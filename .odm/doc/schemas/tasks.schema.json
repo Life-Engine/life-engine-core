@@ -1,13 +1,12 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://life-engine.dev/schemas/tasks.schema.json",
   "title": "Task",
   "description": "A task in the Life Engine canonical data model.",
   "type": "object",
   "required": [
     "id",
     "title",
-    "status",
-    "priority",
     "source",
     "source_id",
     "created_at",
@@ -16,6 +15,7 @@
   "properties": {
     "id": {
       "type": "string",
+      "format": "uuid",
       "description": "Unique identifier assigned by Core"
     },
     "title": {
@@ -27,37 +27,36 @@
       "description": "Detailed description of the task"
     },
     "status": {
-      "type": "string",
-      "enum": [
-        "pending",
-        "active",
-        "completed",
-        "cancelled"
-      ],
-      "description": "Task status"
+      "$ref": "#/$defs/TaskStatus"
     },
     "priority": {
-      "type": "string",
-      "enum": [
-        "none",
-        "low",
-        "medium",
-        "high",
-        "critical"
-      ],
-      "description": "Task priority level"
+      "$ref": "#/$defs/TaskPriority"
     },
     "due_date": {
       "type": "string",
       "format": "date-time",
       "description": "Due date in ISO 8601 format"
     },
-    "labels": {
+    "completed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp when the task was completed"
+    },
+    "tags": {
       "type": "array",
       "items": {
         "type": "string"
       },
-      "description": "User-defined labels for categorisation"
+      "description": "User-defined tags for categorisation"
+    },
+    "assignee": {
+      "type": "string",
+      "description": "Assigned user or entity"
+    },
+    "parent_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Parent task ID for subtask relationships"
     },
     "source": {
       "type": "string",
@@ -69,7 +68,7 @@
     },
     "extensions": {
       "type": "object",
-      "description": "Plugin-specific fields, namespaced by plugin ID. See ADR-014.",
+      "description": "Plugin-specific fields, namespaced by plugin ID.",
       "patternProperties": {
         "^[a-z][a-z0-9]*(-[a-z0-9]+)*(\\.[a-z][a-z0-9]*(-[a-z0-9]+)*)+$": {
           "type": "object"
@@ -88,5 +87,17 @@
       "description": "Record last-updated timestamp"
     }
   },
-  "additionalProperties": false
+  "additionalProperties": false,
+  "$defs": {
+    "TaskStatus": {
+      "type": "string",
+      "enum": ["pending", "in_progress", "completed", "cancelled"],
+      "description": "Current status of the task"
+    },
+    "TaskPriority": {
+      "type": "string",
+      "enum": ["low", "medium", "high", "urgent"],
+      "description": "Priority level of the task"
+    }
+  }
 }

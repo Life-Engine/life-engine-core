@@ -1,5 +1,6 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://life-engine.dev/schemas/events.schema.json",
   "title": "CalendarEvent",
   "description": "A calendar event in the Life Engine canonical data model.",
   "type": "object",
@@ -7,7 +8,6 @@
     "id",
     "title",
     "start",
-    "end",
     "source",
     "source_id",
     "created_at",
@@ -16,6 +16,7 @@
   "properties": {
     "id": {
       "type": "string",
+      "format": "uuid",
       "description": "Unique identifier assigned by Core"
     },
     "title": {
@@ -25,31 +26,78 @@
     "start": {
       "type": "string",
       "format": "date-time",
-      "description": "Start datetime in ISO 8601 format with timezone"
+      "description": "Start datetime in ISO 8601 format"
     },
     "end": {
       "type": "string",
       "format": "date-time",
-      "description": "End datetime in ISO 8601 format with timezone"
+      "description": "End datetime in ISO 8601 format"
     },
-    "recurrence": {
+    "description": {
       "type": "string",
-      "description": "Recurrence rule in RRULE format (RFC 5545)"
-    },
-    "attendees": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      },
-      "description": "List of attendee email addresses or identifiers"
+      "description": "Event description or notes"
     },
     "location": {
       "type": "string",
       "description": "Free-text location or structured address"
     },
-    "description": {
+    "all_day": {
+      "type": "boolean",
+      "description": "Whether this is an all-day event"
+    },
+    "recurrence": {
+      "type": "object",
+      "description": "Recurrence rule for repeating events",
+      "required": ["frequency"],
+      "properties": {
+        "frequency": {
+          "$ref": "#/$defs/RecurrenceFrequency"
+        },
+        "interval": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Interval between recurrences"
+        },
+        "until": {
+          "type": "string",
+          "format": "date-time",
+          "description": "End date for recurrence"
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum number of occurrences"
+        },
+        "by_day": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Days of the week for recurrence (e.g., MO, TU, WE)"
+        }
+      },
+      "additionalProperties": false
+    },
+    "attendees": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Attendee"
+      },
+      "description": "List of event attendees"
+    },
+    "reminders": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Reminder"
+      },
+      "description": "Reminders for the event"
+    },
+    "timezone": {
       "type": "string",
-      "description": "Event description or notes"
+      "description": "IANA timezone identifier (e.g., America/New_York)"
+    },
+    "status": {
+      "$ref": "#/$defs/EventStatus"
     },
     "source": {
       "type": "string",
@@ -61,7 +109,7 @@
     },
     "extensions": {
       "type": "object",
-      "description": "Plugin-specific fields, namespaced by plugin ID. See ADR-014.",
+      "description": "Plugin-specific fields, namespaced by plugin ID.",
       "patternProperties": {
         "^[a-z][a-z0-9]*(-[a-z0-9]+)*(\\.[a-z][a-z0-9]*(-[a-z0-9]+)*)+$": {
           "type": "object"
@@ -80,5 +128,63 @@
       "description": "Record last-updated timestamp"
     }
   },
-  "additionalProperties": false
+  "additionalProperties": false,
+  "$defs": {
+    "RecurrenceFrequency": {
+      "type": "string",
+      "enum": ["daily", "weekly", "monthly", "yearly"],
+      "description": "Frequency of recurrence"
+    },
+    "Attendee": {
+      "type": "object",
+      "required": ["email"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Attendee display name"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Attendee email address"
+        },
+        "status": {
+          "$ref": "#/$defs/AttendeeStatus"
+        }
+      },
+      "additionalProperties": false,
+      "description": "An event attendee"
+    },
+    "AttendeeStatus": {
+      "type": "string",
+      "enum": ["accepted", "declined", "tentative", "needs-action"],
+      "description": "Attendee response status"
+    },
+    "Reminder": {
+      "type": "object",
+      "required": ["minutes_before", "method"],
+      "properties": {
+        "minutes_before": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Minutes before the event to trigger the reminder"
+        },
+        "method": {
+          "$ref": "#/$defs/ReminderMethod"
+        }
+      },
+      "additionalProperties": false,
+      "description": "A reminder for the event"
+    },
+    "ReminderMethod": {
+      "type": "string",
+      "enum": ["notification", "email"],
+      "description": "Method of reminder delivery"
+    },
+    "EventStatus": {
+      "type": "string",
+      "enum": ["confirmed", "tentative", "cancelled"],
+      "description": "Event confirmation status"
+    }
+  }
 }

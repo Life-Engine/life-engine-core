@@ -22,13 +22,13 @@ Progress: 0 / 11 work packages complete
 ## 2.1 — Events and Tasks JSON Schemas
 > spec: .odm/spec/canonical-data-models/brief.md
 
-- [ ] Create Events JSON Schema with all calendar event fields
+- [x] Create Events JSON Schema with all calendar event fields
   <!-- file: .odm/doc/schemas/events.schema.json -->
   <!-- purpose: Define JSON Schema Draft 2020-12 for the Events collection. Required fields: id (uuid), title (string), start (datetime), source (string), source_id (string), created_at (datetime), updated_at (datetime). Optional fields: end (datetime), description (string), location (string), all_day (boolean), recurrence (object with frequency, interval, until, count, by_day), attendees (array of objects with name, email, status enum: accepted/declined/tentative/needs-action), reminders (array of objects with minutes_before, method enum: notification/email), timezone (string), status (enum: confirmed/tentative/cancelled), extensions (object with additionalProperties keyed by reverse-domain namespace). Include $id, $schema, title, description metadata. -->
   <!-- requirements: 3.1, 3.2 -->
   <!-- leverage: existing .odm/doc/schemas/events.schema.json -->
 
-- [ ] Create Tasks JSON Schema with status and priority enums
+- [x] Create Tasks JSON Schema with status and priority enums
   <!-- file: .odm/doc/schemas/tasks.schema.json -->
   <!-- purpose: Define JSON Schema for the Tasks collection. Required fields: id (uuid), title (string), source (string), source_id (string), created_at (datetime), updated_at (datetime). Optional fields: description (string), status (enum: pending/in_progress/completed/cancelled), priority (enum: low/medium/high/urgent), due_date (datetime), completed_at (datetime), tags (array of strings), assignee (string), parent_id (uuid for subtasks), extensions (object). Include TaskStatus and TaskPriority as enum definitions referenced by $ref. -->
   <!-- requirements: 3.1, 3.2, 3.4 -->

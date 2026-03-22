@@ -64,5 +64,5 @@ tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
 urlencoding = "2"
 rcgen = "0.13"
-rsa = { version = "0.9", features = ["pkcs5"] }
+rsa = { version = "0.9", features = ["pkcs5", "pem"] }
 base64 = "0.22"

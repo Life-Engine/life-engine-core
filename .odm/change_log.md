@@ -2,6 +2,10 @@
 
 ## 2026-03-22
 
+- Remove committed test RSA private key from repo; generate test keys at runtime using rsa crate
+- Add pre-commit hook and CI secret scan to block private key material from future commits
+- Add *.pem, *.key, *.p12, *.pfx, *.jks, *.keystore to .gitignore
+
 - Initial project scaffold: Rust workspace with Core backend, engine plugins, plugin SDK, type definitions, docs, CI/CD, and dev tooling
 
 - Add identity credential system with encrypted store, selective disclosure, W3C VC export, and DID support (WP 4.7)

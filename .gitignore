@@ -92,3 +92,11 @@ pnpm-debug.log*
 # Stitch generated assets
 .stitch/designs/
 
+# Secrets / Keys
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+

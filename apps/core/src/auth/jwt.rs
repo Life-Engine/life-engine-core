@@ -365,10 +365,22 @@ mod tests {
 
     /// Generate a test RSA key pair for signing/verifying JWTs.
     fn test_rsa_keys() -> (EncodingKey, DecodingKey) {
-        let rsa_private = include_str!("../../tests/fixtures/test_rsa_private.pem");
-        let rsa_public = include_str!("../../tests/fixtures/test_rsa_public.pem");
-        let encoding = EncodingKey::from_rsa_pem(rsa_private.as_bytes()).unwrap();
-        let decoding = DecodingKey::from_rsa_pem(rsa_public.as_bytes()).unwrap();
+        use rsa::pkcs8::{EncodePrivateKey, EncodePublicKey};
+        use rsa::RsaPrivateKey;
+
+        let mut rng = rand::thread_rng();
+        let private_key = RsaPrivateKey::new(&mut rng, 2048).unwrap();
+        let public_key = private_key.to_public_key();
+
+        let private_pem = private_key
+            .to_pkcs8_pem(rsa::pkcs8::LineEnding::LF)
+            .unwrap();
+        let public_pem = public_key
+            .to_public_key_pem(rsa::pkcs8::LineEnding::LF)
+            .unwrap();
+
+        let encoding = EncodingKey::from_rsa_pem(private_pem.as_bytes()).unwrap();
+        let decoding = DecodingKey::from_rsa_pem(public_pem.as_bytes()).unwrap();
         (encoding, decoding)
     }
 

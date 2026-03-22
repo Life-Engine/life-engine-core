@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Pre-commit hook: block commits containing private key material.
+# Build the pattern dynamically so this file does not trigger itself.
+
+KEY_PATTERN="BEGIN.*(PRIV""ATE KEY|OPENSSH PRIV""ATE KEY)"
+
+BLOCKED=0
+
+while IFS= read -r -d '' file; do
+  # Skip hook and CI scripts that reference the pattern
+  case "$file" in
+    .githooks/*|tools/scripts/ci-check.sh) continue ;;
+  esac
+  content=$(git show :"$file" 2>/dev/null) || continue
+  if echo "$content" | grep -qE "$KEY_PATTERN"; then
+    echo "ERROR: Private key content detected in staged file: $file"
+    BLOCKED=1
+  fi
+done < <(git diff --cached --diff-filter=ACM -z --name-only)
+
+while IFS= read -r -d '' file; do
+  if echo "$file" | grep -qiE '\.(pem|key|p12|pfx|jks|keystore)$'; then
+    echo "WARNING: Sensitive file extension detected: $file"
+    BLOCKED=1
+  fi
+done < <(git diff --cached --diff-filter=ACM -z --name-only)
+
+if [ "$BLOCKED" -ne 0 ]; then
+  echo ""
+  echo "Commit blocked. If this is intentional, use: git commit --no-verify"
+  exit 1
+fi

@@ -18,13 +18,13 @@ pub use contacts::{
     Contact, ContactAddress, ContactEmail, ContactInfoType, ContactName, ContactPhone, PhoneType,
 };
 pub use credentials::{Credential, CredentialType};
-pub use emails::{Email, EmailAttachment};
+pub use emails::{Email, EmailAddress, EmailAttachment};
 pub use events::{
     Attendee, AttendeeStatus, CalendarEvent, EventStatus, Recurrence, RecurrenceFrequency,
     Reminder, ReminderMethod,
 };
 pub use files::FileMetadata;
-pub use notes::Note;
+pub use notes::{Note, NoteFormat};
 pub use tasks::{Task, TaskPriority, TaskStatus};
 
 #[cfg(test)]
@@ -126,16 +126,26 @@ mod tests {
         let now = Utc::now();
         let original = Email {
             id: Uuid::new_v4(),
-            from: "sender@example.com".into(),
-            to: vec!["recipient@example.com".into()],
+            subject: "Test email".into(),
+            from: EmailAddress {
+                name: Some("Sender".into()),
+                address: "sender@example.com".into(),
+            },
+            to: vec![EmailAddress {
+                name: None,
+                address: "recipient@example.com".into(),
+            }],
             cc: vec![],
             bcc: vec![],
-            subject: "Test email".into(),
-            body_text: "Body content".into(),
+            body_text: Some("Body content".into()),
             body_html: None,
-            thread_id: None,
-            labels: vec![],
+            date: now,
+            message_id: None,
+            in_reply_to: None,
             attachments: vec![],
+            read: Some(false),
+            starred: None,
+            labels: vec![],
             source: "test".into(),
             source_id: "email-001".into(),
             extensions: None,
@@ -152,11 +162,12 @@ mod tests {
         let now = Utc::now();
         let original = FileMetadata {
             id: Uuid::new_v4(),
-            name: "test.txt".into(),
-            mime_type: "text/plain".into(),
-            size: 1024,
+            filename: "test.txt".into(),
             path: "/test/test.txt".into(),
-            checksum: Some("sha256:abc123".into()),
+            mime_type: "text/plain".into(),
+            size_bytes: 1024,
+            checksum: "a".repeat(64),
+            storage_backend: None,
             source: "test".into(),
             source_id: "file-001".into(),
             extensions: None,
@@ -176,6 +187,8 @@ mod tests {
             title: "Test note".into(),
             body: "Note body content".into(),
             tags: vec!["test".into()],
+            format: Some(NoteFormat::Markdown),
+            pinned: Some(true),
             source: "test".into(),
             source_id: "note-001".into(),
             extensions: None,
@@ -192,14 +205,14 @@ mod tests {
         let now = Utc::now();
         let original = Credential {
             id: Uuid::new_v4(),
+            name: "Test API Key".into(),
             credential_type: CredentialType::ApiKey,
-            issuer: "https://auth.example.com".into(),
-            issued_date: chrono::NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
-            expiry_date: Some(chrono::NaiveDate::from_ymd_opt(2027, 1, 1).unwrap()),
+            service: "api.example.com".into(),
             claims: serde_json::json!({"scope": "read"}),
+            encrypted: Some(false),
+            expires_at: Some(now),
             source: "test".into(),
             source_id: "cred-001".into(),
-            extensions: None,
             created_at: now,
             updated_at: now,
         };

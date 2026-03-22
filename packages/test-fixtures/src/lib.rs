@@ -204,7 +204,7 @@ mod tests {
     #[test]
     fn file_fixture_deserializes() {
         let f = file();
-        assert_eq!(f.name, "architecture-diagram-v2.png");
+        assert_eq!(f.filename, "architecture-diagram-v2.png");
         let json = serde_json::to_string(&f).expect("serialize");
         let _: FileMetadata = serde_json::from_str(&json).expect("round-trip deserialize");
     }
@@ -220,7 +220,8 @@ mod tests {
     #[test]
     fn credential_fixture_deserializes() {
         let c = credential();
-        assert_eq!(c.issuer, "https://accounts.google.com");
+        assert_eq!(c.name, "Google Calendar OAuth Token");
+        assert_eq!(c.service, "accounts.google.com");
         let json = serde_json::to_string(&c).expect("serialize");
         let _: Credential = serde_json::from_str(&json).expect("round-trip deserialize");
     }

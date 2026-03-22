@@ -14,8 +14,8 @@ pub use life_engine_types;
 use chrono::Utc;
 use life_engine_types::{
     Attendee, CalendarEvent, Contact, ContactAddress, ContactEmail, ContactInfoType, ContactName,
-    ContactPhone, Credential, CredentialType, Email, FileMetadata, Note, PhoneType, Recurrence,
-    Task, TaskPriority, TaskStatus,
+    ContactPhone, Credential, CredentialType, Email, EmailAddress, FileMetadata, Note, PhoneType,
+    Recurrence, Task, TaskPriority, TaskStatus,
 };
 use uuid::Uuid;
 
@@ -117,16 +117,29 @@ pub fn create_test_email() -> Email {
     let now = Utc::now();
     Email {
         id: Uuid::new_v4(),
-        from: "sender@example.com".into(),
-        to: vec!["recipient@example.com".into()],
-        cc: vec!["cc@example.com".into()],
-        bcc: vec![],
         subject: "Project update for Q1".into(),
-        body_text: "Please find the quarterly update attached.".into(),
+        from: EmailAddress {
+            name: Some("Sender".into()),
+            address: "sender@example.com".into(),
+        },
+        to: vec![EmailAddress {
+            name: None,
+            address: "recipient@example.com".into(),
+        }],
+        cc: vec![EmailAddress {
+            name: None,
+            address: "cc@example.com".into(),
+        }],
+        bcc: vec![],
+        body_text: Some("Please find the quarterly update attached.".into()),
         body_html: Some("<p>Please find the quarterly update attached.</p>".into()),
-        thread_id: Some("thread-abc-123".into()),
-        labels: vec!["inbox".into(), "important".into()],
+        date: now,
+        message_id: None,
+        in_reply_to: Some("thread-abc-123".into()),
         attachments: vec![],
+        read: None,
+        starred: None,
+        labels: vec!["inbox".into(), "important".into()],
         source: "test".into(),
         source_id: "test-email-001".into(),
         extensions: None,
@@ -140,11 +153,12 @@ pub fn create_test_file() -> FileMetadata {
     let now = Utc::now();
     FileMetadata {
         id: Uuid::new_v4(),
-        name: "quarterly-report.pdf".into(),
-        mime_type: "application/pdf".into(),
-        size: 245_760,
+        filename: "quarterly-report.pdf".into(),
         path: "/documents/reports/quarterly-report.pdf".into(),
-        checksum: Some("sha256:e3b0c44298fc1c149afbf4c8996fb924".into()),
+        mime_type: "application/pdf".into(),
+        size_bytes: 245_760,
+        checksum: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855".into(),
+        storage_backend: None,
         source: "test".into(),
         source_id: "test-file-001".into(),
         extensions: None,
@@ -161,6 +175,8 @@ pub fn create_test_note() -> Note {
         title: "Meeting notes — Architecture review".into(),
         body: "Discussed plugin sandboxing approach. Decided on Extism for WASM runtime.".into(),
         tags: vec!["meeting".into(), "architecture".into()],
+        format: None,
+        pinned: None,
         source: "test".into(),
         source_id: "test-note-001".into(),
         extensions: None,
@@ -174,17 +190,17 @@ pub fn create_test_credential() -> Credential {
     let now = Utc::now();
     Credential {
         id: Uuid::new_v4(),
+        name: "Test OAuth Token".into(),
         credential_type: CredentialType::OauthToken,
-        issuer: "https://auth.example.com".into(),
-        issued_date: chrono::NaiveDate::from_ymd_opt(2026, 1, 15).unwrap(),
-        expiry_date: Some(chrono::NaiveDate::from_ymd_opt(2027, 1, 15).unwrap()),
+        service: "auth.example.com".into(),
         claims: serde_json::json!({
             "scope": "read write",
             "sub": "user-12345"
         }),
+        encrypted: Some(false),
+        expires_at: Some(now + chrono::Duration::days(365)),
         source: "test".into(),
         source_id: "test-cred-001".into(),
-        extensions: None,
         created_at: now,
         updated_at: now,
     }
@@ -243,8 +259,8 @@ mod tests {
         let file = create_test_file();
         assert!(!file.id.is_nil());
         assert_eq!(file.mime_type, "application/pdf");
-        assert!(file.size > 0);
-        assert!(file.checksum.is_some());
+        assert!(file.size_bytes > 0);
+        assert!(!file.checksum.is_empty());
         let json = serde_json::to_string(&file);
         assert!(json.is_ok(), "FileMetadata should serialize to JSON");
     }
@@ -264,7 +280,7 @@ mod tests {
         let cred = create_test_credential();
         assert!(!cred.id.is_nil());
         assert_eq!(cred.credential_type, CredentialType::OauthToken);
-        assert!(cred.expiry_date.is_some());
+        assert!(cred.expires_at.is_some());
         let json = serde_json::to_string(&cred);
         assert!(json.is_ok(), "Credential should serialize to JSON");
     }

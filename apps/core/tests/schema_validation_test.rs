@@ -75,7 +75,7 @@ fn task_valid_fixture_passes_schema() {
     let fixture = json!({
         "id": "task-001",
         "title": "Review pull request #42",
-        "status": "active",
+        "status": "pending",
         "priority": "high",
         "source": "com.life-engine.todoist",
         "source_id": "todoist-98765",
@@ -90,8 +90,7 @@ fn task_missing_required_field_fails_schema() {
     let schema = load_schema("tasks.schema.json");
     let fixture = json!({
         "id": "task-001",
-        "title": "Review pull request #42",
-        // missing status, priority
+        // missing title
         "source": "com.life-engine.todoist",
         "source_id": "todoist-98765",
         "created_at": TEST_TIMESTAMP,
@@ -142,8 +141,7 @@ fn contact_valid_fixture_passes_schema() {
         "id": "contact-001",
         "name": {
             "given": "Ada",
-            "family": "Lovelace",
-            "display": "Ada Lovelace"
+            "family": "Lovelace"
         },
         "source": "com.life-engine.google-contacts",
         "source_id": "people/c123456",
@@ -177,10 +175,10 @@ fn email_valid_fixture_passes_schema() {
     let schema = load_schema("emails.schema.json");
     let fixture = json!({
         "id": "email-001",
-        "from": "alice@example.com",
-        "to": ["bob@example.com"],
+        "from": { "address": "alice@example.com" },
+        "to": [{ "address": "bob@example.com" }],
         "subject": "Weekly sync notes",
-        "body_text": "Hi Bob, here are the notes from today's sync.",
+        "date": TEST_TIMESTAMP,
         "source": "com.life-engine.imap",
         "source_id": "imap-msg-42",
         "created_at": TEST_TIMESTAMP,
@@ -194,10 +192,10 @@ fn email_wrong_type_for_to_fails_schema() {
     let schema = load_schema("emails.schema.json");
     let fixture = json!({
         "id": "email-001",
-        "from": "alice@example.com",
+        "from": { "address": "alice@example.com" },
         "to": "bob@example.com",  // should be array, not string
         "subject": "Weekly sync notes",
-        "body_text": "Hi Bob.",
+        "date": TEST_TIMESTAMP,
         "source": "com.life-engine.imap",
         "source_id": "imap-msg-42",
         "created_at": TEST_TIMESTAMP,
@@ -213,10 +211,11 @@ fn file_valid_fixture_passes_schema() {
     let schema = load_schema("files.schema.json");
     let fixture = json!({
         "id": "file-001",
-        "name": "quarterly-report.pdf",
-        "mime_type": "application/pdf",
-        "size": 245_760,
+        "filename": "quarterly-report.pdf",
         "path": "files/2026/01/quarterly-report.pdf",
+        "mime_type": "application/pdf",
+        "size_bytes": 245_760,
+        "checksum": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
         "source": "com.life-engine.s3",
         "source_id": "s3-bucket/quarterly-report.pdf",
         "created_at": TEST_TIMESTAMP,
@@ -230,10 +229,11 @@ fn file_size_wrong_type_fails_schema() {
     let schema = load_schema("files.schema.json");
     let fixture = json!({
         "id": "file-001",
-        "name": "report.pdf",
-        "mime_type": "application/pdf",
-        "size": "245760",  // should be integer, not string
+        "filename": "report.pdf",
         "path": "files/report.pdf",
+        "mime_type": "application/pdf",
+        "size_bytes": "245760",  // should be integer, not string
+        "checksum": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
         "source": "com.life-engine.s3",
         "source_id": "s3-bucket/report.pdf",
         "created_at": TEST_TIMESTAMP,
@@ -281,9 +281,9 @@ fn credential_valid_fixture_passes_schema() {
     let schema = load_schema("credentials.schema.json");
     let fixture = json!({
         "id": "cred-001",
-        "type": "oauth_token",
-        "issuer": "google.com",
-        "issued_date": TEST_TIMESTAMP,
+        "name": "Google OAuth",
+        "credential_type": "oauth_token",
+        "service": "google.com",
         "claims": {
             "scope": "email profile calendar",
             "token_type": "Bearer"
@@ -301,9 +301,9 @@ fn credential_invalid_type_enum_fails_schema() {
     let schema = load_schema("credentials.schema.json");
     let fixture = json!({
         "id": "cred-001",
-        "type": "password",  // not in enum
-        "issuer": "example.com",
-        "issued_date": TEST_TIMESTAMP,
+        "name": "Bad Cred",
+        "credential_type": "password",  // not in enum
+        "service": "example.com",
         "claims": {},
         "source": "com.life-engine.auth",
         "source_id": "auth-001",

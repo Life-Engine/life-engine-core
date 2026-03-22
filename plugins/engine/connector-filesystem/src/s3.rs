@@ -196,11 +196,12 @@ impl CloudStorageConnector for S3Client {
 
             results.push(FileMetadata {
                 id: Uuid::new_v4(),
-                name,
-                mime_type,
-                size,
+                filename: name,
                 path: format!("s3://{}/{}", self.config.bucket, key),
-                checksum: obj.e_tag().map(|e| format!("etag:{}", e.trim_matches('"'))),
+                mime_type,
+                size_bytes: size,
+                checksum: obj.e_tag().map(|e| e.trim_matches('"').to_string()).unwrap_or_default(),
+                storage_backend: Some("s3".into()),
                 source: "s3".into(),
                 source_id: key.to_string(),
                 extensions: None,

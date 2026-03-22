@@ -250,29 +250,40 @@ impl GqlCalendarEvent {
     }
 }
 
+/// An email participant (sender/recipient) with optional display name.
+#[derive(SimpleObject, Clone)]
+pub struct GqlEmailParticipant {
+    pub name: Option<String>,
+    pub address: String,
+}
+
 /// An email attachment reference.
 #[derive(SimpleObject, Clone)]
 pub struct GqlEmailAttachment {
-    pub file_id: String,
     pub filename: String,
     pub mime_type: String,
-    pub size: u64,
+    pub size_bytes: u64,
+    pub content_id: Option<String>,
 }
 
 /// An email record (mirrors CDM Email).
 #[derive(Clone)]
 pub struct GqlEmail {
     pub id: String,
-    pub from: String,
-    pub to: Vec<String>,
-    pub cc: Vec<String>,
-    pub bcc: Vec<String>,
     pub subject: String,
-    pub body_text: String,
+    pub from: GqlEmailParticipant,
+    pub to: Vec<GqlEmailParticipant>,
+    pub cc: Vec<GqlEmailParticipant>,
+    pub bcc: Vec<GqlEmailParticipant>,
+    pub body_text: Option<String>,
     pub body_html: Option<String>,
-    pub thread_id: Option<String>,
-    pub labels: Vec<String>,
+    pub date: DateTime<Utc>,
+    pub message_id: Option<String>,
+    pub in_reply_to: Option<String>,
     pub attachments: Vec<GqlEmailAttachment>,
+    pub read: Option<bool>,
+    pub starred: Option<bool>,
+    pub labels: Vec<String>,
     pub source: String,
     pub source_id: String,
     pub extensions: Option<async_graphql::Json<JsonValue>>,
@@ -286,29 +297,41 @@ impl GqlEmail {
     async fn id(&self) -> &str {
         &self.id
     }
-    async fn from(&self) -> &str {
-        &self.from
-    }
-    async fn to(&self) -> &[String] {
-        &self.to
-    }
-    async fn cc(&self) -> &[String] {
-        &self.cc
-    }
-    async fn bcc(&self) -> &[String] {
-        &self.bcc
-    }
     async fn subject(&self) -> &str {
         &self.subject
     }
-    async fn body_text(&self) -> &str {
-        &self.body_text
+    async fn from(&self) -> &GqlEmailParticipant {
+        &self.from
+    }
+    async fn to(&self) -> &[GqlEmailParticipant] {
+        &self.to
+    }
+    async fn cc(&self) -> &[GqlEmailParticipant] {
+        &self.cc
+    }
+    async fn bcc(&self) -> &[GqlEmailParticipant] {
+        &self.bcc
+    }
+    async fn body_text(&self) -> Option<&str> {
+        self.body_text.as_deref()
     }
     async fn body_html(&self) -> Option<&str> {
         self.body_html.as_deref()
     }
-    async fn thread_id(&self) -> Option<&str> {
-        self.thread_id.as_deref()
+    async fn date(&self) -> DateTime<Utc> {
+        self.date
+    }
+    async fn message_id(&self) -> Option<&str> {
+        self.message_id.as_deref()
+    }
+    async fn in_reply_to(&self) -> Option<&str> {
+        self.in_reply_to.as_deref()
+    }
+    async fn read(&self) -> Option<bool> {
+        self.read
+    }
+    async fn starred(&self) -> Option<bool> {
+        self.starred
     }
     async fn labels(&self) -> &[String] {
         &self.labels
@@ -332,7 +355,7 @@ impl GqlEmail {
         self.updated_at
     }
 
-    /// Resolve attachment file_ids to FileMetadata records.
+    /// Resolve attachment filenames to FileMetadata records.
     ///
     /// Uses a single OR-filter query to batch-fetch all attachment files
     /// instead of issuing one query per attachment (N+1).
@@ -345,14 +368,14 @@ impl GqlEmail {
             return Ok(vec![]);
         }
 
-        // Build an OR filter matching any attachment file_id in a single query.
+        // Build an OR filter matching any attachment filename in a single query.
         let or_groups: Vec<QueryFilters> = self
             .attachments
             .iter()
             .map(|att| QueryFilters {
                 equality: vec![FieldFilter {
-                    field: "id".into(),
-                    value: serde_json::Value::String(att.file_id.clone()),
+                    field: "filename".into(),
+                    value: serde_json::Value::String(att.filename.clone()),
                 }],
                 ..Default::default()
             })
@@ -393,6 +416,8 @@ pub struct GqlNote {
     pub title: String,
     pub body: String,
     pub tags: Vec<String>,
+    pub format: Option<String>,
+    pub pinned: Option<bool>,
     pub source: String,
     pub source_id: String,
     pub extensions: Option<async_graphql::Json<JsonValue>>,
@@ -404,11 +429,12 @@ pub struct GqlNote {
 #[derive(SimpleObject, Clone)]
 pub struct GqlFile {
     pub id: String,
-    pub name: String,
-    pub mime_type: String,
-    pub size: u64,
+    pub filename: String,
     pub path: String,
-    pub checksum: Option<String>,
+    pub mime_type: String,
+    pub size_bytes: u64,
+    pub checksum: String,
+    pub storage_backend: Option<String>,
     pub source: String,
     pub source_id: String,
     pub extensions: Option<async_graphql::Json<JsonValue>>,
@@ -420,11 +446,12 @@ pub struct GqlFile {
 #[derive(SimpleObject, Clone)]
 pub struct GqlCredential {
     pub id: String,
+    pub name: String,
     pub credential_type: GqlCredentialType,
-    pub issuer: String,
-    pub issued_date: String,
-    pub expiry_date: Option<String>,
+    pub service: String,
     pub claims: async_graphql::Json<JsonValue>,
+    pub encrypted: Option<bool>,
+    pub expires_at: Option<DateTime<Utc>>,
     pub source: String,
     pub source_id: String,
     pub created_at: DateTime<Utc>,
@@ -709,42 +736,59 @@ fn record_to_event(data: &JsonValue) -> GqlCalendarEvent {
     }
 }
 
+fn json_to_email_participant(v: &JsonValue) -> GqlEmailParticipant {
+    if let Some(obj) = v.as_object() {
+        GqlEmailParticipant {
+            name: obj.get("name").and_then(|n| n.as_str()).map(Into::into),
+            address: obj.get("address").and_then(|a| a.as_str()).unwrap_or_default().into(),
+        }
+    } else if let Some(s) = v.as_str() {
+        GqlEmailParticipant { name: None, address: s.into() }
+    } else {
+        GqlEmailParticipant { name: None, address: String::new() }
+    }
+}
+
+fn json_to_email_participants(v: &JsonValue) -> Vec<GqlEmailParticipant> {
+    v.as_array()
+        .map(|a| a.iter().map(json_to_email_participant).collect())
+        .unwrap_or_default()
+}
+
 fn record_to_email(data: &JsonValue) -> GqlEmail {
     GqlEmail {
         id: data["id"].as_str().unwrap_or_default().into(),
-        from: data["from"].as_str().unwrap_or_default().into(),
-        to: data["to"]
-            .as_array()
-            .map(|a| a.iter().filter_map(|v| v.as_str().map(Into::into)).collect())
-            .unwrap_or_default(),
-        cc: data["cc"]
-            .as_array()
-            .map(|a| a.iter().filter_map(|v| v.as_str().map(Into::into)).collect())
-            .unwrap_or_default(),
-        bcc: data["bcc"]
-            .as_array()
-            .map(|a| a.iter().filter_map(|v| v.as_str().map(Into::into)).collect())
-            .unwrap_or_default(),
         subject: data["subject"].as_str().unwrap_or_default().into(),
-        body_text: data["body_text"].as_str().unwrap_or_default().into(),
+        from: json_to_email_participant(&data["from"]),
+        to: json_to_email_participants(&data["to"]),
+        cc: json_to_email_participants(&data["cc"]),
+        bcc: json_to_email_participants(&data["bcc"]),
+        body_text: data["body_text"].as_str().map(Into::into),
         body_html: data["body_html"].as_str().map(Into::into),
-        thread_id: data["thread_id"].as_str().map(Into::into),
-        labels: data["labels"]
-            .as_array()
-            .map(|a| a.iter().filter_map(|v| v.as_str().map(Into::into)).collect())
-            .unwrap_or_default(),
+        date: data["date"]
+            .as_str()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or_else(Utc::now),
+        message_id: data["message_id"].as_str().map(Into::into),
+        in_reply_to: data["in_reply_to"].as_str().map(Into::into),
         attachments: data["attachments"]
             .as_array()
             .map(|a| {
                 a.iter()
                     .map(|att| GqlEmailAttachment {
-                        file_id: att["file_id"].as_str().unwrap_or_default().into(),
                         filename: att["filename"].as_str().unwrap_or_default().into(),
                         mime_type: att["mime_type"].as_str().unwrap_or_default().into(),
-                        size: att["size"].as_u64().unwrap_or(0),
+                        size_bytes: att["size_bytes"].as_u64().unwrap_or(0),
+                        content_id: att["content_id"].as_str().map(Into::into),
                     })
                     .collect()
             })
+            .unwrap_or_default(),
+        read: data["read"].as_bool(),
+        starred: data["starred"].as_bool(),
+        labels: data["labels"]
+            .as_array()
+            .map(|a| a.iter().filter_map(|v| v.as_str().map(Into::into)).collect())
             .unwrap_or_default(),
         source: data["source"].as_str().unwrap_or_default().into(),
         source_id: data["source_id"].as_str().unwrap_or_default().into(),
@@ -771,6 +815,8 @@ fn record_to_note(data: &JsonValue) -> GqlNote {
             .as_array()
             .map(|a| a.iter().filter_map(|v| v.as_str().map(Into::into)).collect())
             .unwrap_or_default(),
+        format: data["format"].as_str().map(Into::into),
+        pinned: data["pinned"].as_bool(),
         source: data["source"].as_str().unwrap_or_default().into(),
         source_id: data["source_id"].as_str().unwrap_or_default().into(),
         extensions: data.get("extensions").and_then(|v| {
@@ -790,11 +836,12 @@ fn record_to_note(data: &JsonValue) -> GqlNote {
 fn record_to_file(data: &JsonValue) -> GqlFile {
     GqlFile {
         id: data["id"].as_str().unwrap_or_default().into(),
-        name: data["name"].as_str().unwrap_or_default().into(),
-        mime_type: data["mime_type"].as_str().unwrap_or_default().into(),
-        size: data["size"].as_u64().unwrap_or(0),
+        filename: data["filename"].as_str().unwrap_or_default().into(),
         path: data["path"].as_str().unwrap_or_default().into(),
-        checksum: data["checksum"].as_str().map(Into::into),
+        mime_type: data["mime_type"].as_str().unwrap_or_default().into(),
+        size_bytes: data["size_bytes"].as_u64().unwrap_or(0),
+        checksum: data["checksum"].as_str().unwrap_or_default().into(),
+        storage_backend: data["storage_backend"].as_str().map(Into::into),
         source: data["source"].as_str().unwrap_or_default().into(),
         source_id: data["source_id"].as_str().unwrap_or_default().into(),
         extensions: data.get("extensions").and_then(|v| {
@@ -814,16 +861,19 @@ fn record_to_file(data: &JsonValue) -> GqlFile {
 fn record_to_credential(data: &JsonValue) -> GqlCredential {
     GqlCredential {
         id: data["id"].as_str().unwrap_or_default().into(),
-        credential_type: match data["type"].as_str().unwrap_or("api_key") {
+        name: data["name"].as_str().unwrap_or_default().into(),
+        credential_type: match data["credential_type"].as_str().unwrap_or("api_key") {
             "oauth_token" => GqlCredentialType::OauthToken,
             "identity_document" => GqlCredentialType::IdentityDocument,
             "passkey" => GqlCredentialType::Passkey,
             _ => GqlCredentialType::ApiKey,
         },
-        issuer: data["issuer"].as_str().unwrap_or_default().into(),
-        issued_date: data["issued_date"].as_str().unwrap_or_default().into(),
-        expiry_date: data["expiry_date"].as_str().map(Into::into),
+        service: data["service"].as_str().unwrap_or_default().into(),
         claims: async_graphql::Json(data["claims"].clone()),
+        encrypted: data["encrypted"].as_bool(),
+        expires_at: data["expires_at"]
+            .as_str()
+            .and_then(|s| s.parse().ok()),
         source: data["source"].as_str().unwrap_or_default().into(),
         source_id: data["source_id"].as_str().unwrap_or_default().into(),
         created_at: data["created_at"]

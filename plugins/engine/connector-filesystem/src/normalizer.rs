@@ -19,18 +19,18 @@ pub fn normalize_file(path: &Path, compute_checksum: bool) -> Result<FileMetadat
     let metadata = fs::metadata(path)
         .with_context(|| format!("failed to read file metadata: {}", path.display()))?;
 
-    let name = path
+    let filename = path
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "unnamed".into());
 
     let mime_type = detect_mime_type(path);
-    let size = metadata.len();
+    let size_bytes = metadata.len();
 
     let checksum = if compute_checksum {
-        Some(compute_sha256(path)?)
+        compute_sha256(path)?
     } else {
-        None
+        String::new()
     };
 
     let created_at = metadata
@@ -45,11 +45,12 @@ pub fn normalize_file(path: &Path, compute_checksum: bool) -> Result<FileMetadat
 
     Ok(FileMetadata {
         id: Uuid::new_v4(),
-        name,
-        mime_type,
-        size,
+        filename,
         path: path.to_string_lossy().to_string(),
+        mime_type,
+        size_bytes,
         checksum,
+        storage_backend: None,
         source: "local".into(),
         source_id: path.to_string_lossy().to_string(),
         extensions: None,
@@ -75,11 +76,11 @@ mod tests {
         fs::write(&file_path, "fake pdf content").expect("write file");
 
         let meta = normalize_file(&file_path, true).expect("normalize");
-        assert_eq!(meta.name, "report.pdf");
+        assert_eq!(meta.filename, "report.pdf");
         assert_eq!(meta.mime_type, "application/pdf");
-        assert_eq!(meta.size, 16);
+        assert_eq!(meta.size_bytes, 16);
         assert_eq!(meta.source, "local");
-        assert!(meta.checksum.is_some());
+        assert!(!meta.checksum.is_empty());
         assert!(!meta.id.is_nil());
     }
 
@@ -90,8 +91,8 @@ mod tests {
         fs::write(&file_path, "a,b,c").expect("write file");
 
         let meta = normalize_file(&file_path, false).expect("normalize");
-        assert!(meta.checksum.is_none());
-        assert_eq!(meta.name, "data.csv");
+        assert!(meta.checksum.is_empty());
+        assert_eq!(meta.filename, "data.csv");
     }
 
     #[test]
@@ -101,7 +102,7 @@ mod tests {
         fs::write(&file_path, "all: build").expect("write file");
 
         let meta = normalize_file(&file_path, false).expect("normalize");
-        assert_eq!(meta.name, "Makefile");
+        assert_eq!(meta.filename, "Makefile");
         assert_eq!(meta.mime_type, "application/octet-stream");
     }
 
@@ -118,9 +119,9 @@ mod tests {
         let meta = normalize_file(&file_path, true).expect("normalize");
         let json = serde_json::to_string(&meta).expect("should serialize");
         let restored: FileMetadata = serde_json::from_str(&json).expect("should deserialize");
-        assert_eq!(restored.name, meta.name);
+        assert_eq!(restored.filename, meta.filename);
         assert_eq!(restored.mime_type, meta.mime_type);
-        assert_eq!(restored.size, meta.size);
+        assert_eq!(restored.size_bytes, meta.size_bytes);
     }
 
     #[test]

@@ -160,13 +160,13 @@ fn test_full_pipeline_simple_email() {
     let email = normalize_message(&messages[0].raw, "imap")
         .expect("normalization should succeed");
 
-    assert_eq!(email.from, "alice@example.com");
-    assert_eq!(email.to, vec!["bob@example.com"]);
+    assert_eq!(email.from.address, "alice@example.com");
+    assert_eq!(email.to[0].address, "bob@example.com");
     assert_eq!(email.subject, "Weekly report");
-    assert!(email.body_text.contains("weekly report"));
+    assert!(email.body_text.as_deref().unwrap().contains("weekly report"));
     assert_eq!(email.source, "imap");
     assert_eq!(email.source_id, "weekly-001@example.com");
-    assert!(email.thread_id.is_none());
+    assert!(email.in_reply_to.is_none());
     assert!(email.cc.is_empty());
     assert!(email.bcc.is_empty());
     assert!(email.attachments.is_empty());
@@ -217,7 +217,7 @@ fn test_json_round_trip_simple_email() {
     assert_eq!(restored.body_text, email.body_text);
     assert_eq!(restored.source, email.source);
     assert_eq!(restored.source_id, email.source_id);
-    assert_eq!(restored.thread_id, email.thread_id);
+    assert_eq!(restored.in_reply_to, email.in_reply_to);
     assert_eq!(restored.cc, email.cc);
     assert_eq!(restored.bcc, email.bcc);
     assert_eq!(restored.labels, email.labels);
@@ -236,7 +236,7 @@ fn test_json_round_trip_with_attachment() {
     assert_eq!(restored.attachments.len(), 1);
     assert_eq!(restored.attachments[0].filename, email.attachments[0].filename);
     assert_eq!(restored.attachments[0].mime_type, email.attachments[0].mime_type);
-    assert_eq!(restored.attachments[0].size, email.attachments[0].size);
+    assert_eq!(restored.attachments[0].size_bytes, email.attachments[0].size_bytes);
 }
 
 #[test]
@@ -248,7 +248,7 @@ fn test_json_round_trip_threaded_email() {
     let restored: Email =
         serde_json::from_str(&json).expect("deserialization should succeed");
 
-    assert_eq!(restored.thread_id, email.thread_id);
+    assert_eq!(restored.in_reply_to, email.in_reply_to);
     assert_eq!(restored.cc, email.cc);
 }
 
@@ -275,7 +275,7 @@ fn test_no_subject_defaults_to_placeholder() {
         .expect("normalization should succeed");
 
     assert_eq!(email.subject, "(no subject)");
-    assert_eq!(email.from, "charlie@example.com");
+    assert_eq!(email.from.address, "charlie@example.com");
     assert_eq!(email.source_id, "nosub-002@example.com");
 }
 
@@ -296,8 +296,7 @@ fn test_attachment_metadata_extracted() {
         "expected pdf in mime_type, got: {}",
         att.mime_type
     );
-    assert!(att.size > 0, "attachment size should be > 0");
-    assert!(!att.file_id.is_empty(), "file_id should not be empty");
+    assert!(att.size_bytes > 0, "attachment size_bytes should be > 0");
 }
 
 #[test]
@@ -313,33 +312,33 @@ fn test_email_without_attachment_has_empty_vec() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn test_thread_id_from_in_reply_to() {
+fn test_in_reply_to_from_in_reply_to_header() {
     let email = normalize_message(&threaded_email_bytes(), "imap")
         .expect("normalization should succeed");
 
     assert_eq!(
-        email.thread_id.as_deref(),
+        email.in_reply_to.as_deref(),
         Some("thread-root-000@example.com")
     );
 }
 
 #[test]
-fn test_thread_id_from_references_only() {
+fn test_in_reply_to_from_references_only() {
     let email = normalize_message(&references_only_email_bytes(), "imap")
         .expect("normalization should succeed");
 
     assert_eq!(
-        email.thread_id.as_deref(),
+        email.in_reply_to.as_deref(),
         Some("thread-root-000@example.com")
     );
 }
 
 #[test]
-fn test_no_thread_id_for_standalone_email() {
+fn test_no_in_reply_to_for_standalone_email() {
     let email = normalize_message(&simple_email_bytes(), "imap")
         .expect("normalization should succeed");
 
-    assert!(email.thread_id.is_none());
+    assert!(email.in_reply_to.is_none());
 }
 
 // ---------------------------------------------------------------------------
@@ -351,7 +350,8 @@ fn test_cc_addresses_extracted() {
     let email = normalize_message(&threaded_email_bytes(), "imap")
         .expect("normalization should succeed");
 
-    assert_eq!(email.cc, vec!["ivan@example.com"]);
+    assert_eq!(email.cc.len(), 1);
+    assert_eq!(email.cc[0].address, "ivan@example.com");
 }
 
 #[test]
@@ -385,7 +385,7 @@ fn test_plain_text_body_always_present() {
         .expect("normalization should succeed");
 
     assert!(
-        email.body_text.contains("newsletter"),
+        email.body_text.as_deref().unwrap().contains("newsletter"),
         "body_text should contain plain-text fallback"
     );
 }
@@ -410,8 +410,8 @@ fn test_no_date_falls_back_to_now() {
     let email = normalize_message(&no_date_email_bytes(), "imap")
         .expect("normalization should succeed");
 
-    // The created_at should be a valid, recent timestamp (fallback to Utc::now)
-    let year = email.created_at.year();
+    // The date should be a valid, recent timestamp (fallback to Utc::now)
+    let year = email.date.year();
     assert!(
         year >= 2025,
         "expected recent year for date fallback, got: {year}"
@@ -427,9 +427,9 @@ fn test_date_parsed_from_header() {
     let email = normalize_message(&simple_email_bytes(), "imap")
         .expect("normalization should succeed");
 
-    assert_eq!(email.created_at.year(), 2026);
-    assert_eq!(email.created_at.month(), 3);
-    assert_eq!(email.created_at.day(), 21);
+    assert_eq!(email.date.year(), 2026);
+    assert_eq!(email.date.month(), 3);
+    assert_eq!(email.date.day(), 21);
 }
 
 // ---------------------------------------------------------------------------
@@ -681,18 +681,19 @@ fn test_all_cdm_fields_populated_for_rich_email() {
     assert!(!email.id.is_nil());
 
     // Addressing
-    assert_eq!(email.from, "grace@example.com");
-    assert_eq!(email.to, vec!["heidi@example.com"]);
-    assert_eq!(email.cc, vec!["ivan@example.com"]);
+    assert_eq!(email.from.address, "grace@example.com");
+    assert_eq!(email.to[0].address, "heidi@example.com");
+    assert_eq!(email.cc.len(), 1);
+    assert_eq!(email.cc[0].address, "ivan@example.com");
     assert!(email.bcc.is_empty());
 
     // Content
     assert_eq!(email.subject, "Re: Project plan");
-    assert!(email.body_text.contains("proceed"));
+    assert!(email.body_text.as_deref().unwrap().contains("proceed"));
 
     // Threading
     assert_eq!(
-        email.thread_id.as_deref(),
+        email.in_reply_to.as_deref(),
         Some("thread-root-000@example.com")
     );
 
@@ -704,7 +705,7 @@ fn test_all_cdm_fields_populated_for_rich_email() {
     assert!(email.labels.is_empty());
 
     // Timestamps
-    assert_eq!(email.created_at.year(), 2026);
+    assert_eq!(email.date.year(), 2026);
 }
 
 #[test]
@@ -759,12 +760,12 @@ fn test_serialized_json_has_expected_fields() {
     let value = serde_json::to_value(&email).expect("should serialize to Value");
 
     assert!(value["id"].is_string());
-    assert!(value["from"].is_string());
+    assert!(value["from"].is_object());
     assert!(value["to"].is_array());
     assert!(value["subject"].is_string());
-    assert!(value["body_text"].is_string());
     assert!(value["source"].is_string());
     assert!(value["source_id"].is_string());
+    assert!(value["date"].is_string());
     assert!(value["created_at"].is_string());
     assert!(value["updated_at"].is_string());
 }
@@ -782,8 +783,8 @@ fn test_optional_fields_omitted_when_none() {
         "body_html should be omitted when None"
     );
     assert!(
-        value.get("thread_id").is_none(),
-        "thread_id should be omitted when None"
+        value.get("in_reply_to").is_none(),
+        "in_reply_to should be omitted when None"
     );
     assert!(
         value.get("extensions").is_none(),

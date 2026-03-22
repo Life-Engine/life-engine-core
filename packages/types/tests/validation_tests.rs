@@ -482,10 +482,10 @@ mod email_validation {
     fn sample_email() -> serde_json::Value {
         json!({
             "id": TEST_UUID,
-            "from": "sender@example.com",
-            "to": ["recipient@example.com"],
             "subject": "Hello",
-            "body_text": "Message body",
+            "from": { "address": "sender@example.com" },
+            "to": [{ "address": "recipient@example.com" }],
+            "date": TEST_TIMESTAMP,
             "source": "test",
             "source_id": "email-001",
             "created_at": TEST_TIMESTAMP,
@@ -512,9 +512,9 @@ mod email_validation {
     }
 
     #[test]
-    fn email_missing_body_text_is_rejected() {
+    fn email_missing_date_is_rejected() {
         let mut v = sample_email();
-        v.as_object_mut().unwrap().remove("body_text");
+        v.as_object_mut().unwrap().remove("date");
         let result = serde_json::from_value::<Email>(v);
         assert!(result.is_err());
     }
@@ -526,8 +526,9 @@ mod email_validation {
         let email: Email = serde_json::from_value(sample_email()).unwrap();
         assert!(email.cc.is_empty());
         assert!(email.bcc.is_empty());
+        assert_eq!(email.body_text, None);
         assert_eq!(email.body_html, None);
-        assert_eq!(email.thread_id, None);
+        assert_eq!(email.in_reply_to, None);
         assert!(email.labels.is_empty());
         assert!(email.attachments.is_empty());
         assert_eq!(email.extensions, None);
@@ -557,10 +558,10 @@ mod email_validation {
     }
 
     #[test]
-    fn email_omits_none_thread_id_in_json() {
+    fn email_omits_none_in_reply_to_in_json() {
         let email: Email = serde_json::from_value(sample_email()).unwrap();
         let serialized = serde_json::to_value(&email).unwrap();
-        assert!(!serialized.as_object().unwrap().contains_key("thread_id"));
+        assert!(!serialized.as_object().unwrap().contains_key("in_reply_to"));
     }
 
     #[test]
@@ -587,10 +588,11 @@ mod email_validation {
     #[test]
     fn email_includes_cc_when_non_empty() {
         let mut v = sample_email();
-        v["cc"] = json!(["cc@example.com"]);
+        v["cc"] = json!([{ "address": "cc@example.com" }]);
         let email: Email = serde_json::from_value(v).unwrap();
         let serialized = serde_json::to_value(&email).unwrap();
-        assert_eq!(serialized["cc"], json!(["cc@example.com"]));
+        assert!(serialized.as_object().unwrap().contains_key("cc"));
+        assert_eq!(serialized["cc"][0]["address"], "cc@example.com");
     }
 
     // --- (g) Unknown field acceptance ---
@@ -614,10 +616,11 @@ mod file_validation {
     fn sample_file() -> serde_json::Value {
         json!({
             "id": TEST_UUID,
-            "name": "report.pdf",
-            "mime_type": "application/pdf",
-            "size": 2048,
+            "filename": "report.pdf",
             "path": "/documents/report.pdf",
+            "mime_type": "application/pdf",
+            "size_bytes": 2048,
+            "checksum": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
             "source": "test",
             "source_id": "file-001",
             "created_at": TEST_TIMESTAMP,
@@ -628,9 +631,9 @@ mod file_validation {
     // --- (a) Required field rejection ---
 
     #[test]
-    fn file_missing_name_is_rejected() {
+    fn file_missing_filename_is_rejected() {
         let mut v = sample_file();
-        v.as_object_mut().unwrap().remove("name");
+        v.as_object_mut().unwrap().remove("filename");
         let result = serde_json::from_value::<FileMetadata>(v);
         assert!(result.is_err());
     }
@@ -644,9 +647,17 @@ mod file_validation {
     }
 
     #[test]
-    fn file_missing_size_is_rejected() {
+    fn file_missing_size_bytes_is_rejected() {
         let mut v = sample_file();
-        v.as_object_mut().unwrap().remove("size");
+        v.as_object_mut().unwrap().remove("size_bytes");
+        let result = serde_json::from_value::<FileMetadata>(v);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn file_missing_checksum_is_rejected() {
+        let mut v = sample_file();
+        v.as_object_mut().unwrap().remove("checksum");
         let result = serde_json::from_value::<FileMetadata>(v);
         assert!(result.is_err());
     }
@@ -656,17 +667,17 @@ mod file_validation {
     #[test]
     fn file_without_optional_fields_deserializes_with_defaults() {
         let file: FileMetadata = serde_json::from_value(sample_file()).unwrap();
-        assert_eq!(file.checksum, None);
+        assert_eq!(file.storage_backend, None);
         assert_eq!(file.extensions, None);
     }
 
     // --- (e) skip_serializing_if ---
 
     #[test]
-    fn file_omits_none_checksum_in_json() {
+    fn file_omits_none_storage_backend_in_json() {
         let file: FileMetadata = serde_json::from_value(sample_file()).unwrap();
         let serialized = serde_json::to_value(&file).unwrap();
-        assert!(!serialized.as_object().unwrap().contains_key("checksum"));
+        assert!(!serialized.as_object().unwrap().contains_key("storage_backend"));
     }
 
     #[test]
@@ -677,12 +688,10 @@ mod file_validation {
     }
 
     #[test]
-    fn file_includes_checksum_when_present() {
-        let mut v = sample_file();
-        v["checksum"] = json!("sha256:abc123");
-        let file: FileMetadata = serde_json::from_value(v).unwrap();
+    fn file_checksum_always_present() {
+        let file: FileMetadata = serde_json::from_value(sample_file()).unwrap();
         let serialized = serde_json::to_value(&file).unwrap();
-        assert_eq!(serialized["checksum"], "sha256:abc123");
+        assert!(serialized.as_object().unwrap().contains_key("checksum"));
     }
 
     // --- (g) Unknown field acceptance ---
@@ -796,9 +805,9 @@ mod credential_validation {
     fn sample_credential() -> serde_json::Value {
         json!({
             "id": TEST_UUID,
-            "type": "api_key",
-            "issuer": "https://auth.example.com",
-            "issued_date": "2026-01-01",
+            "name": "Test API Key",
+            "credential_type": "api_key",
+            "service": "api.example.com",
             "claims": {"scope": "read"},
             "source": "test",
             "source_id": "cred-001",
@@ -810,17 +819,25 @@ mod credential_validation {
     // --- (a) Required field rejection ---
 
     #[test]
-    fn credential_missing_type_is_rejected() {
+    fn credential_missing_credential_type_is_rejected() {
         let mut v = sample_credential();
-        v.as_object_mut().unwrap().remove("type");
+        v.as_object_mut().unwrap().remove("credential_type");
         let result = serde_json::from_value::<Credential>(v);
         assert!(result.is_err());
     }
 
     #[test]
-    fn credential_missing_issuer_is_rejected() {
+    fn credential_missing_name_is_rejected() {
         let mut v = sample_credential();
-        v.as_object_mut().unwrap().remove("issuer");
+        v.as_object_mut().unwrap().remove("name");
+        let result = serde_json::from_value::<Credential>(v);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn credential_missing_service_is_rejected() {
+        let mut v = sample_credential();
+        v.as_object_mut().unwrap().remove("service");
         let result = serde_json::from_value::<Credential>(v);
         assert!(result.is_err());
     }
@@ -838,7 +855,8 @@ mod credential_validation {
     #[test]
     fn credential_without_optional_fields_deserializes_with_defaults() {
         let cred: Credential = serde_json::from_value(sample_credential()).unwrap();
-        assert_eq!(cred.expiry_date, None);
+        assert_eq!(cred.expires_at, None);
+        assert_eq!(cred.encrypted, None);
     }
 
     // --- (c) Enum variant serialization ---
@@ -894,51 +912,36 @@ mod credential_validation {
     // --- (e) skip_serializing_if ---
 
     #[test]
-    fn credential_omits_none_expiry_date_in_json() {
+    fn credential_omits_none_expires_at_in_json() {
         let cred: Credential = serde_json::from_value(sample_credential()).unwrap();
         let serialized = serde_json::to_value(&cred).unwrap();
-        assert!(!serialized.as_object().unwrap().contains_key("expiry_date"));
+        assert!(!serialized.as_object().unwrap().contains_key("expires_at"));
     }
 
     #[test]
-    fn credential_includes_expiry_date_when_present() {
+    fn credential_includes_expires_at_when_present() {
         let mut v = sample_credential();
-        v["expiry_date"] = json!("2027-01-01");
+        v["expires_at"] = json!("2027-01-01T00:00:00Z");
         let cred: Credential = serde_json::from_value(v).unwrap();
         let serialized = serde_json::to_value(&cred).unwrap();
-        assert_eq!(serialized["expiry_date"], "2027-01-01");
+        assert!(serialized.as_object().unwrap().contains_key("expires_at"));
     }
 
-    // --- (f) serde rename ---
+    // --- (f) credential_type field ---
 
     #[test]
-    fn credential_type_field_uses_json_key_type() {
+    fn credential_type_field_uses_credential_type_key() {
         let cred: Credential = serde_json::from_value(sample_credential()).unwrap();
         let serialized = serde_json::to_value(&cred).unwrap();
-        assert!(serialized.as_object().unwrap().contains_key("type"));
-        assert!(!serialized
-            .as_object()
-            .unwrap()
-            .contains_key("credential_type"));
-        assert_eq!(serialized["type"], "api_key");
+        assert!(serialized.as_object().unwrap().contains_key("credential_type"));
+        assert_eq!(serialized["credential_type"], "api_key");
     }
 
     #[test]
-    fn credential_deserializes_type_from_json_key() {
+    fn credential_deserializes_credential_type() {
         let v = sample_credential();
         let cred: Credential = serde_json::from_value(v).unwrap();
         assert_eq!(cred.credential_type, CredentialType::ApiKey);
-    }
-
-    #[test]
-    fn credential_rejects_credential_type_as_json_key() {
-        let mut v = sample_credential();
-        v.as_object_mut().unwrap().remove("type");
-        v["credential_type"] = json!("api_key");
-        // Without "type" key, deserialization must fail because the Rust field
-        // is renamed to "type" in JSON.
-        let result = serde_json::from_value::<Credential>(v);
-        assert!(result.is_err());
     }
 
     // --- (g) Unknown field acceptance ---

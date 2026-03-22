@@ -151,7 +151,7 @@ impl LocalFsConnector {
         let indexed = IndexedFile {
             size: fs_meta.len(),
             modified: fs_meta.modified().unwrap_or(SystemTime::UNIX_EPOCH),
-            checksum: metadata.checksum.clone(),
+            checksum: if metadata.checksum.is_empty() { None } else { Some(metadata.checksum.clone()) },
         };
 
         self.indexed.insert(path.to_path_buf(), indexed);
@@ -379,10 +379,10 @@ mod tests {
         let mut connector = LocalFsConnector::new(config);
 
         let metadata = connector.index_file(&file_path).expect("index file");
-        assert_eq!(metadata.name, "document.pdf");
+        assert_eq!(metadata.filename, "document.pdf");
         assert_eq!(metadata.mime_type, "application/pdf");
-        assert_eq!(metadata.size, 16); // "fake pdf content".len()
-        assert!(metadata.checksum.is_some());
+        assert_eq!(metadata.size_bytes, 16); // "fake pdf content".len()
+        assert!(!metadata.checksum.is_empty());
         assert!(connector.indexed_files().contains_key(&file_path));
     }
 
@@ -493,7 +493,7 @@ mod tests {
 
         let metadata = connector.index_file(&file_path).expect("index file");
         // Verify size is u64 (type system ensures this)
-        let size: u64 = metadata.size;
+        let size: u64 = metadata.size_bytes;
         assert!(size > 0);
 
         // Verify a large size value can be represented
@@ -516,6 +516,6 @@ mod tests {
 
         let results = connector.scan().expect("scan");
         assert_eq!(results.len(), 1);
-        assert_eq!(results[0].name, "visible.txt");
+        assert_eq!(results[0].filename, "visible.txt");
     }
 }

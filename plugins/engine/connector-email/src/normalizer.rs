@@ -4,7 +4,7 @@
 //! multi-part bodies, and attachment extraction.
 
 use chrono::{DateTime, Utc};
-use life_engine_types::{Email, EmailAttachment};
+use life_engine_types::{Email, EmailAddress, EmailAttachment};
 use mail_parser::{MessageParser, MimeHeaders};
 use uuid::Uuid;
 
@@ -26,72 +26,92 @@ pub fn normalize_message(raw: &[u8], source: &str) -> anyhow::Result<Email> {
         .to_string();
     let body_text = extract_body_text(&parsed);
     let body_html = extract_body_html(&parsed);
-    let thread_id = extract_thread_id(&parsed);
+    let message_id = parsed.message_id().map(|id| id.to_string());
+    let in_reply_to = extract_in_reply_to(&parsed);
     let attachments = extract_attachments(&parsed);
     let source_id = extract_message_id(&parsed);
-    let created_at = extract_date(&parsed);
+    let date = extract_date(&parsed);
 
     Ok(Email {
         id: Uuid::new_v4(),
+        subject,
         from,
         to,
         cc,
         bcc: vec![],
-        subject,
         body_text,
         body_html,
-        thread_id,
-        labels: vec![],
+        date,
+        message_id,
+        in_reply_to,
         attachments,
+        read: None,
+        starred: None,
+        labels: vec![],
         source: source.into(),
         source_id,
         extensions: None,
-        created_at,
+        created_at: date,
         updated_at: Utc::now(),
     })
 }
 
-/// Extract the From address as a string.
-fn extract_from(msg: &mail_parser::Message<'_>) -> String {
+/// Extract the From address as an EmailAddress.
+fn extract_from(msg: &mail_parser::Message<'_>) -> EmailAddress {
     msg.from()
         .and_then(|addrs| addrs.first())
-        .map(|addr| {
-            addr.address()
+        .map(|addr| EmailAddress {
+            name: addr.name().map(|n| n.to_string()),
+            address: addr
+                .address()
                 .map(|a| a.to_string())
-                .unwrap_or_default()
+                .unwrap_or_default(),
         })
-        .unwrap_or_default()
+        .unwrap_or_else(|| EmailAddress {
+            name: None,
+            address: String::new(),
+        })
 }
 
 /// Extract all To addresses.
-fn extract_to(msg: &mail_parser::Message<'_>) -> Vec<String> {
+fn extract_to(msg: &mail_parser::Message<'_>) -> Vec<EmailAddress> {
     msg.to()
         .map(|addrs| {
             addrs
                 .iter()
-                .filter_map(|addr| addr.address().map(|a| a.to_string()))
+                .map(|addr| EmailAddress {
+                    name: addr.name().map(|n| n.to_string()),
+                    address: addr
+                        .address()
+                        .map(|a| a.to_string())
+                        .unwrap_or_default(),
+                })
                 .collect()
         })
         .unwrap_or_default()
 }
 
 /// Extract all CC addresses.
-fn extract_cc(msg: &mail_parser::Message<'_>) -> Vec<String> {
+fn extract_cc(msg: &mail_parser::Message<'_>) -> Vec<EmailAddress> {
     msg.cc()
         .map(|addrs| {
             addrs
                 .iter()
-                .filter_map(|addr| addr.address().map(|a| a.to_string()))
+                .map(|addr| EmailAddress {
+                    name: addr.name().map(|n| n.to_string()),
+                    address: addr
+                        .address()
+                        .map(|a| a.to_string())
+                        .unwrap_or_default(),
+                })
                 .collect()
         })
         .unwrap_or_default()
 }
 
 /// Extract the plain text body from the message.
-fn extract_body_text(msg: &mail_parser::Message<'_>) -> String {
-    msg.body_text(0)
-        .map(|t| t.to_string())
-        .unwrap_or_default()
+fn extract_body_text(msg: &mail_parser::Message<'_>) -> Option<String> {
+    msg.body_text(0).map(|t| t.to_string())
 }
 
 /// Extract the HTML body from the message, if present.
@@ -115,10 +135,10 @@ fn extract_body_html(msg: &mail_parser::Message<'_>) -> Option<String> {
     msg.body_html(0).map(|h| h.to_string())
 }
 
-/// Extract a thread ID from In-Reply-To or References headers.
+/// Extract In-Reply-To header for threading.
 ///
 /// Uses In-Reply-To first; falls back to the first entry in References.
-fn extract_thread_id(msg: &mail_parser::Message<'_>) -> Option<String> {
+fn extract_in_reply_to(msg: &mail_parser::Message<'_>) -> Option<String> {
     // Try In-Reply-To first
     if let Some(in_reply_to) = msg.in_reply_to().as_text() {
         return Some(in_reply_to.to_string());
@@ -152,13 +172,16 @@ fn extract_attachments(msg: &mail_parser::Message<'_>) -> Vec<EmailAttachment> {
                     format!("{main}/{sub}")
                 })
                 .unwrap_or_else(|| "application/octet-stream".into());
-            let size = part.contents().len() as u64;
+            let size_bytes = part.contents().len() as u64;
+            let content_id = part
+                .content_id()
+                .map(|id| id.to_string());
 
             EmailAttachment {
-                file_id: Uuid::new_v4().to_string(),
                 filename,
                 mime_type,
-                size,
+                size_bytes,
+                content_id,
             }
         })
         .collect()
@@ -250,14 +273,13 @@ mod tests {
     #[test]
     fn normalize_simple_email() {
         let email = normalize_message(SIMPLE_EMAIL, "imap").expect("should parse");
-        assert_eq!(email.from, "sender@example.com");
-        assert_eq!(email.to, vec!["recipient@example.com"]);
+        assert_eq!(email.from.address, "sender@example.com");
+        assert_eq!(email.to[0].address, "recipient@example.com");
         assert_eq!(email.subject, "Test Email");
-        assert!(email.body_text.contains("This is a test email body."));
-        // mail-parser may generate HTML for plain text emails; just verify body_text is set
+        assert!(email.body_text.as_deref().unwrap().contains("This is a test email body."));
         assert_eq!(email.source, "imap");
         assert_eq!(email.source_id, "test-001@example.com");
-        assert!(email.thread_id.is_none());
+        assert!(email.in_reply_to.is_none());
         assert!(email.cc.is_empty());
         assert!(email.bcc.is_empty());
         assert!(email.attachments.is_empty());
@@ -266,15 +288,14 @@ mod tests {
     #[test]
     fn normalize_threaded_email() {
         let email = normalize_message(THREADED_EMAIL, "imap").expect("should parse");
-        assert_eq!(email.from, "alice@example.com");
-        assert_eq!(email.to, vec!["bob@example.com"]);
-        assert_eq!(
-            email.cc,
-            vec!["carol@example.com", "dave@example.com"]
-        );
+        assert_eq!(email.from.address, "alice@example.com");
+        assert_eq!(email.to[0].address, "bob@example.com");
+        assert_eq!(email.cc.len(), 2);
+        assert_eq!(email.cc[0].address, "carol@example.com");
+        assert_eq!(email.cc[1].address, "dave@example.com");
         assert_eq!(email.subject, "Re: Project Update");
         assert_eq!(
-            email.thread_id.as_deref(),
+            email.in_reply_to.as_deref(),
             Some("original-001@example.com")
         );
     }
@@ -282,33 +303,32 @@ mod tests {
     #[test]
     fn normalize_minimal_email_defaults() {
         let email = normalize_message(MINIMAL_EMAIL, "imap").expect("should parse");
-        assert_eq!(email.from, "sender@example.com");
+        assert_eq!(email.from.address, "sender@example.com");
         assert_eq!(email.subject, "(no subject)");
-        assert!(email.body_text.contains("Minimal message."));
+        assert!(email.body_text.as_deref().unwrap().contains("Minimal message."));
         // No date header — should fall back to a valid DateTime
-        assert!(email.created_at <= Utc::now());
+        assert!(email.date <= Utc::now());
     }
 
     #[test]
     fn normalize_multipart_with_attachment() {
         let email = normalize_message(MULTIPART_EMAIL, "imap").expect("should parse");
         assert_eq!(email.subject, "Email with attachment");
-        assert!(email.body_text.contains("Please see the attached file."));
+        assert!(email.body_text.as_deref().unwrap().contains("Please see the attached file."));
         assert_eq!(email.attachments.len(), 1);
 
         let attachment = &email.attachments[0];
         assert_eq!(attachment.filename, "report.pdf");
         assert!(attachment.mime_type.contains("pdf"));
-        assert!(attachment.size > 0);
-        assert!(!attachment.file_id.is_empty());
+        assert!(attachment.size_bytes > 0);
     }
 
     #[test]
-    fn thread_id_from_references_only() {
+    fn in_reply_to_from_references_only() {
         let email =
             normalize_message(REFERENCES_ONLY_EMAIL, "imap").expect("should parse");
         assert_eq!(
-            email.thread_id.as_deref(),
+            email.in_reply_to.as_deref(),
             Some("thread-root@example.com")
         );
     }
@@ -329,7 +349,7 @@ mod tests {
     fn email_date_parsed_correctly() {
         let email = normalize_message(SIMPLE_EMAIL, "imap").expect("should parse");
         // The email is dated 2026-03-21 10:00:00 UTC
-        assert_eq!(email.created_at.year(), 2026);
+        assert_eq!(email.date.year(), 2026);
     }
 
     use chrono::Datelike;
@@ -345,7 +365,7 @@ mod tests {
         let email = normalize_message(SIMPLE_EMAIL, "imap").expect("should parse");
         let json = serde_json::to_string(&email).expect("should serialize");
         let restored: Email = serde_json::from_str(&json).expect("should deserialize");
-        assert_eq!(restored.from, email.from);
+        assert_eq!(restored.from.address, email.from.address);
         assert_eq!(restored.subject, email.subject);
     }
 }

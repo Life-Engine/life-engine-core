@@ -8,17 +8,16 @@ use uuid::Uuid;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct FileMetadata {
     pub id: Uuid,
-    pub name: String,
-    pub mime_type: String,
-    pub size: u64,
+    pub filename: String,
     pub path: String,
+    pub mime_type: String,
+    pub size_bytes: u64,
+    pub checksum: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub checksum: Option<String>,
+    pub storage_backend: Option<String>,
     pub source: String,
     pub source_id: String,
     /// Plugin-specific extension data, namespaced by plugin ID (reverse-domain format).
-    /// Each key is a plugin's manifest `id` (e.g. `com.life-engine.todos`) and each value
-    /// is an opaque JSON object owned by that plugin. See ADR-014.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub extensions: Option<serde_json::Value>,
     pub created_at: DateTime<Utc>,

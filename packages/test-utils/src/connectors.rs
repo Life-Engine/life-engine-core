@@ -495,8 +495,8 @@ macro_rules! assert_email_identity {
             "email id should not be nil"
         );
         assert!(
-            !$email.from.is_empty(),
-            "email from should not be empty"
+            !$email.from.address.is_empty(),
+            "email from address should not be empty"
         );
     }};
 }
@@ -507,13 +507,16 @@ macro_rules! assert_email_identity {
 #[macro_export]
 macro_rules! assert_email_addressing {
     ($email:expr, from: $from:expr, to: $to:expr) => {{
-        assert_eq!($email.from, $from, "email from mismatch");
-        assert_eq!($email.to, $to, "email to mismatch");
+        assert_eq!($email.from.address, $from, "email from mismatch");
+        let to_addrs: Vec<String> = $email.to.iter().map(|a| a.address.clone()).collect();
+        assert_eq!(to_addrs, $to, "email to mismatch");
     }};
     ($email:expr, from: $from:expr, to: $to:expr, cc: $cc:expr) => {{
-        assert_eq!($email.from, $from, "email from mismatch");
-        assert_eq!($email.to, $to, "email to mismatch");
-        assert_eq!($email.cc, $cc, "email cc mismatch");
+        assert_eq!($email.from.address, $from, "email from mismatch");
+        let to_addrs: Vec<String> = $email.to.iter().map(|a| a.address.clone()).collect();
+        assert_eq!(to_addrs, $to, "email to mismatch");
+        let cc_addrs: Vec<String> = $email.cc.iter().map(|a| a.address.clone()).collect();
+        assert_eq!(cc_addrs, $cc, "email cc mismatch");
     }};
 }
 
@@ -608,75 +611,90 @@ mod tests {
 
     #[test]
     fn assert_email_source_macro_passes() {
-        use life_engine_types::Email;
+        use life_engine_types::{Email, EmailAddress};
 
+        let now = chrono::Utc::now();
         let email = Email {
             id: uuid::Uuid::new_v4(),
-            from: "test@example.com".into(),
-            to: vec!["recipient@example.com".into()],
+            subject: "Test".into(),
+            from: EmailAddress { name: None, address: "test@example.com".into() },
+            to: vec![EmailAddress { name: None, address: "recipient@example.com".into() }],
             cc: vec![],
             bcc: vec![],
-            subject: "Test".into(),
-            body_text: "body".into(),
+            body_text: Some("body".into()),
             body_html: None,
-            thread_id: None,
-            labels: vec![],
+            date: now,
+            message_id: None,
+            in_reply_to: None,
             attachments: vec![],
+            read: None,
+            starred: None,
+            labels: vec![],
             source: "imap".into(),
             source_id: "msg-001".into(),
             extensions: None,
-            created_at: chrono::Utc::now(),
-            updated_at: chrono::Utc::now(),
+            created_at: now,
+            updated_at: now,
         };
         assert_email_source!(email, "imap");
     }
 
     #[test]
     fn assert_email_identity_macro_passes() {
-        use life_engine_types::Email;
+        use life_engine_types::{Email, EmailAddress};
 
+        let now = chrono::Utc::now();
         let email = Email {
             id: uuid::Uuid::new_v4(),
-            from: "test@example.com".into(),
+            subject: "Test".into(),
+            from: EmailAddress { name: None, address: "test@example.com".into() },
             to: vec![],
             cc: vec![],
             bcc: vec![],
-            subject: "Test".into(),
-            body_text: "body".into(),
+            body_text: Some("body".into()),
             body_html: None,
-            thread_id: None,
-            labels: vec![],
+            date: now,
+            message_id: None,
+            in_reply_to: None,
             attachments: vec![],
+            read: None,
+            starred: None,
+            labels: vec![],
             source: "test".into(),
             source_id: "id".into(),
             extensions: None,
-            created_at: chrono::Utc::now(),
-            updated_at: chrono::Utc::now(),
+            created_at: now,
+            updated_at: now,
         };
         assert_email_identity!(email);
     }
 
     #[test]
     fn assert_email_addressing_macro_passes() {
-        use life_engine_types::Email;
+        use life_engine_types::{Email, EmailAddress};
 
+        let now = chrono::Utc::now();
         let email = Email {
             id: uuid::Uuid::new_v4(),
-            from: "alice@example.com".into(),
-            to: vec!["bob@example.com".into()],
-            cc: vec!["carol@example.com".into()],
-            bcc: vec![],
             subject: "Test".into(),
-            body_text: "body".into(),
+            from: EmailAddress { name: None, address: "alice@example.com".into() },
+            to: vec![EmailAddress { name: None, address: "bob@example.com".into() }],
+            cc: vec![EmailAddress { name: None, address: "carol@example.com".into() }],
+            bcc: vec![],
+            body_text: Some("body".into()),
             body_html: None,
-            thread_id: None,
-            labels: vec![],
+            date: now,
+            message_id: None,
+            in_reply_to: None,
             attachments: vec![],
+            read: None,
+            starred: None,
+            labels: vec![],
             source: "test".into(),
             source_id: "id".into(),
             extensions: None,
-            created_at: chrono::Utc::now(),
-            updated_at: chrono::Utc::now(),
+            created_at: now,
+            updated_at: now,
         };
         assert_email_addressing!(email,
             from: "alice@example.com",

@@ -87,7 +87,7 @@ Progress: 0 / 11 work packages complete
 ## 2.5 — Notes, Emails, Files, and Credentials Rust Structs
 > spec: .odm/spec/canonical-data-models/brief.md
 
-- [ ] Define Notes, Emails, Files, and Credentials Rust structs
+- [x] Define Notes, Emails, Files, and Credentials Rust structs
   <!-- file: packages/types/src/notes.rs -->
   <!-- file: packages/types/src/emails.rs -->
   <!-- file: packages/types/src/files.rs -->

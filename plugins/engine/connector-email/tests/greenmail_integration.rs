@@ -179,16 +179,16 @@ async fn test_full_sync() -> anyhow::Result<()> {
         assert!(!email.id.is_nil(), "email should have a valid UUID");
         assert_eq!(email.source, "imap");
         assert!(!email.source_id.is_empty());
-        assert!(!email.from.is_empty());
+        assert!(!email.from.address.is_empty());
 
         if subjects.contains(&email.subject) {
             found_subjects.push(email.subject.clone());
             assert!(
-                email.body_text.contains("Body for"),
+                email.body_text.as_deref().unwrap_or("").contains("Body for"),
                 "body_text should contain seeded content"
             );
             assert!(
-                email.to.contains(&"test@life-engine.local".to_string()),
+                email.to.iter().any(|a| a.address == "test@life-engine.local"),
                 "to should contain test@life-engine.local"
             );
         }
@@ -398,13 +398,9 @@ async fn test_attachment_handling() -> anyhow::Result<()> {
                 "mime_type should contain 'pdf', got: {}",
                 att.mime_type
             );
-            assert!(att.size > 0, "attachment size should be > 0");
+            assert!(att.size_bytes > 0, "attachment size_bytes should be > 0");
             assert!(
-                !att.file_id.is_empty(),
-                "file_id should not be empty"
-            );
-            assert!(
-                email.body_text.contains("attached PDF document"),
+                email.body_text.as_deref().unwrap_or("").contains("attached PDF document"),
                 "body_text should contain the plain text part"
             );
             break;
@@ -456,10 +452,10 @@ async fn test_send_via_smtp() -> anyhow::Result<()> {
         let email = normalize_message(raw, "imap")?;
         if email.subject == unique_subject {
             found = true;
-            assert_eq!(email.from, "test@life-engine.local");
-            assert!(email.to.contains(&"test@life-engine.local".to_string()));
+            assert_eq!(email.from.address, "test@life-engine.local");
+            assert!(email.to.iter().any(|a| a.address == "test@life-engine.local"));
             assert!(
-                email.body_text.contains("SmtpClient::send()"),
+                email.body_text.as_deref().unwrap_or("").contains("SmtpClient::send()"),
                 "body_text should contain the sent body content"
             );
             break;

@@ -1,5 +1,13 @@
 # Change Log
 
+## 2026-03-23
+
+- WP nx:1.3 Rust Project Configurations: add Nx project.json for apps/core (build/test/lint cargo targets), 4 library packages (plugin-sdk-rs, test-utils, test-fixtures, dav-utils), and 9 engine plugins (connector-email, connector-calendar, connector-contacts, connector-filesystem, api-caldav, api-carddav, webhook-receiver, webhook-sender, backup) with wasm32-wasip1 build targets for plugins. All 15 projects visible in Nx graph.
+
+- WP nx:1.2 Nx Installation & Base Config: install Nx and plugins, generate pnpm lockfile, create nx.json with targetDefaults, cache inputs, and named inputs for Rust and TypeScript
+
+- WP nx:1.1 Root Package & pnpm Workspace: create root package.json with Nx devDependencies and pnpm-workspace.yaml listing apps/*, packages/*, plugins/* workspace members
+
 ## 2026-03-22
 
 - WP 1.4 Low Priority Improvements (75 findings across 7 categories): token expiry validation, tilde expansion via directories crate, manifest segment validation, search field indexing, hex decode error handling, semver pre-release support, LWW version check on delete, TOCTOU fix with compare_exchange, CORS wildcard warnings, secret redaction in S3/WebDAV Debug+Serialize, collection param pattern constraint, blanket allow(dead_code) removal, cfg(test) gating, schema quarantine dedup, dead code removal, SSE serialization warning, search depth limit, HashSet collection dedup, bounded delivery log, test retry loops replacing sleep, skip_unless_docker generalization, workspace dependency alignment, license consistency, RFC 5545/6350 line folding, vCard PREF parsing, credential extensions field, user_id/household_id storage columns

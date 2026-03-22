@@ -1,0 +1,40 @@
+{
+  "name": "dav-utils",
+  "sourceRoot": "packages/dav-utils/src",
+  "projectType": "library",
+  "tags": ["lang:rust", "type:lib"],
+  "namedInputs": {
+    "rust": [
+      "{projectRoot}/src/**/*.rs",
+      "{projectRoot}/Cargo.toml",
+      "{workspaceRoot}/Cargo.toml",
+      "{workspaceRoot}/Cargo.lock"
+    ]
+  },
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "inputs": ["rust"],
+      "options": {
+        "command": "cargo build -p dav-utils",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "inputs": ["rust"],
+      "options": {
+        "command": "cargo test -p dav-utils",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "inputs": ["rust"],
+      "options": {
+        "command": "cargo clippy -p dav-utils -- -D warnings",
+        "cwd": "{workspaceRoot}"
+      }
+    }
+  }
+}

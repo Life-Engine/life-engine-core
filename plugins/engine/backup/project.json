@@ -1,0 +1,40 @@
+{
+  "name": "backup",
+  "sourceRoot": "plugins/engine/backup/src",
+  "projectType": "library",
+  "tags": ["lang:rust", "type:plugin"],
+  "namedInputs": {
+    "rust": [
+      "{projectRoot}/src/**/*.rs",
+      "{projectRoot}/Cargo.toml",
+      "{workspaceRoot}/Cargo.toml",
+      "{workspaceRoot}/Cargo.lock"
+    ]
+  },
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "inputs": ["rust"],
+      "options": {
+        "command": "cargo build -p backup --target wasm32-wasip1",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "inputs": ["rust"],
+      "options": {
+        "command": "cargo test -p backup",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "inputs": ["rust"],
+      "options": {
+        "command": "cargo clippy -p backup -- -D warnings",
+        "cwd": "{workspaceRoot}"
+      }
+    }
+  }
+}

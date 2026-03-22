@@ -57,19 +57,19 @@ Progress: 0 / 14 work packages complete
 ## 1.3 — Rust Project Configurations
 > depends: 1.2
 
-- [ ] Create `project.json` for `apps/core` with cargo targets
+- [x] Create `project.json` for `apps/core` with cargo targets
   <!-- file: apps/core/project.json -->
   <!-- purpose: Define build (cargo build -p life-engine-core), test (cargo test -p life-engine-core), and lint (cargo clippy -p life-engine-core) executor targets -->
   <!-- requirements: Nx orchestrates Rust builds -->
   <!-- leverage: apps/core/Cargo.toml -->
 
-- [ ] Create `project.json` for each Rust library package
+- [x] Create `project.json` for each Rust library package
   <!-- file: packages/plugin-sdk-rs/project.json, packages/test-utils/project.json, packages/test-fixtures/project.json, packages/dav-utils/project.json -->
   <!-- purpose: Define build/test/lint targets for each Rust library crate -->
   <!-- requirements: Nx project detection for libraries -->
   <!-- leverage: respective Cargo.toml files -->
 
-- [ ] Create `project.json` for each engine plugin
+- [x] Create `project.json` for each engine plugin
   <!-- file: plugins/engine/connector-email/project.json, plugins/engine/connector-calendar/project.json, plugins/engine/connector-contacts/project.json, plugins/engine/connector-filesystem/project.json, plugins/engine/api-caldav/project.json, plugins/engine/api-carddav/project.json, plugins/engine/webhook-receiver/project.json, plugins/engine/webhook-sender/project.json, plugins/engine/backup/project.json -->
   <!-- purpose: Define build/test targets for each WASM plugin crate -->
   <!-- requirements: Nx project detection for plugins -->

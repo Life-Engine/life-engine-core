@@ -1,0 +1,13 @@
+{
+  "name": "life-engine-core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Life Engine Core — personal data engine with polyglot monorepo",
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@9.15.4",
+  "scripts": {},
+  "devDependencies": {
+    "nx": "^20.4.0",
+    "@nx/js": "^20.4.0"
+  }
+}

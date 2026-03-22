@@ -187,13 +187,15 @@ impl PgStorage {
         client
             .batch_execute(
                 "CREATE TABLE IF NOT EXISTS plugin_data (
-                    id          TEXT PRIMARY KEY,
-                    plugin_id   TEXT NOT NULL,
-                    collection  TEXT NOT NULL,
-                    data        JSONB NOT NULL,
-                    version     BIGINT NOT NULL DEFAULT 1,
-                    created_at  TIMESTAMPTZ NOT NULL,
-                    updated_at  TIMESTAMPTZ NOT NULL
+                    id             TEXT PRIMARY KEY,
+                    plugin_id      TEXT NOT NULL,
+                    collection     TEXT NOT NULL,
+                    data           JSONB NOT NULL,
+                    version        BIGINT NOT NULL DEFAULT 1,
+                    user_id        TEXT,
+                    household_id   TEXT,
+                    created_at     TIMESTAMPTZ NOT NULL,
+                    updated_at     TIMESTAMPTZ NOT NULL
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_plugin_collection
@@ -338,7 +340,7 @@ impl PgStorage {
 
             let rows = client
                 .query(
-                    "SELECT id, plugin_id, collection, data, version, created_at, updated_at,
+                    "SELECT id, plugin_id, collection, data, version, user_id, household_id, created_at, updated_at,
                             ts_rank(search_vector, plainto_tsquery('english', $1)) AS rank
                      FROM plugin_data
                      WHERE search_vector @@ plainto_tsquery('english', $1) AND collection = $2
@@ -361,7 +363,7 @@ impl PgStorage {
 
             let rows = client
                 .query(
-                    "SELECT id, plugin_id, collection, data, version, created_at, updated_at,
+                    "SELECT id, plugin_id, collection, data, version, user_id, household_id, created_at, updated_at,
                             ts_rank(search_vector, plainto_tsquery('english', $1)) AS rank
                      FROM plugin_data
                      WHERE search_vector @@ plainto_tsquery('english', $1)
@@ -404,7 +406,7 @@ impl StorageAdapter for PgStorage {
         let client = self.pool.get().await?;
         let row = client
             .query_opt(
-                "SELECT id, plugin_id, collection, data, version, created_at, updated_at
+                "SELECT id, plugin_id, collection, data, version, user_id, household_id, created_at, updated_at
                  FROM plugin_data
                  WHERE id = $1 AND plugin_id = $2 AND collection = $3",
                 &[&id, &plugin_id, &collection],
@@ -620,7 +622,7 @@ impl StorageAdapter for PgStorage {
         let offset_param = format!("${}", param_idx + 1);
 
         let data_sql = format!(
-            "SELECT id, plugin_id, collection, data, version, created_at, updated_at
+            "SELECT id, plugin_id, collection, data, version, user_id, household_id, created_at, updated_at
              FROM plugin_data
              WHERE {where_clause}
              {order_clause}
@@ -705,10 +707,10 @@ fn row_to_record(row: &tokio_postgres::Row) -> anyhow::Result<Record> {
         collection: row.get(2),
         data: row.get(3),
         version: row.get(4),
-        user_id: None,
-        household_id: None,
-        created_at: row.get(5),
-        updated_at: row.get(6),
+        user_id: row.get(5),
+        household_id: row.get(6),
+        created_at: row.get(7),
+        updated_at: row.get(8),
     })
 }
 

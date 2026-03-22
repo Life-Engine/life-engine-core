@@ -61,7 +61,43 @@ pub fn contact_to_vcard(contact: &Contact) -> String {
     lines.push(format!("REV:{rev}"));
 
     lines.push("END:VCARD".to_string());
-    lines.join("\r\n")
+
+    // RFC 6350 §3.2: Lines longer than 75 octets SHOULD be folded with
+    // CRLF followed by a single space.
+    lines
+        .iter()
+        .map(|line| fold_line(line))
+        .collect::<Vec<_>>()
+        .join("\r\n")
+}
+
+/// Fold a content line per RFC 6350 §3.2.
+///
+/// Lines longer than 75 octets are split: the first chunk is 75 octets,
+/// continuation chunks are 74 octets (the leading space counts as one).
+fn fold_line(line: &str) -> String {
+    let bytes = line.as_bytes();
+    if bytes.len() <= 75 {
+        return line.to_string();
+    }
+
+    let mut result = String::with_capacity(bytes.len() + bytes.len() / 74 * 3);
+    let mut pos = 0;
+    let mut first = true;
+
+    while pos < bytes.len() {
+        let chunk_len = if first { 75 } else { 74 };
+        first = false;
+
+        let end = std::cmp::min(pos + chunk_len, bytes.len());
+        if !result.is_empty() {
+            result.push_str("\r\n ");
+        }
+        result.push_str(&String::from_utf8_lossy(&bytes[pos..end]));
+        pos = end;
+    }
+
+    result
 }
 
 /// Parse a vCard string into a CDM `Contact`.
@@ -117,9 +153,17 @@ pub fn vcard_to_contact(vcard_data: &str) -> anyhow::Result<Contact> {
             }
             "EMAIL" => {
                 let email_type = extract_type_param(&params);
+                // Handle preference in both vCard formats:
+                //   vCard 4.0: PREF=1
+                //   vCard 3.0: TYPE=PREF  or  TYPE=home,pref  (comma-separated)
                 let primary = params
                     .iter()
-                    .any(|(k, _)| k.eq_ignore_ascii_case("PREF"))
+                    .any(|(k, v)| {
+                        k.eq_ignore_ascii_case("PREF")
+                            || (k.eq_ignore_ascii_case("TYPE")
+                                && v.split(',')
+                                    .any(|part| part.trim().eq_ignore_ascii_case("pref")))
+                    })
                     .then_some(true);
                 emails.push(EmailAddress {
                     address: value.to_string(),

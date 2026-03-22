@@ -86,6 +86,9 @@ mod tests {
     use std::sync::Arc;
     use tower::ServiceExt;
 
+    // NOTE: These tests intentionally skip auth middleware to focus on search
+    // logic in isolation. Auth middleware is tested in the auth module tests
+    // and in the integration test suite.
     async fn setup_search_app() -> (Router, Arc<SearchEngine>) {
         let engine = Arc::new(SearchEngine::new().unwrap());
 

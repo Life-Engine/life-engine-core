@@ -22,7 +22,10 @@ pub fn unfold_lines(raw: &str) -> String {
     let mut result = String::with_capacity(normalized.len());
     for line in normalized.lines() {
         if line.starts_with(' ') || line.starts_with('\t') {
-            // Continuation: append without the leading whitespace
+            // Continuation: append without the leading whitespace.
+            // The continuation marker is always a single ASCII byte (' ' or '\t'),
+            // so indexing at 1 is safe.
+            debug_assert!(line.as_bytes()[0].is_ascii());
             result.push_str(&line[1..]);
         } else {
             if !result.is_empty() {

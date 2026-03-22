@@ -285,23 +285,22 @@ impl ValidatedStorage {
         &self.registry
     }
 
-    /// Validate data and either create the record or quarantine it.
+    /// Validate and quarantine invalid data, returning an error if quarantined.
     ///
-    /// Returns `Ok(record)` if validation passes or no schema exists.
-    /// Returns `Err` with quarantine details if validation fails.
+    /// Shared logic for `validated_create` and `validated_update`.
     #[allow(dead_code)]
-    pub async fn validated_create(
+    async fn quarantine_if_invalid(
         &self,
         plugin_id: &str,
         collection: &str,
-        data: Value,
-    ) -> Result<crate::storage::Record, QuarantineError> {
-        if let Some(result) = self.registry.validate(collection, &data)
+        data: &Value,
+        context: &str,
+    ) -> Result<(), QuarantineError> {
+        if let Some(result) = self.registry.validate(collection, data)
             && !result.valid
         {
-            // Quarantine the invalid record.
             let entry = QuarantineEntry {
-                original_data: data,
+                original_data: data.clone(),
                 original_collection: collection.to_string(),
                 source_plugin_id: plugin_id.to_string(),
                 validation_errors: result.errors.clone(),
@@ -323,7 +322,7 @@ impl ValidatedStorage {
                 plugin_id = %plugin_id,
                 quarantine_id = %quarantine_record.id,
                 error_count = result.errors.len(),
-                "record quarantined due to validation failure"
+                "{context} quarantined due to validation failure"
             );
 
             return Err(QuarantineError::ValidationFailed {
@@ -332,7 +331,22 @@ impl ValidatedStorage {
             });
         }
 
-        // Validation passed or no schema — proceed normally.
+        Ok(())
+    }
+
+    /// Validate data and either create the record or quarantine it.
+    ///
+    /// Returns `Ok(record)` if validation passes or no schema exists.
+    /// Returns `Err` with quarantine details if validation fails.
+    #[allow(dead_code)]
+    pub async fn validated_create(
+        &self,
+        plugin_id: &str,
+        collection: &str,
+        data: Value,
+    ) -> Result<crate::storage::Record, QuarantineError> {
+        self.quarantine_if_invalid(plugin_id, collection, &data, "record").await?;
+
         self.storage
             .create(plugin_id, collection, data)
             .await
@@ -349,41 +363,7 @@ impl ValidatedStorage {
         data: Value,
         version: i64,
     ) -> Result<crate::storage::Record, QuarantineError> {
-        if let Some(result) = self.registry.validate(collection, &data)
-            && !result.valid
-        {
-            let entry = QuarantineEntry {
-                original_data: data,
-                original_collection: collection.to_string(),
-                source_plugin_id: plugin_id.to_string(),
-                validation_errors: result.errors.clone(),
-                schema_version: result.schema_version,
-                quarantined_at: chrono::Utc::now().to_rfc3339(),
-            };
-
-            let quarantine_data = serde_json::to_value(&entry)
-                .map_err(|e| QuarantineError::Internal(e.to_string()))?;
-
-            let quarantine_record = self
-                .storage
-                .create("core", QUARANTINE_COLLECTION, quarantine_data)
-                .await
-                .map_err(|e| QuarantineError::Internal(e.to_string()))?;
-
-            tracing::warn!(
-                collection = %collection,
-                record_id = %id,
-                plugin_id = %plugin_id,
-                quarantine_id = %quarantine_record.id,
-                error_count = result.errors.len(),
-                "update quarantined due to validation failure"
-            );
-
-            return Err(QuarantineError::ValidationFailed {
-                quarantine_id: quarantine_record.id,
-                errors: result.errors,
-            });
-        }
+        self.quarantine_if_invalid(plugin_id, collection, &data, "update").await?;
 
         self.storage
             .update(plugin_id, collection, id, data, version)

@@ -427,11 +427,18 @@ pub async fn greenmail_send_email(
 
     // RCPT TO
     for recipient in to {
-        let _rcpt = send_cmd(
+        let rcpt_resp = send_cmd(
             &mut stream,
             &mut reader,
             &format!("RCPT TO:<{recipient}>\r\n"),
         )?;
+        // SMTP 2xx means accepted; anything else means the recipient was rejected.
+        if !rcpt_resp.starts_with('2') {
+            eprintln!(
+                "WARNING: SMTP RCPT TO:<{recipient}> rejected: {}",
+                rcpt_resp.trim()
+            );
+        }
     }
 
     // DATA

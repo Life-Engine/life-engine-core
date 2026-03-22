@@ -16,8 +16,10 @@ pub async fn enforce_retention(
         return Ok(0);
     }
 
-    // Manifests should already be sorted newest-first.
-    let to_delete = &manifests[policy.max_count..];
+    // Sort manifests newest-first to ensure correct retention ordering.
+    let mut sorted: Vec<&BackupManifest> = manifests.iter().collect();
+    sorted.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    let to_delete = &sorted[policy.max_count..];
     let mut deleted = 0;
 
     for manifest in to_delete {

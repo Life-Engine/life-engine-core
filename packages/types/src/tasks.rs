@@ -36,7 +36,7 @@ pub struct Task {
     pub priority: TaskPriority,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub due_date: Option<DateTime<Utc>>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub labels: Vec<String>,
     pub source: String,
     pub source_id: String,

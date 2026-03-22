@@ -62,7 +62,7 @@ impl SearchEngine {
         let mut schema_builder = Schema::builder();
         let id = schema_builder.add_text_field("id", STRING | STORED);
         let collection = schema_builder.add_text_field("collection", STRING | STORED);
-        let plugin_id = schema_builder.add_text_field("plugin_id", STORED);
+        let plugin_id = schema_builder.add_text_field("plugin_id", STRING | STORED);
         let content = schema_builder.add_text_field("content", TEXT);
         let title = schema_builder.add_text_field("title", TEXT | STORED);
         let schema = schema_builder.build();
@@ -315,7 +315,7 @@ fn extract_text(collection: &str, data: &serde_json::Value) -> (String, String) 
         _ => {
             // Generic: flatten all string values.
             let mut strings = Vec::new();
-            flatten_strings(data, &mut strings);
+            flatten_strings(data, &mut strings, 10);
             let content = strings.join(" ");
             let title = strings.first().cloned().unwrap_or_default();
             (title, content)
@@ -324,17 +324,23 @@ fn extract_text(collection: &str, data: &serde_json::Value) -> (String, String) 
 }
 
 /// Recursively collect all string values from a JSON value.
-fn flatten_strings(value: &serde_json::Value, out: &mut Vec<String>) {
+///
+/// `max_depth` prevents stack overflow on deeply nested JSON; once it reaches
+/// zero the recursion stops.
+fn flatten_strings(value: &serde_json::Value, out: &mut Vec<String>, max_depth: u32) {
+    if max_depth == 0 {
+        return;
+    }
     match value {
         serde_json::Value::String(s) => out.push(s.clone()),
         serde_json::Value::Object(map) => {
             for v in map.values() {
-                flatten_strings(v, out);
+                flatten_strings(v, out, max_depth - 1);
             }
         }
         serde_json::Value::Array(arr) => {
             for v in arr {
-                flatten_strings(v, out);
+                flatten_strings(v, out, max_depth - 1);
             }
         }
         _ => {}

@@ -314,7 +314,20 @@ pub async fn disclose_credential(
         }
     };
 
-    let ttl = Duration::hours(body.ttl_hours.unwrap_or(24));
+    let ttl_hours = body.ttl_hours.unwrap_or(24);
+    if ttl_hours <= 0 {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "error": {
+                    "code": "INVALID_REQUEST",
+                    "message": "ttl_hours must be greater than 0"
+                }
+            })),
+        )
+            .into_response();
+    }
+    let ttl = Duration::hours(ttl_hours);
 
     match store
         .disclose(&id, &body.claim_names, &body.recipient, ttl)
@@ -496,19 +509,6 @@ mod tests {
     use std::sync::Arc;
     use tokio::sync::Mutex;
     use tower::ServiceExt;
-
-    async fn setup_state() -> (AppState, String, axum::middleware::FromFnLayer<
-        fn(
-            axum::extract::State<crate::auth::middleware::AuthMiddlewareState>,
-            axum::http::Request<axum::body::Body>,
-            axum::middleware::Next,
-        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = axum::http::Response<axum::body::Body>> + Send>>,
-        crate::auth::middleware::AuthMiddlewareState,
-        axum::body::Body,
-    >) {
-        // This is a simplified helper — see individual tests.
-        unreachable!("use per-test setup instead");
-    }
 
     async fn make_test_app() -> (Router, String) {
         let (auth_state, provider) = create_auth_state();

@@ -29,3 +29,16 @@ pub struct CalendarEvent {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
+
+impl CalendarEvent {
+    /// Validate that the event's time range is consistent (start before end).
+    pub fn validate_time_range(&self) -> Result<(), String> {
+        if self.start >= self.end {
+            return Err(format!(
+                "event start ({}) must be before end ({})",
+                self.start, self.end
+            ));
+        }
+        Ok(())
+    }
+}

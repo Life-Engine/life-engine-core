@@ -161,8 +161,9 @@ impl LocalFsConnector {
     /// Scan all configured watch paths and return metadata for included files.
     pub fn scan(&mut self) -> Result<Vec<life_engine_types::FileMetadata>> {
         let mut results = Vec::new();
+        let watch_paths = self.config.watch_paths.clone();
 
-        for watch_path in self.config.watch_paths.clone() {
+        for watch_path in &watch_paths {
             if !watch_path.is_dir() {
                 tracing::warn!(
                     path = %watch_path.display(),

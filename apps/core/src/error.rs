@@ -7,7 +7,6 @@ use thiserror::Error;
 
 /// Errors that can occur in the Core binary.
 #[derive(Debug, Error)]
-#[allow(dead_code)]
 pub enum CoreError {
     /// Configuration file could not be read or parsed.
     #[error("config error: {0}")]
@@ -15,6 +14,7 @@ pub enum CoreError {
 
     /// A plugin failed during its lifecycle.
     #[error("plugin error (plugin={plugin_id}): {message}")]
+    #[allow(dead_code)]
     Plugin {
         /// The ID of the plugin that failed.
         plugin_id: String,
@@ -24,6 +24,7 @@ pub enum CoreError {
 
     /// The storage subsystem encountered an error.
     #[error("storage error: {0}")]
+    #[allow(dead_code)]
     Storage(String),
 
     /// A database rekey (passphrase change) operation failed.
@@ -36,10 +37,12 @@ pub enum CoreError {
 
     /// The message bus encountered an error.
     #[error("message bus error: {0}")]
+    #[allow(dead_code)]
     MessageBus(String),
 
     /// A federation sync operation failed.
     #[error("federation error: {0}")]
+    #[allow(dead_code)]
     Federation(String),
 
     /// An I/O error occurred.

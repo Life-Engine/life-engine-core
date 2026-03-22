@@ -70,6 +70,18 @@ pub fn credential() -> Credential {
 mod tests {
     use super::*;
 
+    /// Resolve a schema file path relative to the workspace root using
+    /// `CARGO_MANIFEST_DIR` instead of brittle `../../../` traversal.
+    fn load_schema(filename: &str) -> String {
+        let schema_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../.odm/doc/schemas")
+            .canonicalize()
+            .expect("failed to resolve schema directory");
+        let path = schema_dir.join(filename);
+        std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("cannot read schema {}: {e}", path.display()))
+    }
+
     fn validate_fixture_against_schema(fixture_json: &str, schema_json: &str, name: &str) {
         let instance: serde_json::Value = serde_json::from_str(fixture_json)
             .unwrap_or_else(|e| panic!("{name} fixture is not valid JSON: {e}"));
@@ -94,7 +106,7 @@ mod tests {
     fn task_fixture_validates_against_schema() {
         validate_fixture_against_schema(
             TASK_JSON,
-            include_str!("../../../docs/schemas/tasks.schema.json"),
+            &load_schema("tasks.schema.json"),
             "task",
         );
     }
@@ -103,7 +115,7 @@ mod tests {
     fn event_fixture_validates_against_schema() {
         validate_fixture_against_schema(
             EVENT_JSON,
-            include_str!("../../../docs/schemas/events.schema.json"),
+            &load_schema("events.schema.json"),
             "event",
         );
     }
@@ -112,7 +124,7 @@ mod tests {
     fn contact_fixture_validates_against_schema() {
         validate_fixture_against_schema(
             CONTACT_JSON,
-            include_str!("../../../docs/schemas/contacts.schema.json"),
+            &load_schema("contacts.schema.json"),
             "contact",
         );
     }
@@ -121,7 +133,7 @@ mod tests {
     fn email_fixture_validates_against_schema() {
         validate_fixture_against_schema(
             EMAIL_JSON,
-            include_str!("../../../docs/schemas/emails.schema.json"),
+            &load_schema("emails.schema.json"),
             "email",
         );
     }
@@ -130,7 +142,7 @@ mod tests {
     fn file_fixture_validates_against_schema() {
         validate_fixture_against_schema(
             FILE_JSON,
-            include_str!("../../../docs/schemas/files.schema.json"),
+            &load_schema("files.schema.json"),
             "file",
         );
     }
@@ -139,7 +151,7 @@ mod tests {
     fn note_fixture_validates_against_schema() {
         validate_fixture_against_schema(
             NOTE_JSON,
-            include_str!("../../../docs/schemas/notes.schema.json"),
+            &load_schema("notes.schema.json"),
             "note",
         );
     }
@@ -148,7 +160,7 @@ mod tests {
     fn credential_fixture_validates_against_schema() {
         validate_fixture_against_schema(
             CREDENTIAL_JSON,
-            include_str!("../../../docs/schemas/credentials.schema.json"),
+            &load_schema("credentials.schema.json"),
             "credential",
         );
     }

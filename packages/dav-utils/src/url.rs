@@ -21,7 +21,22 @@
 pub fn join_dav_url(base: &str, path: &str) -> String {
     let base = base.trim_end_matches('/');
     let path = path.trim_start_matches('/');
-    format!("{base}/{path}")
+    let joined = format!("{base}/{path}");
+    // Normalize any internal double slashes (preserving the scheme's "://").
+    if let Some(idx) = joined.find("://") {
+        let (scheme, rest) = joined.split_at(idx + 3);
+        let normalized: String = rest.chars().fold(String::with_capacity(rest.len()), |mut acc, c| {
+            if c == '/' && acc.ends_with('/') {
+                // skip duplicate slash
+            } else {
+                acc.push(c);
+            }
+            acc
+        });
+        format!("{scheme}{normalized}")
+    } else {
+        joined
+    }
 }
 
 #[cfg(test)]

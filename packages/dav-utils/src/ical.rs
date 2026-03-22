@@ -60,7 +60,16 @@ pub fn parse_ical_datetime(
 
     if is_date_only(value) || is_date_param {
         let date = NaiveDate::parse_from_str(value, "%Y%m%d")
-            .map_err(|e| anyhow::anyhow!("invalid DATE '{}': {}", value, e))?;
+            .map_err(|e| {
+                if is_date_param && !is_date_only(value) {
+                    anyhow::anyhow!(
+                        "VALUE=DATE parameter is set but value '{}' looks like a date-time, not a date (YYYYMMDD): {}",
+                        value, e
+                    )
+                } else {
+                    anyhow::anyhow!("invalid DATE '{}': {}", value, e)
+                }
+            })?;
         let datetime = date.and_time(NaiveTime::MIN);
         return Ok(Utc.from_utc_datetime(&datetime));
     }

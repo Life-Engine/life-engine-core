@@ -192,21 +192,21 @@ impl CalDavClient {
     /// Create an event on the CalDAV server (stub, gated behind `integration` feature).
     #[allow(dead_code)]
     pub fn create_event(&self, _event: &CalendarEvent) -> anyhow::Result<()> {
-        tracing::info!("CalDAV create_event stub called");
+        tracing::warn!("CalDAV create_event not yet implemented; returning no-op");
         Ok(())
     }
 
     /// Update an event on the CalDAV server (stub, gated behind `integration` feature).
     #[allow(dead_code)]
     pub fn update_event(&self, _event: &CalendarEvent) -> anyhow::Result<()> {
-        tracing::info!("CalDAV update_event stub called");
+        tracing::warn!("CalDAV update_event not yet implemented; returning no-op");
         Ok(())
     }
 
     /// Delete an event on the CalDAV server (stub, gated behind `integration` feature).
     #[allow(dead_code)]
     pub fn delete_event(&self, _event_id: &str) -> anyhow::Result<()> {
-        tracing::info!("CalDAV delete_event stub called");
+        tracing::warn!("CalDAV delete_event not yet implemented; returning no-op");
         Ok(())
     }
 }

@@ -30,61 +30,51 @@ pub async fn event_stream(
     let stream = BroadcastStream::new(rx);
 
     let filtered = stream.filter_map(move |result| {
-        match result {
-            Ok(event) => {
-                // Apply collection filter.
-                if let Some(ref col) = params.collection {
-                    match &event {
-                        BusEvent::NewRecords { collection, .. } if collection != col => {
-                            return None;
-                        }
-                        _ => {}
-                    }
-                }
+        let event = match result {
+            Ok(e) => e,
+            Err(_) => return None,
+        };
 
-                // Skip internal events not intended for SSE clients.
-                match &event {
-                    BusEvent::RecordChanged { .. } | BusEvent::RecordDeleted { .. } => {
-                        return None;
-                    }
-                    _ => {}
-                }
-
-                // Apply event_type filter.
-                if let Some(ref et) = params.event_type {
-                    let event_type_name = match &event {
-                        BusEvent::NewRecords { .. } => "new_records",
-                        BusEvent::SyncComplete { .. } => "sync_complete",
-                        BusEvent::PluginLoaded { .. } => "plugin_loaded",
-                        BusEvent::PluginError { .. } => "plugin_error",
-                        BusEvent::RecordChanged { .. } | BusEvent::RecordDeleted { .. } => {
-                            return None;
-                        }
-                    };
-                    if event_type_name != et.as_str() {
-                        return None;
-                    }
-                }
-
-                let payload = serde_json::to_string(&event).unwrap_or_default();
-                let event_type = match &event {
-                    BusEvent::NewRecords { .. } => "new_records",
-                    BusEvent::SyncComplete { .. } => "sync_complete",
-                    BusEvent::PluginLoaded { .. } => "plugin_loaded",
-                    BusEvent::PluginError { .. } => "plugin_error",
-                    BusEvent::RecordChanged { .. } | BusEvent::RecordDeleted { .. } => {
-                        return None;
-                    }
-                };
-
-                let sse_event = Event::default()
-                    .event(event_type)
-                    .data(payload);
-
-                Some(Ok(sse_event))
+        // Determine the SSE event type name; skip internal-only events.
+        let event_type = match &event {
+            BusEvent::NewRecords { .. } => "new_records",
+            BusEvent::SyncComplete { .. } => "sync_complete",
+            BusEvent::PluginLoaded { .. } => "plugin_loaded",
+            BusEvent::PluginError { .. } => "plugin_error",
+            BusEvent::RecordChanged { .. } | BusEvent::RecordDeleted { .. } => {
+                return None;
             }
-            Err(_) => None,
+        };
+
+        // Apply collection filter.
+        if let Some(ref col) = params.collection {
+            if let BusEvent::NewRecords { collection, .. } = &event {
+                if collection != col {
+                    return None;
+                }
+            }
         }
+
+        // Apply event_type filter.
+        if let Some(ref et) = params.event_type {
+            if event_type != et.as_str() {
+                return None;
+            }
+        }
+
+        let payload = match serde_json::to_string(&event) {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::warn!(error = %e, "failed to serialize SSE event payload");
+                return None;
+            }
+        };
+
+        let sse_event = Event::default()
+            .event(event_type)
+            .data(payload);
+
+        Some(Ok(sse_event))
     });
 
     Sse::new(filtered).keep_alive(

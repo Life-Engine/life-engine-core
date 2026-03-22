@@ -687,6 +687,15 @@ pub async fn webauthn_register_finish(
             let msg: String = e.to_string();
             tracing::error!(error = %msg, "webauthn register finish failed");
 
+            // NOTE: Error classification relies on string matching because
+            // `AuthError::Internal(String)` is the only variant produced by
+            // `WebAuthnProvider::finish_registration`.  If the error messages
+            // in `webauthn_provider.rs` change, these checks will silently
+            // fall through to the generic BAD_REQUEST branch.
+            //
+            // Matched strings (from webauthn_provider.rs):
+            //   - "challenge not found or expired" / "challenge expired"
+            //   - "passkey already registered"
             if msg.contains("expired") {
                 (
                     StatusCode::GONE,

@@ -187,7 +187,13 @@ impl CredentialStore for SqliteCredentialStore {
         let keys: Vec<String> = stmt
             .query_map(params![plugin_id], |row| row.get(0))
             .context("failed to list credential keys")?
-            .filter_map(|r| r.ok())
+            .filter_map(|r| match r {
+                Ok(val) => Some(val),
+                Err(e) => {
+                    tracing::warn!(error = %e, "failed to deserialize credential key row");
+                    None
+                }
+            })
             .collect();
 
         Ok(keys)

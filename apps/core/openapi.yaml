@@ -7,8 +7,8 @@ info:
     quarantine management, Server-Sent Events streaming, and sync conflict resolution.
   version: 0.1.0
   license:
-    name: AGPL-3.0-or-later
-    url: https://www.gnu.org/licenses/agpl-3.0.html
+    name: Apache-2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
 
 servers:
   - url: http://127.0.0.1:3750
@@ -698,7 +698,7 @@ components:
       name: collection
       in: path
       required: true
-      schema: { type: string }
+      schema: { type: string, pattern: "^[a-zA-Z][a-zA-Z0-9_-]*$" }
       description: The collection name (e.g. `tasks`, `contacts`, `emails`).
     recordId:
       name: id

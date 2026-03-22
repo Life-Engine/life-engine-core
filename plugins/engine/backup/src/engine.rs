@@ -30,11 +30,12 @@ pub async fn create_full_backup(
 
     // Compute collection stats.
     let mut collections: Vec<String> = Vec::new();
+    let mut seen_collections: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut record_counts: HashMap<String, u64> = HashMap::new();
     for rec in &records {
         let col = rec.collection.clone();
         *record_counts.entry(col.clone()).or_insert(0) += 1;
-        if !collections.contains(&col) {
+        if seen_collections.insert(col.clone()) {
             collections.push(col);
         }
     }

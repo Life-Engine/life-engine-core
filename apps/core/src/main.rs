@@ -247,7 +247,13 @@ async fn main() -> anyhow::Result<()> {
         } else {
             let parsed: Vec<axum::http::HeaderValue> = origins
                 .iter()
-                .filter_map(|o| o.parse().ok())
+                .filter_map(|o| match o.parse() {
+                    Ok(v) => Some(v),
+                    Err(e) => {
+                        tracing::warn!(origin = %o, error = %e, "failed to parse CORS origin, skipping");
+                        None
+                    }
+                })
                 .collect();
             AllowOrigin::list(parsed)
         };

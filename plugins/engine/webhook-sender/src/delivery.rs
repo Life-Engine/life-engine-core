@@ -5,26 +5,54 @@
 
 use crate::models::{DeliveryRecord, DeliveryStatus};
 
+/// Maximum number of delivery records kept in memory before oldest entries
+/// are evicted.
+const DEFAULT_MAX_CAPACITY: usize = 10_000;
+
 /// In-memory delivery log that records webhook send attempts.
 ///
 /// In production, this would be backed by Core's storage. For now,
 /// the in-memory log is used for testing and will be replaced with
 /// storage-backed persistence during plugin loading.
-#[derive(Debug, Default)]
+///
+/// The log is bounded to `max_capacity` entries; when exceeded the oldest
+/// entries are evicted to stay within the limit.
+#[derive(Debug)]
 pub struct DeliveryLog {
     records: Vec<DeliveryRecord>,
+    max_capacity: usize,
+}
+
+impl Default for DeliveryLog {
+    fn default() -> Self {
+        Self {
+            records: Vec::new(),
+            max_capacity: DEFAULT_MAX_CAPACITY,
+        }
+    }
 }
 
 impl DeliveryLog {
     pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Create a delivery log with a custom maximum capacity.
+    pub fn with_max_capacity(max_capacity: usize) -> Self {
         Self {
             records: Vec::new(),
+            max_capacity,
         }
     }
 
-    /// Record a delivery attempt.
+    /// Record a delivery attempt. If the log exceeds its maximum capacity,
+    /// the oldest entries are evicted.
     pub fn record(&mut self, record: DeliveryRecord) {
         self.records.push(record);
+        if self.records.len() > self.max_capacity {
+            let excess = self.records.len() - self.max_capacity;
+            self.records.drain(..excess);
+        }
     }
 
     /// Returns all delivery records.

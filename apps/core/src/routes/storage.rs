@@ -77,8 +77,8 @@ pub async fn init_storage(
         entries.push(Instant::now());
     }
 
-    // Guard: only callable once.
-    if state.initialized.swap(true, Ordering::SeqCst) {
+    // Guard: only callable once. Use compare_exchange to avoid TOCTOU race.
+    if state.initialized.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
         return (
             StatusCode::CONFLICT,
             Json(json!({

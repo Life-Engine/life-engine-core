@@ -1194,6 +1194,7 @@ impl MutationRoot {
         if deleted {
             bus.publish(BusEvent::RecordDeleted {
                 record_id: id,
+                collection: collection.clone(),
             });
         }
 
@@ -1250,12 +1251,15 @@ impl SubscriptionRoot {
                         deleted_id: None,
                     })
                 }
-                Ok(BusEvent::RecordDeleted { record_id }) => {
-                    // For deletions we don't have the collection info,
-                    // so we deliver to all subscribers regardless of filter.
+                Ok(BusEvent::RecordDeleted { record_id, collection: del_collection }) => {
+                    if let Some(ref col) = collection {
+                        if &del_collection != col {
+                            return None;
+                        }
+                    }
                     Some(RecordChangeEvent {
                         change_type: "deleted".into(),
-                        collection: "unknown".into(),
+                        collection: del_collection,
                         record: None,
                         deleted_id: Some(record_id),
                     })

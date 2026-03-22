@@ -12,7 +12,7 @@ use life_engine_types::FileMetadata;
 use serde::{Deserialize, Serialize};
 
 /// Configuration for an S3-compatible storage endpoint.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct S3Config {
     /// The S3 endpoint URL (e.g. `https://s3.amazonaws.com` or MinIO URL).
     pub endpoint: String,
@@ -23,9 +23,23 @@ pub struct S3Config {
     /// The access key ID for authentication.
     pub access_key_id: String,
     /// The secret access key for authentication.
+    #[serde(skip_serializing)]
     pub secret_access_key: String,
     /// Optional key prefix to scope operations.
     pub prefix: Option<String>,
+}
+
+impl std::fmt::Debug for S3Config {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("S3Config")
+            .field("endpoint", &self.endpoint)
+            .field("region", &self.region)
+            .field("bucket", &self.bucket)
+            .field("access_key_id", &self.access_key_id)
+            .field("secret_access_key", &"[REDACTED]")
+            .field("prefix", &self.prefix)
+            .finish()
+    }
 }
 
 /// Tracks sync state for cloud storage operations.
@@ -271,7 +285,11 @@ mod tests {
             prefix: Some("files/".into()),
         };
         let json = serde_json::to_string(&config).expect("serialize");
-        let restored: S3Config = serde_json::from_str(&json).expect("deserialize");
+        // secret_access_key is redacted from serialization output
+        assert!(!json.contains("SECRET"));
+        // Deserialization from a complete JSON string still works
+        let full_json = r#"{"endpoint":"https://s3.amazonaws.com","region":"us-east-1","bucket":"my-bucket","access_key_id":"AKID","secret_access_key":"SECRET","prefix":"files/"}"#;
+        let restored: S3Config = serde_json::from_str(full_json).expect("deserialize");
         assert_eq!(restored.endpoint, "https://s3.amazonaws.com");
         assert_eq!(restored.region, "us-east-1");
         assert_eq!(restored.bucket, "my-bucket");

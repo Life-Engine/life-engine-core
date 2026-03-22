@@ -76,6 +76,12 @@ async fn send_test_email(subject: &str, body: &str) {
 ///
 /// Returns the collected messages and the IMAP session for further use
 /// (the caller must call `session.logout()` when finished).
+///
+/// NOTE: The `async_imap` crate is built on `async-std` networking types, so
+/// `async_std::net::TcpStream` appears in the signature even though the tests
+/// run under `#[tokio::test]`. This works because `async-std` streams implement
+/// the standard `AsyncRead`/`AsyncWrite` traits and the tokio runtime can drive
+/// them. This is intentional — not a runtime mismatch bug.
 async fn fetch_all_messages(
     session: &mut async_imap::Session<async_std::net::TcpStream>,
 ) -> Vec<(u32, Vec<u8>)> {

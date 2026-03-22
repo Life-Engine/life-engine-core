@@ -57,9 +57,17 @@ pub fn normalize_vcard(raw: &str, source: &str) -> anyhow::Result<Contact> {
             }
             "EMAIL" => {
                 let email_type = extract_type_param(&params);
+                // Check for PREF in three forms:
+                //   vCard 3.0: TYPE=pref  or  TYPE=home,pref  (comma-separated)
+                //   vCard 4.0: PREF=1
                 let primary = params
                     .iter()
-                    .any(|(k, v)| k.eq_ignore_ascii_case("TYPE") && v.eq_ignore_ascii_case("pref"))
+                    .any(|(k, v)| {
+                        (k.eq_ignore_ascii_case("TYPE")
+                            && v.split(',')
+                                .any(|part| part.trim().eq_ignore_ascii_case("pref")))
+                            || k.eq_ignore_ascii_case("PREF")
+                    })
                     .then_some(true);
                 emails.push(EmailAddress {
                     address: value.to_string(),
@@ -616,7 +624,8 @@ END:VCARD";
         let contact = normalize_vcard(vcard, "carddav").expect("should parse");
         assert_eq!(contact.emails.len(), 2);
         assert!(contact.emails[0].primary.is_none());
-        // The pref type for email[1] is in TYPE=home,pref which becomes TYPE param "home,pref"
-        // Our extract_type_param returns "home", and pref detection looks for TYPE=pref separately
+        // TYPE=home,pref — comma-separated values are split; "pref" is detected.
+        assert_eq!(contact.emails[1].primary, Some(true));
+        assert_eq!(contact.emails[1].email_type.as_deref(), Some("home"));
     }
 }

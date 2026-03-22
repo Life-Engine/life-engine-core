@@ -154,8 +154,12 @@ impl Drop for TestBucket {
         let sdk_client = self.sdk_client.clone();
         let bucket = self.bucket.clone();
 
-        // Spawn cleanup on the runtime. We cannot `.await` in Drop, so
-        // we use `spawn_blocking` + `block_on` to ensure it completes.
+        // We cannot `.await` in Drop, so we spawn a dedicated OS thread and
+        // call `block_on` there. This avoids deadlocking the current tokio
+        // runtime (calling `block_on` from within an async context would
+        // panic or deadlock). The dedicated thread has no async runtime of
+        // its own, so `handle.block_on()` is safe. The `.join()` ensures
+        // cleanup completes before the test exits.
         let handle = self.rt_handle.clone();
         std::thread::spawn(move || {
             handle.block_on(async {

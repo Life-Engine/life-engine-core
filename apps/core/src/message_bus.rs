@@ -30,6 +30,8 @@ pub enum BusEvent {
     RecordDeleted {
         /// The deleted record's ID.
         record_id: String,
+        /// The collection the record belonged to.
+        collection: String,
     },
 
     /// A plugin completed a sync operation.

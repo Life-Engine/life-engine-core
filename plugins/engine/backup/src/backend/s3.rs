@@ -6,14 +6,28 @@ use serde::{Deserialize, Serialize};
 use super::{BackupBackend, StoredBackup};
 
 /// Configuration for S3-compatible backup storage.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct S3BackupConfig {
     pub endpoint: String,
     pub region: String,
     pub bucket: String,
     pub access_key_id: String,
+    #[serde(skip_serializing)]
     pub secret_access_key: String,
     pub prefix: Option<String>,
+}
+
+impl std::fmt::Debug for S3BackupConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("S3BackupConfig")
+            .field("endpoint", &self.endpoint)
+            .field("region", &self.region)
+            .field("bucket", &self.bucket)
+            .field("access_key_id", &self.access_key_id)
+            .field("secret_access_key", &"[REDACTED]")
+            .field("prefix", &self.prefix)
+            .finish()
+    }
 }
 
 /// S3-compatible backup backend.
@@ -204,8 +218,13 @@ mod tests {
             prefix: Some("life-engine/".into()),
         };
         let json = serde_json::to_string(&config).unwrap();
-        let restored: S3BackupConfig = serde_json::from_str(&json).unwrap();
+        // secret_access_key is redacted from serialization output
+        assert!(!json.contains("SECRET"));
+        // Deserialization from a complete JSON string still works
+        let full_json = r#"{"endpoint":"https://s3.amazonaws.com","region":"us-east-1","bucket":"backups","access_key_id":"AKID","secret_access_key":"SECRET","prefix":"life-engine/"}"#;
+        let restored: S3BackupConfig = serde_json::from_str(full_json).unwrap();
         assert_eq!(restored.bucket, "backups");
+        assert_eq!(restored.secret_access_key, "SECRET");
     }
 
     #[test]

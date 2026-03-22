@@ -337,6 +337,7 @@ pub async fn delete_record(
             // Notify search processor via bus event.
             state.message_bus.publish(BusEvent::RecordDeleted {
                 record_id: id.clone(),
+                collection: collection.clone(),
             });
 
             StatusCode::NO_CONTENT.into_response()

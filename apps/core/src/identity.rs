@@ -563,9 +563,12 @@ impl IdentityStore {
 
     /// Generate a DID for the local identity store.
     ///
-    /// Uses the `did:key` method with a deterministic key derived from
-    /// the identity secret, providing future interoperability with the
-    /// DID ecosystem.
+    /// Produces a **custom** DID using the `did:key` URI scheme with a
+    /// SHA-256 fingerprint of the signing key.  This is **not** compliant
+    /// with the did:key specification (which requires a multicodec-prefixed,
+    /// multibase-encoded public key).  The format is deterministic and
+    /// suitable for internal correlation, but must not be exchanged with
+    /// external systems that expect spec-compliant `did:key` identifiers.
     pub fn generate_did(&self) -> String {
         let fingerprint = hex::encode(&Sha256::digest(&self.signing_key)[..16]);
         format!("did:key:z{fingerprint}")

@@ -164,6 +164,7 @@ pub fn create_test_credential() -> Credential {
         }),
         source: "test".into(),
         source_id: "test-cred-001".into(),
+        extensions: None,
         created_at: now,
         updated_at: now,
     }

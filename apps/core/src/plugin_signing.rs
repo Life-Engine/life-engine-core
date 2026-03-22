@@ -99,13 +99,20 @@ impl RevocationList {
     }
 
     /// Add a public key to the revocation list.
+    ///
+    /// The key is normalized to lowercase hex to ensure consistent matching.
     pub fn revoke(&mut self, public_key_hex: &str) {
-        self.revoked_keys.insert(public_key_hex.to_string());
+        self.revoked_keys
+            .insert(public_key_hex.to_ascii_lowercase());
     }
 
     /// Check whether a public key has been revoked.
+    ///
+    /// Normalizes to lowercase hex before comparison so that uppercase input
+    /// matches keys stored via `hex::encode` (which emits lowercase).
     pub fn is_revoked(&self, public_key_hex: &str) -> bool {
-        self.revoked_keys.contains(public_key_hex)
+        self.revoked_keys
+            .contains(&public_key_hex.to_ascii_lowercase())
     }
 }
 
@@ -239,8 +246,15 @@ pub fn verify_plugin(
     }
 
     // Recompute the signing payload and verify.
-    let manifest_hash_bytes =
-        hex::decode(&plugin_sig.manifest_hash).expect("hex decode of validated hash");
+    let manifest_hash_bytes = match hex::decode(&plugin_sig.manifest_hash) {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            warn!(error = %e, "failed to hex-decode manifest hash");
+            return VerificationResult::MalformedSignature(format!(
+                "invalid manifest hash hex: {e}"
+            ));
+        }
+    };
     let payload = compute_signing_payload(wasm_bytes, &manifest_hash_bytes);
 
     match verifying_key.verify(&payload, &signature) {

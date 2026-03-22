@@ -12,6 +12,10 @@ use tokio::sync::Mutex;
 use tracing::{info, warn};
 
 /// Default timeout for graceful shutdown (seconds).
+///
+/// Intentionally hardcoded: 5 seconds is sufficient for unloading plugins
+/// during graceful shutdown, and making this configurable would add
+/// complexity with little practical benefit.
 const SHUTDOWN_TIMEOUT_SECS: u64 = 5;
 
 /// Creates a future that completes when a shutdown signal is received.

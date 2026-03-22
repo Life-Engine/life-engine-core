@@ -386,6 +386,7 @@ impl WebAuthnProvider {
     ///
     /// Call this periodically to prevent unbounded memory growth from
     /// abandoned ceremony flows.
+    #[allow(dead_code)]
     pub async fn cleanup_expired_challenges(&self) {
         let mut challenges = self.challenges.write().await;
         let before = challenges.len();

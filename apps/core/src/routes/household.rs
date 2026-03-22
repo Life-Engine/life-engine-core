@@ -415,28 +415,7 @@ mod tests {
         (app, token, store)
     }
 
-    fn auth_request(
-        method: &str,
-        uri: &str,
-        token: &str,
-        body: Option<String>,
-    ) -> Request<Body> {
-        let builder = Request::builder()
-            .method(method)
-            .uri(uri)
-            .header("Authorization", format!("Bearer {token}"))
-            .header("Content-Type", "application/json");
-
-        match body {
-            Some(b) => builder.body(Body::from(b)).unwrap(),
-            None => builder.body(Body::empty()).unwrap(),
-        }
-    }
-
-    async fn body_json(response: axum::http::Response<Body>) -> serde_json::Value {
-        let body = response.into_body().collect().await.unwrap().to_bytes();
-        serde_json::from_slice(&body).unwrap()
-    }
+    use crate::test_helpers::{auth_request, body_json};
 
     fn app_with_identity(store: Arc<HouseholdStore>, identity: crate::auth::types::AuthIdentity) -> Router {
         let household_state = HouseholdState { store };

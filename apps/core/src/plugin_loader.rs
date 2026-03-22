@@ -130,9 +130,17 @@ pub fn read_manifest(path: &Path) -> anyhow::Result<PluginManifest> {
     Ok(manifest)
 }
 
-/// Check whether a version string is valid semver (`X.Y.Z` where X, Y, Z are numeric).
+/// Check whether a version string is valid semver (`X.Y.Z` with optional pre-release/build metadata).
 fn is_valid_semver(version: &str) -> bool {
-    let parts: Vec<&str> = version.split('.').collect();
+    // Strip optional pre-release (`-alpha.1`) and build metadata (`+build.123`) suffixes.
+    let base = version
+        .split('+')
+        .next()
+        .unwrap_or(version)
+        .split('-')
+        .next()
+        .unwrap_or(version);
+    let parts: Vec<&str> = base.split('.').collect();
     if parts.len() != 3 {
         return false;
     }

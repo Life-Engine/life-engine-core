@@ -263,6 +263,15 @@ fn validate_reverse_domain_id(id: &str) -> anyhow::Result<()> {
             ))
             .into());
         }
+
+        // Validate all characters: lowercase ASCII letters, digits, and hyphens only.
+        if !segment.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-') {
+            return Err(CoreError::Manifest(format!(
+                "manifest 'id' segment contains invalid characters, got '{segment}' in '{id}' \
+                 (only lowercase letters, digits, and hyphens are allowed)"
+            ))
+            .into());
+        }
     }
 
     Ok(())

@@ -382,7 +382,14 @@ fn default_log_format() -> String {
     "json".into()
 }
 fn default_data_dir() -> String {
-    "~/.life-engine/data".into()
+    directories::BaseDirs::new()
+        .map(|dirs| {
+            dirs.home_dir()
+                .join(".life-engine/data")
+                .to_string_lossy()
+                .into_owned()
+        })
+        .unwrap_or_else(|| "~/.life-engine/data".into())
 }
 fn default_auth_provider() -> String {
     "local-token".into()
@@ -720,6 +727,13 @@ impl CoreConfig {
         if self.network.cors.allowed_origins.is_empty() {
             return Err(
                 CoreError::Config("cors.allowed_origins must not be empty".into()).into(),
+            );
+        }
+
+        // Warn when wildcard CORS is configured.
+        if self.network.cors.allowed_origins.iter().any(|o| o == "*") {
+            tracing::warn!(
+                "CORS allowed_origins contains wildcard '*'; this allows requests from any origin"
             );
         }
 

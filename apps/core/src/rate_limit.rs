@@ -75,6 +75,9 @@ impl GeneralRateLimiter {
 ///
 /// When rate limited, returns `429 Too Many Requests` with a `Retry-After`
 /// header indicating how many seconds the client should wait.
+/// NOTE: This middleware requires the router to be served with
+/// `into_make_service_with_connect_info::<SocketAddr>()` so that
+/// `ConnectInfo<SocketAddr>` is available in the request extensions.
 pub async fn rate_limit_middleware(
     State(limiter): State<GeneralRateLimiter>,
     request: Request<Body>,

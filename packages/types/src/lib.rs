@@ -180,6 +180,7 @@ mod tests {
             claims: serde_json::json!({"scope": "read"}),
             source: "test".into(),
             source_id: "cred-001".into(),
+            extensions: None,
             created_at: now,
             updated_at: now,
         };

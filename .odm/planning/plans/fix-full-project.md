@@ -514,49 +514,49 @@ Progress: 0 / 4 work packages complete (76 tasks)
 > depends: 1.1
 > qa-report: .odm/qa/full-project/report.md
 
-- [ ] Fix low-severity Bug Risk findings
+- [x] Fix low-severity Bug Risk findings
   <!-- file: multiple files (23 findings) -->
   <!-- purpose: Fix edge cases: zero expiry, tilde expansion, parse errors, version checks, sort assumptions -->
   <!-- findings: F-109, F-110, F-111, F-112, F-113, F-114, F-115, F-116, F-117, F-118, F-119, F-120, F-121, F-122, F-123, F-124, F-125, F-126, F-127, F-128, F-129, F-130, F-131 -->
   <!-- severity: low -->
   <!-- impact: Various edge cases and silent failures that could confuse users -->
 
-- [ ] Fix low-severity Security findings
+- [x] Fix low-severity Security findings
   <!-- file: multiple files (10 findings) -->
   <!-- purpose: Redact secrets in Debug output, validate collection params, document test-only creds -->
   <!-- findings: F-132, F-133, F-134, F-135, F-136, F-137, F-138, F-139, F-140, F-141 -->
   <!-- severity: low -->
   <!-- impact: Secret exposure in logs, minor input validation gaps -->
 
-- [ ] Fix low-severity Code Quality findings
+- [x] Fix low-severity Code Quality findings
   <!-- file: multiple files (14 findings) -->
   <!-- purpose: Remove blanket allow(dead_code), fix dead code, reduce duplication, handle errors -->
   <!-- findings: F-142, F-143, F-144, F-145, F-146, F-147, F-148, F-149, F-150, F-151, F-152, F-153, F-154, F-155 -->
   <!-- severity: low -->
   <!-- impact: Suppressed compiler warnings, dead code, duplicated test helpers -->
 
-- [ ] Fix low-severity Performance findings
+- [x] Fix low-severity Performance findings
   <!-- file: multiple files (4 findings) -->
   <!-- purpose: Add depth limits, avoid unnecessary clones, use HashSet, bound delivery log -->
   <!-- findings: F-156, F-157, F-158, F-159 -->
   <!-- severity: low -->
   <!-- impact: Minor inefficiencies in search indexing, backup, and webhook delivery -->
 
-- [ ] Fix low-severity Testing findings
+- [x] Fix low-severity Testing findings
   <!-- file: multiple files (10 findings) -->
   <!-- purpose: Add auth to test setup, fix timing-dependent tests, update stale test assertions -->
   <!-- findings: F-160, F-161, F-162, F-163, F-164, F-165, F-166, F-167, F-168, F-169 -->
   <!-- severity: low -->
   <!-- impact: Flaky tests, missing validation, stale assertions -->
 
-- [ ] Fix low-severity Consistency findings
+- [x] Fix low-severity Consistency findings
   <!-- file: multiple files (8 findings) -->
   <!-- purpose: Align schemas, types, imports, license declarations, dependency management -->
   <!-- findings: F-170, F-171, F-172, F-173, F-174, F-175, F-176, F-177 -->
   <!-- severity: low -->
   <!-- impact: Inconsistent patterns across codebase; Apache vs AGPL license confusion -->
 
-- [ ] Fix low-severity Documentation findings
+- [x] Fix low-severity Documentation findings
   <!-- file: multiple files (6 findings) -->
   <!-- purpose: Fix did:key compliance, add RFC line folding, fix vCard PREF parsing -->
   <!-- findings: F-178, F-179, F-180, F-181, F-182, F-183 -->

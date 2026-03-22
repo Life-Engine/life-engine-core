@@ -33,7 +33,17 @@ pub fn to_cron_expression(schedule: &BackupSchedule) -> Result<String, anyhow::E
 
 /// Compute the next scheduled run time from a cron expression.
 pub fn next_run(cron_expr: &str, after: DateTime<Utc>) -> Option<DateTime<Utc>> {
-    let schedule = cron::Schedule::from_str(cron_expr).ok()?;
+    let schedule = match cron::Schedule::from_str(cron_expr) {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::warn!(
+                cron_expr = %cron_expr,
+                error = %e,
+                "failed to parse cron expression — backups will not run on this schedule"
+            );
+            return None;
+        }
+    };
     schedule.after(&after).next()
 }
 

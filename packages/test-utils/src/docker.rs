@@ -177,6 +177,12 @@ pub async fn require_docker_service_async(name: &str, host: &str, port: u16) {
 ///
 /// # Example
 ///
+/// Skip a test unless Docker test services are reachable.
+///
+/// By default (no arguments), checks GreenMail SMTP as a proxy for whether
+/// `docker compose -f docker-compose.test.yml up -d` has been run. Pass a
+/// `host` and `port` to check a specific service instead.
+///
 /// ```rust,ignore
 /// use life_engine_test_utils::skip_unless_docker;
 ///
@@ -185,17 +191,28 @@ pub async fn require_docker_service_async(name: &str, host: &str, port: u16) {
 ///     skip_unless_docker!();
 ///     // ... rest of test
 /// }
+///
+/// #[tokio::test]
+/// async fn test_minio() {
+///     skip_unless_docker!("127.0.0.1", 9100);
+///     // ...
+/// }
 /// ```
 #[macro_export]
 macro_rules! skip_unless_docker {
     () => {
-        if !$crate::docker::is_service_available(
+        // Default: use GreenMail SMTP as the canary service for Docker availability.
+        $crate::skip_unless_docker!(
             $crate::docker::GREENMAIL_HOST,
-            $crate::docker::GREENMAIL_SMTP_PORT,
-        ) {
+            $crate::docker::GREENMAIL_SMTP_PORT
+        );
+    };
+    ($host:expr, $port:expr) => {
+        if !$crate::docker::is_service_available($host, $port) {
             eprintln!(
-                "SKIP: Docker test services not available. \
-                 Start with: docker compose -f docker-compose.test.yml up -d"
+                "SKIP: Docker test service at {}:{} not available. \
+                 Start with: docker compose -f docker-compose.test.yml up -d",
+                $host, $port
             );
             return;
         }

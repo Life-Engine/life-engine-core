@@ -90,10 +90,12 @@ pub async fn trigger_sync(
     let collections_filter = body.collections.as_deref();
 
     // Update peer status to syncing.
-    let _ = store.update_peer_status(
+    if let Err(e) = store.update_peer_status(
         &peer.id,
         crate::federation::PeerStatus::Syncing,
-    ).await;
+    ).await {
+        tracing::warn!(peer_id = %peer.id, error = %e, "failed to update peer status to syncing");
+    }
 
     let result = crate::federation::sync_with_peer(
         &peer,
@@ -104,7 +106,9 @@ pub async fn trigger_sync(
     .await;
 
     // Record the sync result.
-    let _ = store.record_sync(result.clone()).await;
+    if let Err(e) = store.record_sync(result.clone()).await {
+        tracing::warn!(error = %e, "failed to record sync result");
+    }
 
     Ok(Json(result))
 }

@@ -221,6 +221,8 @@ export interface Credential {
   claims: Record<string, unknown>;
   source: string;
   source_id: string;
+  /** Plugin-specific extension data, namespaced by plugin ID. */
+  extensions?: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 }

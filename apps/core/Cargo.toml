@@ -26,7 +26,7 @@ async-trait = { workspace = true }
 clap = { workspace = true }
 serde_yaml = { workspace = true }
 tower-http = { workspace = true }
-directories = "6"
+directories = { workspace = true }
 rusqlite = { workspace = true }
 rand = { workspace = true }
 sha2 = { workspace = true }
@@ -41,7 +41,7 @@ jsonschema = { workspace = true }
 jsonwebtoken = { workspace = true }
 reqwest = { workspace = true }
 tantivy = { workspace = true }
-base64 = "0.22"
+base64 = { workspace = true }
 governor = { workspace = true }
 rpassword = { workspace = true }
 rustls = { workspace = true }
@@ -71,4 +71,4 @@ http-body-util = "0.1"
 urlencoding = "2"
 rcgen = "0.13"
 rsa = { version = "0.9", features = ["pkcs5", "pem"] }
-base64 = "0.22"
+base64 = { workspace = true }

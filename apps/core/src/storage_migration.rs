@@ -87,7 +87,7 @@ pub async fn migrate_sqlite_to_pg(
             });
         }
 
-        let mut offset: u32 = 0;
+        let mut offset: u64 = 0;
         loop {
             let batch = sqlite
                 .list(
@@ -96,7 +96,7 @@ pub async fn migrate_sqlite_to_pg(
                     None,
                     Pagination {
                         limit: MIGRATION_BATCH_SIZE,
-                        offset,
+                        offset: offset as u32,
                     },
                 )
                 .await?;
@@ -138,9 +138,9 @@ pub async fn migrate_sqlite_to_pg(
                 migrated_count.fetch_add(1, Ordering::Relaxed);
             }
 
-            offset += batch.records.len() as u32;
+            offset += batch.records.len() as u64;
 
-            if (offset as u64) >= batch.total {
+            if offset >= batch.total {
                 break;
             }
         }

@@ -67,7 +67,7 @@ pub fn spawn_with_shutdown(
                         warn!(error = %e, record_id = %record.id, "search indexing failed");
                     }
                 }
-                Ok(BusEvent::RecordDeleted { record_id }) => {
+                Ok(BusEvent::RecordDeleted { record_id, .. }) => {
                     if let Err(e) = engine.remove(&record_id).await {
                         warn!(error = %e, record_id = %record_id, "search removal failed");
                     }
@@ -76,7 +76,11 @@ pub fn spawn_with_shutdown(
                     // Ignore other event types.
                 }
                 Err(broadcast::error::RecvError::Lagged(n)) => {
-                    warn!(skipped = n, "search processor lagged behind message bus");
+                    warn!(
+                        skipped = n,
+                        "search processor lagged behind message bus — {n} messages were \
+                         dropped and those records will not be indexed until their next update"
+                    );
                 }
                 Err(broadcast::error::RecvError::Closed) => {
                     debug!("message bus closed, search processor shutting down");
@@ -96,7 +100,7 @@ pub fn spawn_with_shutdown(
                         warn!(error = %e, record_id = %record.id, "drain: search indexing failed");
                     }
                 }
-                Ok(BusEvent::RecordDeleted { record_id }) => {
+                Ok(BusEvent::RecordDeleted { record_id, .. }) => {
                     if let Err(e) = engine.remove(&record_id).await {
                         warn!(error = %e, record_id = %record_id, "drain: search removal failed");
                     }
@@ -143,10 +147,16 @@ mod tests {
             record: record.clone(),
         });
 
-        // Give the background task time to process.
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-
-        let results = engine.search("Test r1", None, 10, 0).unwrap();
+        // Retry loop: the background task may need time to process the event,
+        // especially on slow CI runners. Retry for up to 2 seconds.
+        let mut results = engine.search("Test r1", None, 10, 0).unwrap();
+        for _ in 0..20 {
+            if results.total >= 1 {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            results = engine.search("Test r1", None, 10, 0).unwrap();
+        }
         assert_eq!(results.total, 1);
         assert_eq!(results.hits[0].id, "r1");
     }
@@ -164,11 +174,18 @@ mod tests {
 
         bus.publish(BusEvent::RecordDeleted {
             record_id: "r2".into(),
+            collection: "test".into(),
         });
 
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-
-        let results = engine.search("Test r2", None, 10, 0).unwrap();
+        // Retry loop: wait for the background task to process the deletion.
+        let mut results = engine.search("Test r2", None, 10, 0).unwrap();
+        for _ in 0..20 {
+            if results.total == 0 {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            results = engine.search("Test r2", None, 10, 0).unwrap();
+        }
         assert_eq!(results.total, 0);
     }
 
@@ -189,9 +206,15 @@ mod tests {
         updated.version = 2;
         bus.publish(BusEvent::RecordChanged { record: updated });
 
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-
-        let results = engine.search("Updated title", None, 10, 0).unwrap();
+        // Retry loop: wait for the background task to re-index.
+        let mut results = engine.search("Updated title", None, 10, 0).unwrap();
+        for _ in 0..20 {
+            if results.total >= 1 {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            results = engine.search("Updated title", None, 10, 0).unwrap();
+        }
         assert_eq!(results.total, 1);
         assert_eq!(results.hits[0].id, "r3");
 
@@ -216,7 +239,7 @@ mod tests {
             plugin_id: "core".into(),
         });
 
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
         // Search engine should be empty.
         let results = engine.search("anything", None, 10, 0);

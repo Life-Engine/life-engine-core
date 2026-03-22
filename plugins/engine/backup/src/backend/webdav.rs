@@ -126,15 +126,26 @@ impl BackupBackend for WebDavBackend {
             .send()
             .await?;
 
-        if !resp.status().is_success() && resp.status().as_u16() != 207 {
+        let status = resp.status();
+        if !status.is_success() && status.as_u16() != 207 {
             anyhow::bail!(
                 "WebDAV PROPFIND failed: {}",
-                resp.status()
+                status
             );
         }
 
         // Parse the multi-status XML response to extract href entries.
+        // A 207 Multi-Status is the expected response; other 2xx codes
+        // (e.g. 200 OK) don't contain multistatus XML and would produce
+        // empty results.
         let body = resp.text().await?;
+        if status.as_u16() != 207 {
+            tracing::warn!(
+                status = %status,
+                "WebDAV PROPFIND returned non-207 success status; listing may be empty"
+            );
+            return Ok(Vec::new());
+        }
         let results = parse_propfind_response(&body, prefix);
         Ok(results)
     }

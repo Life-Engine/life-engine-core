@@ -273,6 +273,11 @@ impl AuthProvider for LocalTokenProvider {
         let token_hash = Self::hash_token(&raw_token);
         let now = Utc::now();
         let expiry_days = credentials.expires_in_days.unwrap_or(DEFAULT_EXPIRY_DAYS);
+        if expiry_days < 1 {
+            return Err(AuthError::Internal(
+                "expires_in_days must be >= 1".into(),
+            ));
+        }
         let expires_at = now + Duration::days(i64::from(expiry_days));
         let token_id = uuid::Uuid::new_v4().to_string();
 

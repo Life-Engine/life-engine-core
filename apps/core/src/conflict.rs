@@ -8,6 +8,9 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
+// Uses std::sync::Mutex intentionally: ConflictStore methods are synchronous
+// (non-async) and lock durations are short (in-memory HashMap ops only), so
+// std::sync::Mutex avoids the overhead of tokio::sync::Mutex.
 use std::sync::Mutex;
 
 use crate::storage::Record;

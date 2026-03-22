@@ -49,6 +49,7 @@ pub enum WebAuthnStoreError {
     Auth(#[from] AuthError),
     /// An internal storage error occurred.
     #[error("webauthn store error: {0}")]
+    #[allow(dead_code)]
     Internal(String),
 }
 
@@ -82,6 +83,7 @@ pub trait WebAuthnCredentialStore: Send + Sync {
     ///
     /// Returns `WebAuthnStoreError::PasskeyNotFound` if no passkey with
     /// the given ID exists.
+    #[allow(dead_code)]
     async fn get_passkey_by_id(
         &self,
         passkey_id: &uuid::Uuid,
@@ -114,6 +116,7 @@ pub trait WebAuthnCredentialStore: Send + Sync {
     ///
     /// Intended for administrative use. Returns an empty `Vec` if no
     /// passkeys are stored.
+    #[allow(dead_code)]
     async fn list_passkeys(&self) -> Result<Vec<StoredPasskey>, WebAuthnStoreError>;
 }
 

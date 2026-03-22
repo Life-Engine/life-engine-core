@@ -43,19 +43,25 @@ pub enum JwtError {
 }
 
 /// Shared JWKS cache wrapped in a RwLock for concurrent access.
+#[cfg(test)]
 pub type SharedJwksCache = Arc<RwLock<Option<SyncJwksCache>>>;
 
 /// Create a new shared JWKS cache.
+#[cfg(test)]
 pub fn new_shared_cache() -> SharedJwksCache {
     Arc::new(RwLock::new(None))
 }
 
 /// Return the default JWKS cache TTL.
+#[cfg(test)]
 pub fn default_jwks_ttl() -> Duration {
     Duration::from_secs(DEFAULT_JWKS_TTL_SECS)
 }
 
-/// A synchronous JWKS cache (non-async methods) used by OidcProvider.
+/// A synchronous JWKS cache (non-async methods), used in tests.
+///
+/// Production code uses the async `JwksCache` instead.
+#[cfg(test)]
 #[derive(Debug)]
 pub struct SyncJwksCache {
     /// Cached keys indexed by key ID.
@@ -66,6 +72,7 @@ pub struct SyncJwksCache {
     ttl: Duration,
 }
 
+#[cfg(test)]
 impl SyncJwksCache {
     /// Create a new synchronous cache from a JWKS response.
     pub fn new(jwks: JwksResponse, ttl: Duration) -> Self {
@@ -96,6 +103,11 @@ impl SyncJwksCache {
     pub fn len(&self) -> usize {
         self.keys.len()
     }
+
+    /// Check whether the cache contains no keys.
+    pub fn is_empty(&self) -> bool {
+        self.keys.is_empty()
+    }
 }
 
 /// A decoded JWT header containing the key ID and algorithm.
@@ -104,6 +116,7 @@ pub struct JwtHeader {
     /// The key ID used to sign the token.
     pub kid: Option<String>,
     /// The signing algorithm.
+    #[allow(dead_code)]
     pub alg: Algorithm,
 }
 
@@ -143,6 +156,7 @@ pub enum Audience {
 
 impl Audience {
     /// Check if this audience contains the given value.
+    #[allow(dead_code)]
     pub fn contains(&self, value: &str) -> bool {
         match self {
             Audience::Single(s) => s == value,
@@ -154,6 +168,7 @@ impl Audience {
 
 /// An individual JSON Web Key from a JWKS endpoint.
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 pub struct JwkKey {
     /// Key type (e.g., "RSA").
     pub kty: String,
@@ -244,6 +259,7 @@ impl JwksCache {
     }
 
     /// Return the number of cached keys.
+    #[allow(dead_code)]
     pub async fn key_count(&self) -> usize {
         let cached = self.keys.read().await;
         cached.keys.len()
@@ -271,6 +287,7 @@ pub fn decode_jwt_header(token: &str) -> Result<JwtHeader, JwtError> {
 ///
 /// Verifies the signature using the provided decoding key, then checks
 /// issuer and audience claims.
+#[allow(dead_code)]
 pub fn validate_jwt(
     token: &str,
     key: &DecodingKey,

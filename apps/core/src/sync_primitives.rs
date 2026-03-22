@@ -133,6 +133,13 @@ pub async fn apply_change(
             }
         }
         ChangeOperation::Delete => {
+            // Check version before deleting to enforce last-write-wins (LWW).
+            if let Some(existing) = storage.get(namespace, &change.collection, &change.id).await? {
+                if change.version <= existing.version {
+                    // Local version is newer or equal; skip the stale delete.
+                    return Ok(());
+                }
+            }
             storage
                 .delete(namespace, &change.collection, &change.id)
                 .await?;

@@ -171,13 +171,15 @@ impl SqliteStorage {
     fn create_tables(conn: &Connection) -> anyhow::Result<()> {
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS plugin_data (
-                id          TEXT PRIMARY KEY,
-                plugin_id   TEXT NOT NULL,
-                collection  TEXT NOT NULL,
-                data        TEXT NOT NULL,
-                version     INTEGER NOT NULL DEFAULT 1,
-                created_at  TEXT NOT NULL,
-                updated_at  TEXT NOT NULL
+                id             TEXT PRIMARY KEY,
+                plugin_id      TEXT NOT NULL,
+                collection     TEXT NOT NULL,
+                data           TEXT NOT NULL,
+                version        INTEGER NOT NULL DEFAULT 1,
+                user_id        TEXT,
+                household_id   TEXT,
+                created_at     TEXT NOT NULL,
+                updated_at     TEXT NOT NULL
             );
 
             CREATE INDEX IF NOT EXISTS idx_plugin_collection
@@ -218,7 +220,7 @@ impl StorageAdapter for SqliteStorage {
     ) -> anyhow::Result<Option<Record>> {
         let conn = self.conn.lock().await;
         let mut stmt = conn.prepare(
-            "SELECT id, plugin_id, collection, data, version, created_at, updated_at
+            "SELECT id, plugin_id, collection, data, version, user_id, household_id, created_at, updated_at
              FROM plugin_data
              WHERE id = ?1 AND plugin_id = ?2 AND collection = ?3",
         )?;
@@ -422,7 +424,7 @@ impl StorageAdapter for SqliteStorage {
         };
 
         let data_sql = format!(
-            "SELECT id, plugin_id, collection, data, version, created_at, updated_at
+            "SELECT id, plugin_id, collection, data, version, user_id, household_id, created_at, updated_at
              FROM plugin_data
              WHERE {where_clause}
              {order_clause}
@@ -499,8 +501,8 @@ impl StorageAdapter for SqliteStorage {
 
 /// Convert a rusqlite Row into a Record.
 fn row_to_record(row: &rusqlite::Row<'_>) -> anyhow::Result<Record> {
-    let created_str: String = row.get(5)?;
-    let updated_str: String = row.get(6)?;
+    let created_str: String = row.get(7)?;
+    let updated_str: String = row.get(8)?;
     let data_str: String = row.get(3)?;
 
     Ok(Record {
@@ -509,8 +511,8 @@ fn row_to_record(row: &rusqlite::Row<'_>) -> anyhow::Result<Record> {
         collection: row.get(2)?,
         data: serde_json::from_str(&data_str)?,
         version: row.get(4)?,
-        user_id: None,
-        household_id: None,
+        user_id: row.get(5)?,
+        household_id: row.get(6)?,
         created_at: chrono::DateTime::parse_from_rfc3339(&created_str)?.with_timezone(&Utc),
         updated_at: chrono::DateTime::parse_from_rfc3339(&updated_str)?.with_timezone(&Utc),
     })

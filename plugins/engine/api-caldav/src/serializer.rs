@@ -50,7 +50,46 @@ pub fn event_to_ical(event: &CalendarEvent) -> String {
 
     lines.push("END:VEVENT".to_string());
     lines.push("END:VCALENDAR".to_string());
-    lines.join("\r\n")
+
+    // RFC 5545 §3.1: Lines longer than 75 octets SHOULD be folded with
+    // CRLF followed by a single space (linear white space).
+    lines
+        .iter()
+        .map(|line| fold_line(line))
+        .collect::<Vec<_>>()
+        .join("\r\n")
+}
+
+/// Fold a content line per RFC 5545 §3.1.
+///
+/// Lines longer than 75 octets are split: the first chunk is 75 octets,
+/// continuation chunks are 74 octets (because the leading space counts).
+fn fold_line(line: &str) -> String {
+    let bytes = line.as_bytes();
+    if bytes.len() <= 75 {
+        return line.to_string();
+    }
+
+    let mut result = String::with_capacity(bytes.len() + bytes.len() / 74 * 3);
+    let mut pos = 0;
+    let mut first = true;
+
+    while pos < bytes.len() {
+        let chunk_len = if first { 75 } else { 74 };
+        first = false;
+
+        let end = std::cmp::min(pos + chunk_len, bytes.len());
+        // Safety: iCalendar property values should be ASCII-safe for
+        // standard properties; non-ASCII values may need UTF-8 aware
+        // splitting in the future.
+        if !result.is_empty() {
+            result.push_str("\r\n ");
+        }
+        result.push_str(&String::from_utf8_lossy(&bytes[pos..end]));
+        pos = end;
+    }
+
+    result
 }
 
 /// Parse an iCalendar VCALENDAR string into a CDM `CalendarEvent`.

@@ -4,17 +4,13 @@
 //! the `LocalTokenProvider` implementation, OIDC provider, auth
 //! middleware, and token management routes.
 
-#[allow(dead_code)]
 pub mod jwt;
 pub mod local_token;
 pub mod middleware;
-#[allow(dead_code, unused_imports)]
 pub mod oidc;
 pub mod routes;
 pub mod types;
-#[allow(dead_code)]
 pub mod webauthn_provider;
-#[allow(dead_code)]
 pub mod webauthn_store;
 
 use async_trait::async_trait;

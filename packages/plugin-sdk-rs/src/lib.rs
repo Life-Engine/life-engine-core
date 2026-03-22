@@ -43,6 +43,9 @@ pub use async_trait::async_trait;
 // Re-export anyhow::Result so plugin authors can use it directly.
 pub use anyhow::Result;
 
+// Re-export serde_json so plugin authors can use it (needed for handle_route, events, etc.)
+pub use serde_json;
+
 // Re-export all canonical data model types from the types crate
 // so plugin authors only need one dependency.
 pub use life_engine_types;

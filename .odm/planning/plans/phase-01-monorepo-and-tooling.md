@@ -178,7 +178,7 @@ Progress: 0 / 11 work packages complete
 > depends: 1.1
 > spec: .odm/spec/monorepo-and-tooling/brief.md
 
-- [ ] Verify community plugins build independently from the monorepo
+- [x] Verify community plugins build independently from the monorepo
   <!-- file: (external test project) -->
   <!-- purpose: Create a temporary test plugin project outside the monorepo with only life-engine-plugin-sdk as a Cargo dependency (using a path dependency for now, simulating a future published crate). Implement a minimal Plugin trait with one action. Run cargo build --target wasm32-wasi and confirm it compiles to a valid WASM module without needing any other monorepo crates as direct dependencies. Verify the produced .wasm file is loadable by Extism. Clean up the temporary project after verification. -->
   <!-- requirements: 9.1, 9.2 -->

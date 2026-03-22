@@ -2,6 +2,8 @@
 
 ## 2026-03-23
 
+- WP 1.11 Community Plugin Build Verification: verify community plugins build independently from the monorepo with only life-engine-plugin-sdk as a dependency. Created temporary test plugin outside monorepo implementing CorePlugin trait with one action. Compiled successfully to wasm32-wasip1 target producing valid 3.3MB WebAssembly module. Verified .wasm file loadable by Extism runtime. Added serde_json re-export to plugin SDK so plugin authors don't need it as a separate dependency. Cleaned up temporary project after verification. Phase 1 now complete.
+
 - WP 1.9 Directory Layout Verification: verify complete directory structure against ARCHITECTURE.md. All 24 required top-level directories confirmed present (apps/core, 15 package crates, 7 plugin crates, tools/templates/plugin, .odm/doc). All 7 plugin crates have complete standard layout (lib.rs, config.rs, error.rs, steps/, transform/, types.rs, tests/). Add missing tests/ directories with .gitkeep to 5 crates (types, plugin-sdk-rs, dav-utils, test-utils, test-fixtures). Package crate deviations documented and justified by crate purpose. Workspace compiles clean.
 
 - WP 1.8 Plugin Scaffold Template: create tools/templates/plugin/ with full WASM-compatible plugin scaffold (Cargo.toml, manifest.toml, src/lib.rs with CorePlugin impl, config.rs, error.rs, steps/, transform/, types.rs, tests/). Uses __NAME__/__ID__ placeholders for sed substitution. Fix justfile new-plugin recipe to use compatible placeholder syntax instead of broken just brace escaping. Verified: scaffolded test plugin compiles and all 7 template tests pass.

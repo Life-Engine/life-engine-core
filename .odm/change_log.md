@@ -2,6 +2,10 @@
 
 ## 2026-03-22
 
+- Replace phase-based planning (phase-0 through phase-4) with QA-driven fix plan from full-project audit
+- Add full-project QA report (196 findings across 170 files) and 76-task fix plan organized by severity
+- Disable dependabot (renamed to .disabled)
+
 - Remove committed test RSA private key from repo; generate test keys at runtime using rsa crate
 - Add pre-commit hook and CI secret scan to block private key material from future commits
 - Add *.pem, *.key, *.p12, *.pfx, *.jks, *.keystore to .gitignore

@@ -1,0 +1,2 @@
+# life-engine-core
+core

@@ -7,6 +7,7 @@ use crate::auth::local_token::LocalTokenProvider;
 use crate::auth::middleware::{AuthMiddlewareState, RateLimiter};
 use crate::auth::types::TokenRequest;
 use crate::auth::AuthProvider;
+use crate::config::CoreConfig;
 use crate::message_bus::MessageBus;
 use crate::plugin_loader::PluginLoader;
 use crate::routes::health::AppState;
@@ -23,6 +24,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tokio::sync::Mutex as TokioMutex;
+use tokio::sync::RwLock;
 
 /// Create an `AuthMiddlewareState` and its backing `LocalTokenProvider`.
 ///
@@ -82,6 +84,8 @@ pub fn default_app_state() -> AppState {
         household_store: None,
         federation_store: None,
         identity_store: None,
+        config: Arc::new(RwLock::new(CoreConfig::default())),
+        config_path: None,
     }
 }
 

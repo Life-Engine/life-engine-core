@@ -1,5 +1,6 @@
 //! Health check endpoint returning system status, uptime, and plugin info.
 
+use crate::config::CoreConfig;
 use crate::conflict::ConflictStore;
 use crate::credential_store::SqliteCredentialStore;
 use crate::federation::FederationStore;
@@ -13,9 +14,10 @@ use crate::sqlite_storage::SqliteStorage;
 use axum::extract::State;
 use axum::Json;
 use serde::Serialize;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 
 /// Shared application state accessible to route handlers.
 #[derive(Clone)]
@@ -42,6 +44,10 @@ pub struct AppState {
     pub federation_store: Option<Arc<FederationStore>>,
     /// The identity credential store.
     pub identity_store: Option<Arc<IdentityStore>>,
+    /// The live configuration (readable and writable at runtime).
+    pub config: Arc<RwLock<CoreConfig>>,
+    /// Path to the config YAML file for persisting changes.
+    pub config_path: Option<PathBuf>,
 }
 
 /// Health response body.

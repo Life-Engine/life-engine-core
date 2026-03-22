@@ -2,6 +2,8 @@
 
 ## 2026-03-23
 
+- WP 2.1 Config API Endpoints: add GET /api/system/config (returns current CoreConfig with secrets redacted) and PUT /api/system/config (accepts partial JSON, merges with current config, validates, persists to config.yaml). Added CoreConfig.to_redacted_json(), merge_partial(), recursive JSON merge, and Arc<RwLock<CoreConfig>> in AppState. 5 new tests covering redaction, auth requirement, update+persist, validation rejection, and PUT auth.
+
 - WP nx:1.5 Task Pipelines & Developer Scripts: configure composite targetDefaults in nx.json for build-ts, test-ts, type-check, and dev targets with correct dependency ordering; add root package.json scripts (dev, build, build:ts, test, test:ts, lint, type-check, affected:test, affected:build) delegating to nx run-many and nx affected; add dev target to core project.json for cargo run workflow
 
 - WP nx:1.3 Rust Project Configurations: add Nx project.json for apps/core (build/test/lint cargo targets), 4 library packages (plugin-sdk-rs, test-utils, test-fixtures, dav-utils), and 9 engine plugins (connector-email, connector-calendar, connector-contacts, connector-filesystem, api-caldav, api-carddav, webhook-receiver, webhook-sender, backup) with wasm32-wasip1 build targets for plugins. All 15 projects visible in Nx graph.

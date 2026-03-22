@@ -493,7 +493,7 @@ impl CoreConfig {
     }
 
     /// Returns the default config file path (`~/.life-engine/config.yaml`).
-    fn default_config_path() -> Option<PathBuf> {
+    pub fn default_config_path() -> Option<PathBuf> {
         directories::BaseDirs::new().map(|dirs| dirs.home_dir().join(".life-engine/config.yaml"))
     }
 
@@ -836,6 +836,54 @@ impl CoreConfig {
     /// Resolve the bind address as `host:port`.
     pub fn bind_address(&self) -> String {
         format!("{}:{}", self.core.host, self.core.port)
+    }
+
+    /// Serialize config to JSON with sensitive fields replaced by `"[REDACTED]"`.
+    pub fn to_redacted_json(&self) -> serde_json::Value {
+        let mut val = serde_json::to_value(self).expect("CoreConfig is always serializable");
+
+        // Redact OIDC client_secret.
+        if let Some(secret) = val
+            .pointer_mut("/auth/oidc/client_secret")
+            .filter(|v| !v.is_null())
+        {
+            *secret = serde_json::Value::String(REDACTED.into());
+        }
+
+        // Redact PostgreSQL password.
+        if let Some(pw) = val
+            .pointer_mut("/storage/postgres/password")
+            .filter(|v| !v.is_null())
+        {
+            *pw = serde_json::Value::String(REDACTED.into());
+        }
+
+        val
+    }
+
+    /// Merge a partial JSON config into this config, validate, and return the merged result.
+    pub fn merge_partial(&self, partial: &serde_json::Value) -> anyhow::Result<CoreConfig> {
+        let mut base = serde_json::to_value(self).expect("CoreConfig is always serializable");
+        merge_json(&mut base, partial);
+        let merged: CoreConfig = serde_json::from_value(base).map_err(|e| {
+            CoreError::Config(format!("invalid config after merge: {e}"))
+        })?;
+        merged.validate()?;
+        Ok(merged)
+    }
+}
+
+/// Recursively merge `patch` into `base`. For objects, merge keys; for everything else, overwrite.
+fn merge_json(base: &mut serde_json::Value, patch: &serde_json::Value) {
+    if let (Some(base_obj), Some(patch_obj)) = (base.as_object_mut(), patch.as_object()) {
+        for (key, patch_val) in patch_obj {
+            let entry = base_obj
+                .entry(key.clone())
+                .or_insert(serde_json::Value::Null);
+            merge_json(entry, patch_val);
+        }
+    } else {
+        *base = patch.clone();
     }
 }
 

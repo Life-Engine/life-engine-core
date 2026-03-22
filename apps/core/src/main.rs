@@ -63,7 +63,7 @@ use crate::routes::identity::{
 use crate::routes::graphql::{graphql_handler, graphql_playground};
 use crate::routes::plugins::plugin_route_stub;
 use crate::routes::storage::{init_storage, StorageInitState};
-use crate::routes::system::{system_info, system_plugins};
+use crate::routes::system::{get_config, put_config, system_info, system_plugins};
 use crate::schema_registry::{SchemaRegistry, ValidatedStorage};
 use crate::shutdown::{graceful_shutdown, shutdown_signal};
 
@@ -216,6 +216,13 @@ async fn main() -> anyhow::Result<()> {
     };
 
     // 8. Build the HTTP router.
+    let config_path = if cli.config.is_empty() {
+        CoreConfig::default_config_path()
+    } else {
+        Some(std::path::PathBuf::from(&cli.config))
+    };
+    let shared_config = Arc::new(tokio::sync::RwLock::new(config.clone()));
+
     let state = AppState {
         start_time,
         plugin_loader: Arc::clone(&plugin_loader),
@@ -228,6 +235,8 @@ async fn main() -> anyhow::Result<()> {
         household_store: Some(Arc::new(crate::household::HouseholdStore::new())),
         federation_store: Some(Arc::new(crate::federation::FederationStore::new())),
         identity_store: None,
+        config: shared_config,
+        config_path,
     };
 
     let general_rate_limiter =
@@ -295,6 +304,10 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/system/health", axum::routing::get(health_check))
         .route("/api/system/info", axum::routing::get(system_info))
         .route("/api/system/plugins", axum::routing::get(system_plugins))
+        .route(
+            "/api/system/config",
+            axum::routing::get(get_config).put(put_config),
+        )
         .route(
             "/api/data/{collection}",
             axum::routing::get(list_records).post(create_record),

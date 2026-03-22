@@ -125,13 +125,13 @@ Progress: 0 / 14 work packages complete
 ## 2.1 — Config API Endpoints
 > depends: 1.3
 
-- [ ] Add GET `/api/system/config` endpoint to Core
+- [x] Add GET `/api/system/config` endpoint to Core
   <!-- file: apps/core/src/routes/system.rs -->
   <!-- purpose: Add handler that serializes current CoreConfig to JSON with sensitive fields (passwords, secrets) redacted; requires auth -->
   <!-- requirements: admin UI reads current config -->
   <!-- leverage: CoreConfig struct, existing system routes, Debug impl redaction pattern -->
 
-- [ ] Add PUT `/api/system/config` endpoint to Core
+- [x] Add PUT `/api/system/config` endpoint to Core
   <!-- file: apps/core/src/routes/system.rs -->
   <!-- purpose: Add handler that accepts partial config JSON, validates against CoreConfig constraints, merges with current config, and writes to config.yaml -->
   <!-- requirements: admin UI writes config changes -->

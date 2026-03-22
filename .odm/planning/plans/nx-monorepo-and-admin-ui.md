@@ -80,7 +80,7 @@ Progress: 0 / 14 work packages complete
 ## 1.4 — TypeScript Project Configuration
 > depends: 1.2
 
-- [ ] Create `project.json` for `packages/types` with TypeScript targets
+- [x] Create `project.json` for `packages/types` with TypeScript targets
   <!-- file: packages/types/project.json -->
   <!-- purpose: Define build (tsc) and test (vitest) targets for the dual Rust/TypeScript types package -->
   <!-- requirements: TypeScript compilation in Nx pipeline -->

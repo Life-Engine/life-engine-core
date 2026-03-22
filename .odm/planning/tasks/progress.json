@@ -127,7 +127,7 @@
       "wp": "2.5",
       "title": "App Layout & Routing",
       "completed_at": "2026-03-23T00:00:00Z",
-      "commit": "pending",
+      "commit": "47c876f",
       "tasks_completed": 2,
       "tasks_deferred": 0
     }

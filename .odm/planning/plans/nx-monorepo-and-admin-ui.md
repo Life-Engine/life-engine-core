@@ -222,7 +222,7 @@ Progress: 0 / 14 work packages complete
 ## 2.6 — Config Overview Page
 > depends: 2.4, 2.5
 
-- [ ] Create config overview page showing current settings
+- [x] Create config overview page showing current settings
   <!-- file: apps/admin/src/pages/ConfigPage.tsx -->
   <!-- purpose: Fetch and display current config organized into collapsible sections (Core, Auth, Storage, Plugins, Network) with edit buttons per section -->
   <!-- requirements: admin sees current config at a glance -->

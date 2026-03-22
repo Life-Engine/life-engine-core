@@ -1,22 +1,43 @@
 [workspace]
 resolver = "2"
 members = [
+    # Core binary
+    "apps/core",
+
+    # Foundation packages
     "packages/types",
+    "packages/traits",
+    "packages/crypto",
     "packages/plugin-sdk-rs",
+
+    # Infrastructure packages
+    "packages/storage-sqlite",
+    "packages/auth",
+    "packages/workflow-engine",
+
+    # Transport packages
+    "packages/transport-rest",
+    "packages/transport-graphql",
+    "packages/transport-caldav",
+    "packages/transport-carddav",
+    "packages/transport-webhook",
+
+    # Shared utilities
+    "packages/dav-utils",
     "packages/test-utils",
     "packages/test-fixtures",
-    "apps/core",
+
+    # First-party plugins
     "plugins/engine/connector-email",
-    "packages/dav-utils",
     "plugins/engine/connector-calendar",
     "plugins/engine/connector-contacts",
     "plugins/engine/connector-filesystem",
+    "plugins/engine/webhook-sender",
+    "plugins/engine/webhook-receiver",
+    "plugins/engine/search-indexer",
+    "plugins/engine/backup",
     "plugins/engine/api-caldav",
     "plugins/engine/api-carddav",
-    "plugins/engine/webhook-receiver",
-    "plugins/engine/webhook-sender",
-    "plugins/engine/backup",
-    "plugins/engine/search-indexer",
 ]
 exclude = [
     "apps/app/src-tauri",
@@ -79,3 +100,5 @@ tokio-postgres-rustls = "0.13"
 rustls-native-certs = "0.8"
 directories = "6"
 base64 = "0.22"
+toml = "0.8"
+cron = "0.15"

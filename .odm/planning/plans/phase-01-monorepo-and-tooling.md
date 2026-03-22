@@ -22,7 +22,7 @@ Progress: 0 / 11 work packages complete
 ## 1.1 — Cargo Workspace Configuration
 > spec: .odm/spec/monorepo-and-tooling/brief.md
 
-- [ ] Restructure root Cargo.toml workspace members to match new architecture
+- [x] Restructure root Cargo.toml workspace members to match new architecture
   <!-- file: Cargo.toml -->
   <!-- purpose: Update [workspace] members list to include apps/core, packages/types, packages/traits, packages/crypto, packages/plugin-sdk, packages/storage-sqlite, packages/auth, packages/workflow-engine, packages/transport-rest, packages/transport-graphql, packages/transport-caldav, packages/transport-carddav, packages/transport-webhook, packages/test-utils, packages/test-fixtures, and all plugins/* crates. Add [workspace.dependencies] section with shared dependency versions (serde = "1", serde_json = "1", tokio = { version = "1", features = ["full"] }, uuid = { version = "1", features = ["v4", "serde"] }, chrono = { version = "0.4", features = ["serde"] }, thiserror = "2", anyhow = "1", tracing = "0.1", async-trait = "0.1"). Remove any members that no longer exist in the new structure. Preserve existing workspace settings like resolver = "2" and edition = "2024". -->
   <!-- requirements: 1.1, 1.2, 1.3, 1.4 -->

@@ -1,0 +1,16 @@
+[package]
+name = "life-engine-workflow-engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "YAML-defined workflow execution engine for Life Engine"
+
+[dependencies]
+life-engine-types = { path = "../types" }
+life-engine-traits = { path = "../traits" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+tokio = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }

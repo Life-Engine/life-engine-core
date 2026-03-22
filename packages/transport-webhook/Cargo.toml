@@ -1,0 +1,16 @@
+[package]
+name = "life-engine-transport-webhook"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Webhook transport layer for Life Engine"
+
+[dependencies]
+life-engine-types = { path = "../types" }
+life-engine-traits = { path = "../traits" }
+axum = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }

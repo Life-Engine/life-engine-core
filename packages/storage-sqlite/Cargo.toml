@@ -1,0 +1,16 @@
+[package]
+name = "life-engine-storage-sqlite"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "SQLCipher-backed storage backend for Life Engine"
+
+[dependencies]
+life-engine-types = { path = "../types" }
+life-engine-traits = { path = "../traits" }
+life-engine-crypto = { path = "../crypto" }
+rusqlite = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }

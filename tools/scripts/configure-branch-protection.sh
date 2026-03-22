@@ -55,8 +55,6 @@ gh api "repos/${REPO}/branches/${BRANCH}/protection" \
     "strict": true,
     "contexts": [
       "Rust Checks",
-      "JS/TS Checks",
-      "Playwright E2E",
       "DCO Check"
     ]
   },

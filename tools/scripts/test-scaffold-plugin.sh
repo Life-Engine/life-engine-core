@@ -16,8 +16,6 @@ cp "$REPO_ROOT/Cargo.toml" "$REPO_ROOT/Cargo.toml.bak"
 
 cleanup() {
   rm -rf "$REPO_ROOT/plugins/engine/test-scaffold-eng"
-  rm -rf "$REPO_ROOT/plugins/life/test-scaffold-van"
-  rm -rf "$REPO_ROOT/plugins/life/test-scaffold-lit"
   mv "$REPO_ROOT/Cargo.toml.bak" "$REPO_ROOT/Cargo.toml"
 }
 trap cleanup EXIT
@@ -25,20 +23,20 @@ trap cleanup EXIT
 echo "Testing scaffold-plugin.sh"
 echo "=========================="
 
-# ── Test 1: invalid type rejected ────────────────────────────────
+# ── Test 1: missing name argument rejected ───────────────────────
 echo ""
-echo "Test: invalid type rejected"
-OUTPUT=$(bash "$SCAFFOLD" test-plugin badtype 2>&1 || true)
-if echo "$OUTPUT" | grep -q "unknown plugin type"; then
-  pass "invalid type prints error"
+echo "Test: missing name argument rejected"
+OUTPUT=$(bash "$SCAFFOLD" 2>&1 || true)
+if echo "$OUTPUT" | grep -q "Usage:"; then
+  pass "missing name prints usage"
 else
-  fail "invalid type should print error"
+  fail "missing name should print usage"
 fi
 
 # ── Test 2: engine plugin scaffolding ────────────────────────────
 echo ""
 echo "Test: engine plugin scaffolding"
-bash "$SCAFFOLD" test-scaffold-eng engine
+bash "$SCAFFOLD" test-scaffold-eng
 
 if [[ -d "$REPO_ROOT/plugins/engine/test-scaffold-eng" ]]; then
   pass "engine directory created"
@@ -73,69 +71,11 @@ fi
 # ── Test 3: duplicate directory rejected ─────────────────────────
 echo ""
 echo "Test: duplicate directory rejected"
-OUTPUT=$(bash "$SCAFFOLD" test-scaffold-eng engine 2>&1 || true)
+OUTPUT=$(bash "$SCAFFOLD" test-scaffold-eng 2>&1 || true)
 if echo "$OUTPUT" | grep -q "already exists"; then
   pass "duplicate engine directory rejected"
 else
   fail "duplicate engine directory should be rejected"
-fi
-
-# ── Test 4: vanilla plugin scaffolding ───────────────────────────
-echo ""
-echo "Test: vanilla plugin scaffolding"
-bash "$SCAFFOLD" test-scaffold-van life-vanilla
-
-if [[ -d "$REPO_ROOT/plugins/life/test-scaffold-van" ]]; then
-  pass "vanilla directory created"
-else
-  fail "vanilla directory not created"
-fi
-
-if grep -q '"com.life-engine.test-scaffold-van"' "$REPO_ROOT/plugins/life/test-scaffold-van/plugin.json"; then
-  pass "vanilla plugin.json has correct ID"
-else
-  fail "vanilla plugin.json ID not substituted"
-fi
-
-if grep -q '"test-scaffold-van"' "$REPO_ROOT/plugins/life/test-scaffold-van/plugin.json"; then
-  pass "vanilla plugin.json has correct element name"
-else
-  fail "vanilla plugin.json element name not substituted"
-fi
-
-if ! grep -q 'com\.example\.my-plugin' "$REPO_ROOT/plugins/life/test-scaffold-van/plugin.json"; then
-  pass "vanilla plugin.json has no remaining template placeholders"
-else
-  fail "vanilla plugin.json still has template placeholders"
-fi
-
-# ── Test 5: lit plugin scaffolding ───────────────────────────────
-echo ""
-echo "Test: lit plugin scaffolding"
-bash "$SCAFFOLD" test-scaffold-lit life-lit
-
-if [[ -d "$REPO_ROOT/plugins/life/test-scaffold-lit" ]]; then
-  pass "lit directory created"
-else
-  fail "lit directory not created"
-fi
-
-if grep -q '"com.life-engine.test-scaffold-lit"' "$REPO_ROOT/plugins/life/test-scaffold-lit/plugin.json"; then
-  pass "lit plugin.json has correct ID"
-else
-  fail "lit plugin.json ID not substituted"
-fi
-
-if ! grep -q 'com\.example\.my-lit-plugin' "$REPO_ROOT/plugins/life/test-scaffold-lit/plugin.json"; then
-  pass "lit plugin.json has no remaining template placeholders"
-else
-  fail "lit plugin.json still has template placeholders"
-fi
-
-if grep -q 'TestScaffoldLitPlugin' "$REPO_ROOT/plugins/life/test-scaffold-lit/src/index.js"; then
-  pass "lit index.js has PascalCase class name"
-else
-  fail "lit index.js class name not substituted"
 fi
 
 # ── Summary ──────────────────────────────────────────────────────

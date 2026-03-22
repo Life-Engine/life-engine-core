@@ -1,14 +1,16 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://life-engine.dev/schemas/files.schema.json",
   "title": "FileMetadata",
   "description": "File metadata in the Life Engine canonical data model.",
   "type": "object",
   "required": [
     "id",
-    "name",
-    "mime_type",
-    "size",
+    "filename",
     "path",
+    "mime_type",
+    "size_bytes",
+    "checksum",
     "source",
     "source_id",
     "created_at",
@@ -17,27 +19,34 @@
   "properties": {
     "id": {
       "type": "string",
+      "format": "uuid",
       "description": "Unique identifier assigned by Core"
     },
-    "name": {
+    "filename": {
       "type": "string",
       "description": "Filename including extension"
-    },
-    "mime_type": {
-      "type": "string",
-      "description": "MIME type (e.g. application/pdf, image/png)"
-    },
-    "size": {
-      "type": "integer",
-      "description": "File size in bytes"
     },
     "path": {
       "type": "string",
       "description": "Storage path relative to the Core data directory"
     },
+    "mime_type": {
+      "type": "string",
+      "description": "MIME type (e.g. application/pdf, image/png)"
+    },
+    "size_bytes": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "File size in bytes"
+    },
     "checksum": {
       "type": "string",
-      "description": "SHA-256 hash of the file contents for integrity verification"
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "SHA-256 hex hash of the file contents"
+    },
+    "storage_backend": {
+      "type": "string",
+      "description": "Storage backend identifier"
     },
     "source": {
       "type": "string",
@@ -49,7 +58,7 @@
     },
     "extensions": {
       "type": "object",
-      "description": "Plugin-specific fields, namespaced by plugin ID. See ADR-014.",
+      "description": "Plugin-specific fields, namespaced by plugin ID.",
       "patternProperties": {
         "^[a-z][a-z0-9]*(-[a-z0-9]+)*(\\.[a-z][a-z0-9]*(-[a-z0-9]+)*)+$": {
           "type": "object"

@@ -1,14 +1,15 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://life-engine.dev/schemas/emails.schema.json",
   "title": "Email",
   "description": "An email message in the Life Engine canonical data model.",
   "type": "object",
   "required": [
     "id",
+    "subject",
     "from",
     "to",
-    "subject",
-    "body_text",
+    "date",
     "source",
     "source_id",
     "created_at",
@@ -17,36 +18,37 @@
   "properties": {
     "id": {
       "type": "string",
+      "format": "uuid",
       "description": "Unique identifier assigned by Core"
     },
-    "from": {
+    "subject": {
       "type": "string",
-      "description": "Sender email address"
+      "description": "Email subject line"
+    },
+    "from": {
+      "$ref": "#/$defs/EmailAddress",
+      "description": "Sender"
     },
     "to": {
       "type": "array",
       "items": {
-        "type": "string"
+        "$ref": "#/$defs/EmailAddress"
       },
       "description": "Recipient email addresses"
     },
     "cc": {
       "type": "array",
       "items": {
-        "type": "string"
+        "$ref": "#/$defs/EmailAddress"
       },
       "description": "CC recipient email addresses"
     },
     "bcc": {
       "type": "array",
       "items": {
-        "type": "string"
+        "$ref": "#/$defs/EmailAddress"
       },
       "description": "BCC recipient email addresses"
-    },
-    "subject": {
-      "type": "string",
-      "description": "Email subject line"
     },
     "body_text": {
       "type": "string",
@@ -56,9 +58,33 @@
       "type": "string",
       "description": "HTML body for rich rendering"
     },
-    "thread_id": {
+    "date": {
       "type": "string",
-      "description": "Thread identifier for conversation grouping"
+      "format": "date-time",
+      "description": "Date the email was sent or received"
+    },
+    "message_id": {
+      "type": "string",
+      "description": "RFC 2822 Message-ID header value"
+    },
+    "in_reply_to": {
+      "type": "string",
+      "description": "Message-ID of the email this is replying to, for threading"
+    },
+    "attachments": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/EmailAttachment"
+      },
+      "description": "List of attachments"
+    },
+    "read": {
+      "type": "boolean",
+      "description": "Whether the email has been read"
+    },
+    "starred": {
+      "type": "boolean",
+      "description": "Whether the email is starred or flagged"
     },
     "labels": {
       "type": "array",
@@ -66,38 +92,6 @@
         "type": "string"
       },
       "description": "Labels or folder assignments"
-    },
-    "attachments": {
-      "type": "array",
-      "description": "List of file references",
-      "items": {
-        "type": "object",
-        "required": [
-          "file_id",
-          "filename",
-          "mime_type",
-          "size"
-        ],
-        "properties": {
-          "file_id": {
-            "type": "string",
-            "description": "Reference to a record in the files collection"
-          },
-          "filename": {
-            "type": "string",
-            "description": "Original filename"
-          },
-          "mime_type": {
-            "type": "string",
-            "description": "MIME type of the attachment"
-          },
-          "size": {
-            "type": "integer",
-            "description": "Size in bytes"
-          }
-        },
-        "additionalProperties": false
-      }
     },
     "source": {
       "type": "string",
@@ -109,7 +103,7 @@
     },
     "extensions": {
       "type": "object",
-      "description": "Plugin-specific fields, namespaced by plugin ID. See ADR-014.",
+      "description": "Plugin-specific fields, namespaced by plugin ID.",
       "patternProperties": {
         "^[a-z][a-z0-9]*(-[a-z0-9]+)*(\\.[a-z][a-z0-9]*(-[a-z0-9]+)*)+$": {
           "type": "object"
@@ -128,5 +122,49 @@
       "description": "Record last-updated timestamp"
     }
   },
-  "additionalProperties": false
+  "additionalProperties": false,
+  "$defs": {
+    "EmailAddress": {
+      "type": "object",
+      "description": "An email address with optional display name",
+      "required": ["address"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Display name"
+        },
+        "address": {
+          "type": "string",
+          "format": "email",
+          "description": "Email address"
+        }
+      },
+      "additionalProperties": false
+    },
+    "EmailAttachment": {
+      "type": "object",
+      "description": "An email attachment",
+      "required": ["filename", "mime_type", "size_bytes"],
+      "properties": {
+        "filename": {
+          "type": "string",
+          "description": "Original filename"
+        },
+        "mime_type": {
+          "type": "string",
+          "description": "MIME type of the attachment"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Size in bytes"
+        },
+        "content_id": {
+          "type": "string",
+          "description": "Content-ID for inline attachments"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
 }

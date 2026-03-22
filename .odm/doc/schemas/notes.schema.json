@@ -1,5 +1,6 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://life-engine.dev/schemas/notes.schema.json",
   "title": "Note",
   "description": "A note in the Life Engine canonical data model.",
   "type": "object",
@@ -15,6 +16,7 @@
   "properties": {
     "id": {
       "type": "string",
+      "format": "uuid",
       "description": "Unique identifier assigned by Core"
     },
     "title": {
@@ -23,7 +25,7 @@
     },
     "body": {
       "type": "string",
-      "description": "Note content in markdown or plain text"
+      "description": "Note content"
     },
     "tags": {
       "type": "array",
@@ -31,6 +33,13 @@
         "type": "string"
       },
       "description": "Tags for categorisation and search"
+    },
+    "format": {
+      "$ref": "#/$defs/NoteFormat"
+    },
+    "pinned": {
+      "type": "boolean",
+      "description": "Whether this note is pinned"
     },
     "source": {
       "type": "string",
@@ -42,7 +51,7 @@
     },
     "extensions": {
       "type": "object",
-      "description": "Plugin-specific fields, namespaced by plugin ID. See ADR-014.",
+      "description": "Plugin-specific fields, namespaced by plugin ID.",
       "patternProperties": {
         "^[a-z][a-z0-9]*(-[a-z0-9]+)*(\\.[a-z][a-z0-9]*(-[a-z0-9]+)*)+$": {
           "type": "object"
@@ -61,5 +70,12 @@
       "description": "Record last-updated timestamp"
     }
   },
-  "additionalProperties": false
+  "additionalProperties": false,
+  "$defs": {
+    "NoteFormat": {
+      "type": "string",
+      "enum": ["plain", "markdown", "html"],
+      "description": "Content format of the note"
+    }
+  }
 }

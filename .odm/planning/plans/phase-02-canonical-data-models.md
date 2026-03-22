@@ -39,13 +39,13 @@ Progress: 0 / 11 work packages complete
 ## 2.2 — Contacts, Notes, Emails, Files, and Credentials JSON Schemas
 > spec: .odm/spec/canonical-data-models/brief.md
 
-- [ ] Create Contacts JSON Schema with nested structured types
+- [x] Create Contacts JSON Schema with nested structured types
   <!-- file: .odm/doc/schemas/contacts.schema.json -->
   <!-- purpose: Define JSON Schema for the Contacts collection. Required fields: id (uuid), name (object with given, family required; prefix, suffix, middle optional), source (string), source_id (string), created_at (datetime), updated_at (datetime). Optional fields: emails (array of objects with address required, type enum: home/work/other, primary boolean), phones (array of objects with number required, type enum: mobile/home/work/fax/other, primary boolean), addresses (array of objects with street, city, region, postal_code, country, type enum: home/work/other), organization (string), title (string), birthday (date), photo_url (string), notes (string), groups (array of strings), extensions (object). -->
   <!-- requirements: 3.1, 3.2 -->
   <!-- leverage: existing .odm/doc/schemas/contacts.schema.json -->
 
-- [ ] Create Notes, Emails, Files, and Credentials JSON Schemas
+- [x] Create Notes, Emails, Files, and Credentials JSON Schemas
   <!-- file: .odm/doc/schemas/notes.schema.json -->
   <!-- file: .odm/doc/schemas/emails.schema.json -->
   <!-- file: .odm/doc/schemas/files.schema.json -->

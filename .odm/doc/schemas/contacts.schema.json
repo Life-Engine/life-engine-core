@@ -1,5 +1,6 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://life-engine.dev/schemas/contacts.schema.json",
   "title": "Contact",
   "description": "A contact in the Life Engine canonical data model.",
   "type": "object",
@@ -14,106 +15,60 @@
   "properties": {
     "id": {
       "type": "string",
+      "format": "uuid",
       "description": "Unique identifier assigned by Core"
     },
     "name": {
-      "type": "object",
-      "description": "Structured name",
-      "required": [
-        "given",
-        "family",
-        "display"
-      ],
-      "properties": {
-        "given": {
-          "type": "string",
-          "description": "Given/first name"
-        },
-        "family": {
-          "type": "string",
-          "description": "Family/last name"
-        },
-        "display": {
-          "type": "string",
-          "description": "Full display name as the user prefers it"
-        }
-      },
-      "additionalProperties": false
+      "$ref": "#/$defs/ContactName"
     },
     "emails": {
       "type": "array",
-      "description": "List of email addresses",
       "items": {
-        "type": "object",
-        "required": [
-          "address"
-        ],
-        "properties": {
-          "address": {
-            "type": "string",
-            "description": "Email address"
-          },
-          "type": {
-            "type": "string",
-            "description": "Label such as work, personal, other"
-          },
-          "primary": {
-            "type": "boolean",
-            "description": "Whether this is the primary email"
-          }
-        },
-        "additionalProperties": false
-      }
+        "$ref": "#/$defs/ContactEmail"
+      },
+      "description": "List of email addresses"
     },
     "phones": {
       "type": "array",
-      "description": "List of phone numbers",
       "items": {
-        "type": "object",
-        "required": [
-          "number"
-        ],
-        "properties": {
-          "number": {
-            "type": "string",
-            "description": "Phone number (E.164 format recommended)"
-          },
-          "type": {
-            "type": "string",
-            "description": "Label such as mobile, work, home"
-          }
-        },
-        "additionalProperties": false
-      }
+        "$ref": "#/$defs/ContactPhone"
+      },
+      "description": "List of phone numbers"
     },
     "addresses": {
       "type": "array",
-      "description": "List of postal addresses",
       "items": {
-        "type": "object",
-        "properties": {
-          "street": {
-            "type": "string"
-          },
-          "city": {
-            "type": "string"
-          },
-          "state": {
-            "type": "string"
-          },
-          "postcode": {
-            "type": "string"
-          },
-          "country": {
-            "type": "string"
-          }
-        },
-        "additionalProperties": false
-      }
+        "$ref": "#/$defs/ContactAddress"
+      },
+      "description": "List of postal addresses"
     },
-    "organisation": {
+    "organization": {
       "type": "string",
-      "description": "Company or organisation name"
+      "description": "Company or organization name"
+    },
+    "title": {
+      "type": "string",
+      "description": "Job title or role"
+    },
+    "birthday": {
+      "type": "string",
+      "format": "date",
+      "description": "Date of birth in ISO 8601 date format (YYYY-MM-DD)"
+    },
+    "photo_url": {
+      "type": "string",
+      "description": "URL to the contact's photo"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Free-text notes about the contact"
+    },
+    "groups": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Groups or categories the contact belongs to"
     },
     "source": {
       "type": "string",
@@ -125,7 +80,7 @@
     },
     "extensions": {
       "type": "object",
-      "description": "Plugin-specific fields, namespaced by plugin ID. See ADR-014.",
+      "description": "Plugin-specific fields, namespaced by plugin ID.",
       "patternProperties": {
         "^[a-z][a-z0-9]*(-[a-z0-9]+)*(\\.[a-z][a-z0-9]*(-[a-z0-9]+)*)+$": {
           "type": "object"
@@ -144,5 +99,114 @@
       "description": "Record last-updated timestamp"
     }
   },
-  "additionalProperties": false
+  "additionalProperties": false,
+  "$defs": {
+    "ContactName": {
+      "type": "object",
+      "description": "Structured name",
+      "required": ["given", "family"],
+      "properties": {
+        "given": {
+          "type": "string",
+          "description": "Given/first name"
+        },
+        "family": {
+          "type": "string",
+          "description": "Family/last name"
+        },
+        "prefix": {
+          "type": "string",
+          "description": "Name prefix (e.g., Mr, Dr)"
+        },
+        "suffix": {
+          "type": "string",
+          "description": "Name suffix (e.g., Jr, III)"
+        },
+        "middle": {
+          "type": "string",
+          "description": "Middle name"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ContactEmail": {
+      "type": "object",
+      "description": "A contact email address",
+      "required": ["address"],
+      "properties": {
+        "address": {
+          "type": "string",
+          "format": "email",
+          "description": "Email address"
+        },
+        "type": {
+          "$ref": "#/$defs/ContactInfoType"
+        },
+        "primary": {
+          "type": "boolean",
+          "description": "Whether this is the primary email"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ContactPhone": {
+      "type": "object",
+      "description": "A contact phone number",
+      "required": ["number"],
+      "properties": {
+        "number": {
+          "type": "string",
+          "description": "Phone number (E.164 format recommended)"
+        },
+        "type": {
+          "$ref": "#/$defs/PhoneType"
+        },
+        "primary": {
+          "type": "boolean",
+          "description": "Whether this is the primary phone number"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ContactAddress": {
+      "type": "object",
+      "description": "A postal address",
+      "properties": {
+        "street": {
+          "type": "string",
+          "description": "Street address"
+        },
+        "city": {
+          "type": "string",
+          "description": "City"
+        },
+        "region": {
+          "type": "string",
+          "description": "State, province, or region"
+        },
+        "postal_code": {
+          "type": "string",
+          "description": "Postal or ZIP code"
+        },
+        "country": {
+          "type": "string",
+          "description": "Country"
+        },
+        "type": {
+          "$ref": "#/$defs/ContactInfoType"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ContactInfoType": {
+      "type": "string",
+      "enum": ["home", "work", "other"],
+      "description": "Type label for contact information"
+    },
+    "PhoneType": {
+      "type": "string",
+      "enum": ["mobile", "home", "work", "fax", "other"],
+      "description": "Type label for phone numbers"
+    }
+  }
 }

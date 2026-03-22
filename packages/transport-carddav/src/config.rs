@@ -1,0 +1,1 @@
+//! CardDAV transport configuration.

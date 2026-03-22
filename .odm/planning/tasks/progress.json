@@ -1,7 +1,7 @@
 {
   "version": 1,
   "last_updated": "2026-03-23T00:00:00Z",
-  "completed_wps": ["1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "nx:1.1", "nx:1.2", "nx:1.3", "nx:1.4", "nx:1.5", "nx:1.6", "2.1", "2.2", "2.3", "2.4", "2.5", "2.6", "2.7", "2.8", "2.9", "ph1:1.1"],
+  "completed_wps": ["1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "nx:1.1", "nx:1.2", "nx:1.3", "nx:1.4", "nx:1.5", "nx:1.6", "2.1", "2.2", "2.3", "2.4", "2.5", "2.6", "2.7", "2.8", "2.9", "ph1:1.1", "ph1:1.2", "ph1:1.3", "ph1:1.4"],
   "current_wp": null,
   "current_wp_tasks": {
     "total": 0,
@@ -177,6 +177,38 @@
       "completed_at": "2026-03-23T00:00:00Z",
       "commit": "7fb0d81",
       "tasks_completed": 1,
+      "tasks_deferred": 0
+    },
+    {
+      "wp": "ph1:1.1",
+      "title": "Cargo Workspace Configuration",
+      "completed_at": "2026-03-23T00:00:00Z",
+      "commit": "afaca02",
+      "tasks_completed": 1,
+      "tasks_deferred": 0
+    },
+    {
+      "wp": "ph1:1.2",
+      "title": "Nx Configuration",
+      "completed_at": "2026-03-23T00:00:00Z",
+      "commit": "5402bdf",
+      "tasks_completed": 1,
+      "tasks_deferred": 0
+    },
+    {
+      "wp": "ph1:1.3",
+      "title": "pnpm Workspace Configuration",
+      "completed_at": "2026-03-23T00:00:00Z",
+      "commit": "existing",
+      "tasks_completed": 1,
+      "tasks_deferred": 0
+    },
+    {
+      "wp": "ph1:1.4",
+      "title": "Package Crate Scaffolding",
+      "completed_at": "2026-03-23T00:00:00Z",
+      "commit": "pending",
+      "tasks_completed": 6,
       "tasks_deferred": 0
     }
   ]

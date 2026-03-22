@@ -44,7 +44,7 @@ Progress: 0 / 11 work packages complete
 ## 1.3 — pnpm Workspace Configuration
 > spec: .odm/spec/monorepo-and-tooling/brief.md
 
-- [ ] Configure pnpm workspace for JavaScript/TypeScript packages
+- [x] Configure pnpm workspace for JavaScript/TypeScript packages
   <!-- file: pnpm-workspace.yaml -->
   <!-- purpose: List apps/app (Tauri frontend) and any JS/TS packages as workspace members. Use workspace:* protocol for internal dependencies. Ensure pnpm-lock.yaml is committed. Verify pnpm install succeeds with the updated workspace configuration. -->
   <!-- requirements: 3.1, 3.2, 3.3 -->
@@ -56,42 +56,42 @@ Progress: 0 / 11 work packages complete
 > depends: 1.1
 > spec: .odm/spec/monorepo-and-tooling/brief.md
 
-- [ ] Scaffold packages/traits crate with standard layout
+- [x] Scaffold packages/traits crate with standard layout
   <!-- file: packages/traits/Cargo.toml -->
   <!-- file: packages/traits/src/lib.rs -->
   <!-- purpose: Create Cargo.toml with name = "life-engine-traits", dependencies on life-engine-types. Create src/lib.rs with module declarations for storage, transport, plugin, error. Create src/storage.rs (empty StorageBackend trait placeholder), src/transport.rs (empty Transport trait placeholder), src/plugin.rs (empty Plugin trait placeholder), src/error.rs (EngineError trait placeholder), src/types.rs (module-internal types), src/tests/mod.rs (empty test module). All files compile with no errors. -->
   <!-- requirements: 5.1, 6.1, 6.2, 7.1 -->
   <!-- leverage: none -->
 
-- [ ] Scaffold packages/crypto crate with standard layout
+- [x] Scaffold packages/crypto crate with standard layout
   <!-- file: packages/crypto/Cargo.toml -->
   <!-- file: packages/crypto/src/lib.rs -->
   <!-- purpose: Create Cargo.toml with name = "life-engine-crypto", dependencies on life-engine-types, aes-gcm, argon2, hmac, sha2. Create src/lib.rs with module declarations. Create src/encryption.rs (AES-256-GCM placeholder), src/kdf.rs (Argon2id placeholder), src/hmac.rs (HMAC placeholder), src/error.rs (CryptoError types), src/tests/mod.rs. All files compile with no errors. -->
   <!-- requirements: 5.1, 6.1, 7.1 -->
   <!-- leverage: none -->
 
-- [ ] Scaffold packages/storage-sqlite crate with standard layout
+- [x] Scaffold packages/storage-sqlite crate with standard layout
   <!-- file: packages/storage-sqlite/Cargo.toml -->
   <!-- file: packages/storage-sqlite/src/lib.rs -->
   <!-- purpose: Create Cargo.toml with name = "life-engine-storage-sqlite", dependencies on life-engine-types, life-engine-traits, life-engine-crypto, rusqlite with bundled-sqlcipher feature. Create src/lib.rs, src/config.rs, src/error.rs, src/schema.rs, src/backend.rs, src/validation.rs, src/credentials.rs, src/audit.rs, src/export.rs, src/types.rs, src/tests/mod.rs. All files compile. -->
   <!-- requirements: 5.1, 6.1, 7.1 -->
   <!-- leverage: none -->
 
-- [ ] Scaffold packages/auth crate with standard layout
+- [x] Scaffold packages/auth crate with standard layout
   <!-- file: packages/auth/Cargo.toml -->
   <!-- file: packages/auth/src/lib.rs -->
   <!-- purpose: Create Cargo.toml with name = "life-engine-auth", dependencies on life-engine-types, life-engine-traits, life-engine-crypto, jsonwebtoken, reqwest. Create src/lib.rs, src/config.rs, src/error.rs, src/handlers/mod.rs, src/handlers/validate.rs, src/handlers/rate_limit.rs, src/handlers/keys.rs, src/types.rs, src/tests/mod.rs. All files compile. -->
   <!-- requirements: 5.1, 6.1, 7.1 -->
   <!-- leverage: none -->
 
-- [ ] Scaffold packages/workflow-engine crate with standard layout
+- [x] Scaffold packages/workflow-engine crate with standard layout
   <!-- file: packages/workflow-engine/Cargo.toml -->
   <!-- file: packages/workflow-engine/src/lib.rs -->
   <!-- purpose: Create Cargo.toml with name = "life-engine-workflow-engine", dependencies on life-engine-types, life-engine-traits, serde_yaml, cron, tokio. Create src/lib.rs, src/config.rs, src/error.rs, src/types.rs, src/loader.rs, src/executor.rs, src/event_bus.rs, src/scheduler.rs, src/tests/mod.rs. All files compile. -->
   <!-- requirements: 5.1, 6.1, 7.1 -->
   <!-- leverage: none -->
 
-- [ ] Scaffold all transport-* crates with standard layout
+- [x] Scaffold all transport-* crates with standard layout
   <!-- file: packages/transport-rest/Cargo.toml -->
   <!-- file: packages/transport-rest/src/lib.rs -->
   <!-- purpose: Create five transport crates (transport-rest, transport-graphql, transport-caldav, transport-carddav, transport-webhook) each with Cargo.toml depending on life-engine-types and life-engine-traits. Each crate gets src/lib.rs, src/config.rs, src/error.rs, src/handlers/mod.rs, src/types.rs, src/tests/mod.rs. transport-rest depends on axum; transport-graphql depends on async-graphql; transport-caldav and transport-carddav depend on life-engine-dav-utils; transport-webhook depends on axum. All files compile. -->

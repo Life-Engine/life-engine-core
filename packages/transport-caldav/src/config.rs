@@ -1,0 +1,1 @@
+//! CalDAV transport configuration.

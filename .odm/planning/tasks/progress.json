@@ -1,7 +1,7 @@
 {
   "version": 1,
   "last_updated": "2026-03-23T00:00:00Z",
-  "completed_wps": ["1.1", "1.2", "1.3", "1.4", "nx:1.1", "nx:1.2", "nx:1.3", "nx:1.4", "nx:1.5"],
+  "completed_wps": ["1.1", "1.2", "1.3", "1.4", "nx:1.1", "nx:1.2", "nx:1.3", "nx:1.4", "nx:1.5", "nx:1.6"],
   "current_wp": null,
   "current_wp_tasks": {
     "total": 0,
@@ -78,6 +78,14 @@
     {
       "wp": "nx:1.5",
       "title": "Task Pipelines & Developer Scripts",
+      "completed_at": "2026-03-23T00:00:00Z",
+      "commit": "5c7c593",
+      "tasks_completed": 2,
+      "tasks_deferred": 0
+    },
+    {
+      "wp": "nx:1.6",
+      "title": "Gitignore & Verification",
       "completed_at": "2026-03-23T00:00:00Z",
       "commit": "pending",
       "tasks_completed": 2,

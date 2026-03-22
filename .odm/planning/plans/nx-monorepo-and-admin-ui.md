@@ -108,13 +108,13 @@ Progress: 0 / 14 work packages complete
 ## 1.6 — Gitignore & Verification
 > depends: 1.5
 
-- [ ] Update `.gitignore` for Nx cache and node_modules
+- [x] Update `.gitignore` for Nx cache and node_modules
   <!-- file: .gitignore -->
   <!-- purpose: Add .nx/, node_modules/, dist/ entries to .gitignore if not already present -->
   <!-- requirements: clean git state -->
   <!-- leverage: existing .gitignore -->
 
-- [ ] Verify Nx affected detection and caching work correctly
+- [x] Verify Nx affected detection and caching work correctly
   <!-- file: (verification — no file output) -->
   <!-- purpose: Run npx nx affected:test and confirm only changed projects are tested; verify cache hits on re-runs -->
   <!-- requirements: affected detection works end-to-end -->

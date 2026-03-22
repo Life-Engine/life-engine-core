@@ -31,7 +31,7 @@ reqwest = { workspace = true }
 aws-sdk-s3 = { version = "1", optional = true }
 aws-config = { version = "1", optional = true }
 flate2 = "1"
-cron = "0.13"
+cron = "0.15"
 
 [dev-dependencies]
 life-engine-test-utils = { path = "../../../packages/test-utils" }

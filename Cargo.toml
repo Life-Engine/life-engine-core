@@ -42,20 +42,20 @@ async-trait = "0.1"
 clap = { version = "4", features = ["derive"] }
 serde_yaml = "0.9"
 tower-http = { version = "0.6", features = ["cors", "trace"] }
-rusqlite = { version = "0.32", features = ["bundled-sqlcipher"] }
+rusqlite = { version = "0.39", features = ["bundled-sqlcipher"] }
 rpassword = "7"
-rand = "0.8"
+rand = "0.9"
 sha2 = "0.10"
 hex = "0.4"
 argon2 = "0.5"
 tokio-stream = { version = "0.1", features = ["sync"] }
 futures = "0.3"
-jsonschema = "0.29"
-jsonwebtoken = "9"
+jsonschema = "0.45"
+jsonwebtoken = "10"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
-tantivy = "0.22"
+tantivy = "0.25"
 mime_guess = "2"
-governor = { version = "0.8", features = ["std", "dashmap", "jitter"] }
+governor = { version = "0.10", features = ["std", "dashmap", "jitter"] }
 rustls = "0.23"
 tokio-rustls = "0.26"
 rustls-pemfile = "2"

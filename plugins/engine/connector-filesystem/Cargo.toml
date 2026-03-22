@@ -23,7 +23,7 @@ serde_json = { workspace = true }
 chrono = { workspace = true }
 uuid = { workspace = true }
 tracing = { workspace = true }
-notify = { version = "7", features = ["serde"] }
+notify = { version = "8", features = ["serde"] }
 sha2 = { workspace = true }
 hex = { workspace = true }
 glob = "0.3"

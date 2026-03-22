@@ -6,6 +6,7 @@
 use chrono::Utc;
 use dav_utils::ical::{is_date_only, parse_ical_datetime};
 use life_engine_types::CalendarEvent;
+use life_engine_types::events::{Attendee, Recurrence};
 use uuid::Uuid;
 
 /// Serialise a CDM `CalendarEvent` to iCalendar VCALENDAR/VEVENT format.
@@ -16,7 +17,7 @@ pub fn event_to_ical(event: &CalendarEvent) -> String {
     let uid = &event.source_id;
     let summary = &event.title;
     let dtstart = event.start.format("%Y%m%dT%H%M%SZ").to_string();
-    let dtend = event.end.format("%Y%m%dT%H%M%SZ").to_string();
+    let dtend = event.end.unwrap_or(event.start).format("%Y%m%dT%H%M%SZ").to_string();
     let dtstamp = event.updated_at.format("%Y%m%dT%H%M%SZ").to_string();
     let created = event.created_at.format("%Y%m%dT%H%M%SZ").to_string();
     let last_modified = event.updated_at.format("%Y%m%dT%H%M%SZ").to_string();
@@ -41,11 +42,11 @@ pub fn event_to_ical(event: &CalendarEvent) -> String {
     if let Some(ref desc) = event.description {
         lines.push(format!("DESCRIPTION:{desc}"));
     }
-    if let Some(ref rrule) = event.recurrence {
-        lines.push(format!("RRULE:{rrule}"));
+    if let Some(ref recurrence) = event.recurrence {
+        lines.push(format!("RRULE:{}", recurrence.to_rrule()));
     }
     for attendee in &event.attendees {
-        lines.push(format!("ATTENDEE:mailto:{attendee}"));
+        lines.push(format!("ATTENDEE:mailto:{}", attendee.email));
     }
 
     lines.push("END:VEVENT".to_string());
@@ -139,7 +140,7 @@ fn parse_vevent(event: &ical::parser::ical::component::IcalEvent) -> anyhow::Res
         }
     };
 
-    let recurrence = get_property(event, "RRULE");
+    let recurrence = get_property(event, "RRULE").and_then(|r| Recurrence::from_rrule(&r));
     let location = get_property(event, "LOCATION");
     let description = get_property(event, "DESCRIPTION");
     let attendees = extract_attendees(event);
@@ -159,11 +160,15 @@ fn parse_vevent(event: &ical::parser::ical::component::IcalEvent) -> anyhow::Res
         id: Uuid::new_v4(),
         title,
         start,
-        end,
+        end: Some(end),
         recurrence,
         attendees,
         location,
         description,
+        all_day: None,
+        reminders: vec![],
+        timezone: None,
+        status: None,
         source: "caldav-api".into(),
         source_id,
         extensions: None,
@@ -194,18 +199,19 @@ fn get_property_params(
         .and_then(|p| p.params.clone())
 }
 
-fn extract_attendees(event: &ical::parser::ical::component::IcalEvent) -> Vec<String> {
+fn extract_attendees(event: &ical::parser::ical::component::IcalEvent) -> Vec<Attendee> {
     event
         .properties
         .iter()
         .filter(|p| p.name == "ATTENDEE")
         .filter_map(|p| {
             p.value.as_ref().map(|v| {
-                v.trim()
+                let email = v.trim()
                     .strip_prefix("mailto:")
                     .or_else(|| v.trim().strip_prefix("MAILTO:"))
                     .unwrap_or(v.trim())
-                    .to_string()
+                    .to_string();
+                Attendee::from_email(email)
             })
         })
         .collect()
@@ -221,11 +227,15 @@ mod tests {
             id: Uuid::new_v4(),
             title: "Team Meeting".into(),
             start: Utc.with_ymd_and_hms(2026, 3, 21, 10, 0, 0).unwrap(),
-            end: Utc.with_ymd_and_hms(2026, 3, 21, 11, 0, 0).unwrap(),
-            recurrence: Some("FREQ=WEEKLY;BYDAY=MO".into()),
-            attendees: vec!["alice@example.com".into(), "bob@example.com".into()],
+            end: Some(Utc.with_ymd_and_hms(2026, 3, 21, 11, 0, 0).unwrap()),
+            recurrence: Recurrence::from_rrule("FREQ=WEEKLY;BYDAY=MO"),
+            attendees: vec![Attendee::from_email("alice@example.com"), Attendee::from_email("bob@example.com")],
             location: Some("Board Room".into()),
             description: Some("Weekly team sync".into()),
+            all_day: None,
+            reminders: vec![],
+            timezone: None,
+            status: None,
             source: "local".into(),
             source_id: "evt-round-trip@example.com".into(),
             extensions: None,
@@ -275,11 +285,15 @@ mod tests {
             id: Uuid::new_v4(),
             title: "Simple".into(),
             start: Utc.with_ymd_and_hms(2026, 4, 1, 9, 0, 0).unwrap(),
-            end: Utc.with_ymd_and_hms(2026, 4, 1, 10, 0, 0).unwrap(),
+            end: Some(Utc.with_ymd_and_hms(2026, 4, 1, 10, 0, 0).unwrap()),
             recurrence: None,
             attendees: vec![],
             location: None,
             description: None,
+            all_day: None,
+            reminders: vec![],
+            timezone: None,
+            status: None,
             source: "local".into(),
             source_id: "simple-001".into(),
             extensions: None,
@@ -346,9 +360,9 @@ END:VCALENDAR\r\n";
         assert_eq!(event.title, "Full Event");
         assert_eq!(event.location.as_deref(), Some("Office"));
         assert_eq!(event.description.as_deref(), Some("A full event"));
-        assert_eq!(event.recurrence.as_deref(), Some("FREQ=DAILY;COUNT=5"));
+        assert_eq!(event.recurrence.as_ref().map(|r| r.to_rrule()).as_deref(), Some("FREQ=DAILY;COUNT=5"));
         assert_eq!(event.attendees.len(), 2);
-        assert_eq!(event.attendees[0], "alice@example.com");
+        assert_eq!(event.attendees[0].email, "alice@example.com");
     }
 
     #[test]
@@ -403,11 +417,15 @@ END:VCALENDAR\r\n";
             id: Uuid::new_v4(),
             title: "Minimal".into(),
             start: Utc.with_ymd_and_hms(2026, 6, 1, 14, 0, 0).unwrap(),
-            end: Utc.with_ymd_and_hms(2026, 6, 1, 15, 0, 0).unwrap(),
+            end: Some(Utc.with_ymd_and_hms(2026, 6, 1, 15, 0, 0).unwrap()),
             recurrence: None,
             attendees: vec![],
             location: None,
             description: None,
+            all_day: None,
+            reminders: vec![],
+            timezone: None,
+            status: None,
             source: "local".into(),
             source_id: "min-001".into(),
             extensions: None,

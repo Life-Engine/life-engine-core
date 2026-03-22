@@ -59,13 +59,13 @@ Progress: 0 / 11 work packages complete
 ## 2.3 — Events and Tasks Rust Structs
 > spec: .odm/spec/canonical-data-models/brief.md
 
-- [ ] Define Events Rust struct with recurrence and attendee support
+- [x] Define Events Rust struct with recurrence and attendee support
   <!-- file: packages/types/src/events.rs -->
   <!-- purpose: Define CalendarEvent struct with serde Serialize/Deserialize derives. Required fields as non-optional: id (Uuid), title (String), start (DateTime<Utc>), source (String), source_id (String), created_at (DateTime<Utc>), updated_at (DateTime<Utc>). Optional fields as Option<T> with #[serde(skip_serializing_if = "Option::is_none")]: end, description, location, all_day, timezone, status (EventStatus enum). Define Recurrence struct (frequency: RecurrenceFrequency enum, interval: u32, until: Option<DateTime<Utc>>, count: Option<u32>, by_day: Option<Vec<String>>). Define Attendee struct (name: Option<String>, email: String, status: AttendeeStatus enum). Define Reminder struct (minutes_before: u32, method: ReminderMethod enum). Add extensions: Option<serde_json::Value> field. Ensure all existing tests still pass after modification. -->
   <!-- requirements: 1.1, 1.2, 1.3 -->
   <!-- leverage: existing packages/types/src/events.rs -->
 
-- [ ] Define Tasks Rust struct with status and priority enums
+- [x] Define Tasks Rust struct with status and priority enums
   <!-- file: packages/types/src/tasks.rs -->
   <!-- purpose: Define Task struct with serde derives. Required fields: id (Uuid), title (String), source (String), source_id (String), created_at (DateTime<Utc>), updated_at (DateTime<Utc>). Optional fields: description, status (TaskStatus enum: Pending/InProgress/Completed/Cancelled), priority (TaskPriority enum: Low/Medium/High/Urgent), due_date, completed_at, tags (Vec<String>), assignee, parent_id (Uuid), extensions. Implement Default for TaskStatus (Pending) and TaskPriority (Medium). Ensure serde rename_all = "snake_case" on enums for JSON compatibility. Ensure all existing tests pass. -->
   <!-- requirements: 1.1, 1.2, 1.3 -->

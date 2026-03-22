@@ -17,7 +17,10 @@ pub mod tasks;
 pub use contacts::{Contact, ContactName, EmailAddress, PhoneNumber, PostalAddress};
 pub use credentials::{Credential, CredentialType};
 pub use emails::{Email, EmailAttachment};
-pub use events::CalendarEvent;
+pub use events::{
+    Attendee, AttendeeStatus, CalendarEvent, EventStatus, Recurrence, RecurrenceFrequency,
+    Reminder, ReminderMethod,
+};
 pub use files::FileMetadata;
 pub use notes::Note;
 pub use tasks::{Task, TaskPriority, TaskStatus};
@@ -38,7 +41,10 @@ mod tests {
             status: TaskStatus::Pending,
             priority: TaskPriority::High,
             due_date: Some(now),
-            labels: vec!["test".into()],
+            completed_at: None,
+            tags: vec!["test".into()],
+            assignee: None,
+            parent_id: None,
             source: "test".into(),
             source_id: "task-001".into(),
             extensions: None,
@@ -57,11 +63,15 @@ mod tests {
             id: Uuid::new_v4(),
             title: "Test event".into(),
             start: now,
-            end: now + chrono::Duration::hours(1),
-            recurrence: None,
-            attendees: vec!["user@example.com".into()],
-            location: Some("Room A".into()),
+            end: Some(now + chrono::Duration::hours(1)),
             description: None,
+            location: Some("Room A".into()),
+            all_day: None,
+            recurrence: None,
+            attendees: vec![Attendee::from_email("user@example.com")],
+            reminders: vec![],
+            timezone: None,
+            status: None,
             source: "test".into(),
             source_id: "event-001".into(),
             extensions: None,

@@ -481,7 +481,7 @@ mod tests {
                 "title": { "type": "string" },
                 "status": {
                     "type": "string",
-                    "enum": ["pending", "active", "completed", "cancelled"]
+                    "enum": ["pending", "in_progress", "completed", "cancelled"]
                 },
                 "description": { "type": "string" }
             },
@@ -839,7 +839,7 @@ mod tests {
         let record = vs.validated_create("plug1", "tasks", data).await.unwrap();
 
         // Update with valid data.
-        let new_data = json!({ "id": "t1", "title": "Updated", "status": "active" });
+        let new_data = json!({ "id": "t1", "title": "Updated", "status": "in_progress" });
         let updated = vs
             .validated_update("plug1", "tasks", &record.id, new_data.clone(), record.version)
             .await

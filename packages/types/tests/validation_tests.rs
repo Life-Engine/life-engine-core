@@ -40,19 +40,19 @@ mod task_validation {
     }
 
     #[test]
-    fn task_missing_status_is_rejected() {
+    fn task_missing_status_defaults_to_pending() {
         let mut v = sample_task();
         v.as_object_mut().unwrap().remove("status");
-        let result = serde_json::from_value::<Task>(v);
-        assert!(result.is_err());
+        let task: Task = serde_json::from_value(v).unwrap();
+        assert_eq!(task.status, TaskStatus::Pending);
     }
 
     #[test]
-    fn task_missing_priority_is_rejected() {
+    fn task_missing_priority_defaults_to_medium() {
         let mut v = sample_task();
         v.as_object_mut().unwrap().remove("priority");
-        let result = serde_json::from_value::<Task>(v);
-        assert!(result.is_err());
+        let task: Task = serde_json::from_value(v).unwrap();
+        assert_eq!(task.priority, TaskPriority::Medium);
     }
 
     // --- (b) Optional field defaults ---
@@ -63,16 +63,19 @@ mod task_validation {
         let task: Task = serde_json::from_value(v).unwrap();
         assert_eq!(task.description, None);
         assert_eq!(task.due_date, None);
-        assert!(task.labels.is_empty());
+        assert!(task.tags.is_empty());
         assert_eq!(task.extensions, None);
     }
 
     // --- (c) Enum variant serialization ---
 
     #[test]
-    fn task_status_serializes_to_lowercase() {
+    fn task_status_serializes_to_snake_case() {
         assert_eq!(serde_json::to_value(TaskStatus::Pending).unwrap(), "pending");
-        assert_eq!(serde_json::to_value(TaskStatus::Active).unwrap(), "active");
+        assert_eq!(
+            serde_json::to_value(TaskStatus::InProgress).unwrap(),
+            "in_progress"
+        );
         assert_eq!(
             serde_json::to_value(TaskStatus::Completed).unwrap(),
             "completed"
@@ -85,7 +88,6 @@ mod task_validation {
 
     #[test]
     fn task_priority_serializes_to_lowercase() {
-        assert_eq!(serde_json::to_value(TaskPriority::None).unwrap(), "none");
         assert_eq!(serde_json::to_value(TaskPriority::Low).unwrap(), "low");
         assert_eq!(
             serde_json::to_value(TaskPriority::Medium).unwrap(),
@@ -93,22 +95,22 @@ mod task_validation {
         );
         assert_eq!(serde_json::to_value(TaskPriority::High).unwrap(), "high");
         assert_eq!(
-            serde_json::to_value(TaskPriority::Critical).unwrap(),
-            "critical"
+            serde_json::to_value(TaskPriority::Urgent).unwrap(),
+            "urgent"
         );
     }
 
     // --- (d) Enum variant deserialization ---
 
     #[test]
-    fn task_status_deserializes_from_lowercase() {
+    fn task_status_deserializes_from_snake_case() {
         assert_eq!(
             serde_json::from_value::<TaskStatus>(json!("pending")).unwrap(),
             TaskStatus::Pending
         );
         assert_eq!(
-            serde_json::from_value::<TaskStatus>(json!("active")).unwrap(),
-            TaskStatus::Active
+            serde_json::from_value::<TaskStatus>(json!("in_progress")).unwrap(),
+            TaskStatus::InProgress
         );
         assert_eq!(
             serde_json::from_value::<TaskStatus>(json!("completed")).unwrap(),
@@ -129,10 +131,6 @@ mod task_validation {
     #[test]
     fn task_priority_deserializes_from_lowercase() {
         assert_eq!(
-            serde_json::from_value::<TaskPriority>(json!("none")).unwrap(),
-            TaskPriority::None
-        );
-        assert_eq!(
             serde_json::from_value::<TaskPriority>(json!("low")).unwrap(),
             TaskPriority::Low
         );
@@ -145,14 +143,14 @@ mod task_validation {
             TaskPriority::High
         );
         assert_eq!(
-            serde_json::from_value::<TaskPriority>(json!("critical")).unwrap(),
-            TaskPriority::Critical
+            serde_json::from_value::<TaskPriority>(json!("urgent")).unwrap(),
+            TaskPriority::Urgent
         );
     }
 
     #[test]
     fn task_priority_rejects_invalid_variant() {
-        let result = serde_json::from_value::<TaskPriority>(json!("URGENT"));
+        let result = serde_json::from_value::<TaskPriority>(json!("CRITICAL"));
         assert!(result.is_err());
     }
 
@@ -239,11 +237,11 @@ mod event_validation {
     }
 
     #[test]
-    fn event_missing_end_is_rejected() {
+    fn event_missing_end_deserializes_as_none() {
         let mut v = sample_event();
         v.as_object_mut().unwrap().remove("end");
-        let result = serde_json::from_value::<CalendarEvent>(v);
-        assert!(result.is_err());
+        let event: CalendarEvent = serde_json::from_value(v).unwrap();
+        assert_eq!(event.end, None);
     }
 
     // --- (b) Optional field defaults ---
@@ -298,10 +296,10 @@ mod event_validation {
     #[test]
     fn event_includes_attendees_when_non_empty() {
         let mut v = sample_event();
-        v["attendees"] = json!(["alice@example.com"]);
+        v["attendees"] = json!([{"email": "alice@example.com"}]);
         let event: CalendarEvent = serde_json::from_value(v).unwrap();
         let serialized = serde_json::to_value(&event).unwrap();
-        assert_eq!(serialized["attendees"], json!(["alice@example.com"]));
+        assert_eq!(serialized["attendees"], json!([{"email": "alice@example.com"}]));
     }
 
     // --- (g) Unknown field acceptance ---

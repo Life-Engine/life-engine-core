@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use base64::Engine as _;
 use chrono::{DateTime, Duration, Utc};
 use life_engine_types::CalendarEvent;
+use life_engine_types::events::{Attendee, Recurrence};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -885,18 +886,18 @@ impl GoogleCalendarClient {
             .unwrap_or_else(|| "(no title)".to_string());
 
         let start = parse_google_datetime(&event.start)?;
-        let end = parse_google_datetime(&event.end)?;
+        let end = Some(parse_google_datetime(&event.end)?);
 
-        let recurrence = if event.recurrence.is_empty() {
-            None
-        } else {
-            Some(event.recurrence.join(";"))
-        };
+        let recurrence = event
+            .recurrence
+            .iter()
+            .find(|r| r.starts_with("RRULE:"))
+            .and_then(|r| Recurrence::from_rrule(r));
 
-        let attendees: Vec<String> = event
+        let attendees: Vec<Attendee> = event
             .attendees
             .iter()
-            .map(|a| a.email.clone())
+            .map(|a| Attendee::from_email(a.email.clone()))
             .collect();
 
         let created_at = event
@@ -995,6 +996,10 @@ impl GoogleCalendarClient {
             extensions,
             created_at,
             updated_at,
+            all_day: None,
+            reminders: vec![],
+            timezone: None,
+            status: None,
         })
     }
 }
@@ -1010,20 +1015,20 @@ pub fn build_google_event(event: &CalendarEvent) -> GoogleEvent {
             time_zone: None,
         },
         end: GoogleDateTime {
-            date_time: Some(event.end.to_rfc3339()),
+            date_time: Some(event.end.unwrap_or(event.start).to_rfc3339()),
             date: None,
             time_zone: None,
         },
         recurrence: event
             .recurrence
             .as_ref()
-            .map(|r| vec![format!("RRULE:{r}")])
+            .map(|r| vec![format!("RRULE:{}", r.to_rrule())])
             .unwrap_or_default(),
         attendees: event
             .attendees
             .iter()
-            .map(|email| GoogleAttendee {
-                email: email.clone(),
+            .map(|a| GoogleAttendee {
+                email: a.email.clone(),
                 display_name: None,
             })
             .collect(),
@@ -1393,11 +1398,11 @@ mod tests {
         assert_eq!(cal_event.title, "Google Meeting");
         assert_eq!(cal_event.source, "google-calendar");
         assert_eq!(cal_event.source_id, "google-event-001");
-        assert_eq!(cal_event.attendees, vec!["alice@example.com"]);
+        assert_eq!(cal_event.attendees[0].email, "alice@example.com");
         assert_eq!(cal_event.location.as_deref(), Some("Room B"));
         assert_eq!(cal_event.description.as_deref(), Some("Quarterly review"));
         assert!(cal_event.recurrence.is_none());
-        assert!(cal_event.start < cal_event.end);
+        assert!(cal_event.start < cal_event.end.unwrap());
 
         // Verify extensions
         let extensions = cal_event.extensions.as_ref().expect("should have extensions");
@@ -1469,7 +1474,7 @@ mod tests {
             GoogleCalendarClient::normalize_google_event(&event).expect("should normalize");
         assert_eq!(cal_event.title, "Company Holiday");
         assert_eq!(cal_event.start.date_naive().to_string(), "2026-03-25");
-        assert_eq!(cal_event.end.date_naive().to_string(), "2026-03-26");
+        assert_eq!(cal_event.end.unwrap().date_naive().to_string(), "2026-03-26");
     }
 
     #[test]
@@ -1506,8 +1511,8 @@ mod tests {
         let cal_event =
             GoogleCalendarClient::normalize_google_event(&event).expect("should normalize");
         assert_eq!(
-            cal_event.recurrence.as_deref(),
-            Some("RRULE:FREQ=DAILY;COUNT=30")
+            cal_event.recurrence.as_ref().map(|r| r.to_rrule()).as_deref(),
+            Some("FREQ=DAILY;COUNT=30")
         );
     }
 
@@ -1679,9 +1684,9 @@ mod tests {
             id: Uuid::new_v4(),
             title: "CDM Event".into(),
             start: Utc.with_ymd_and_hms(2026, 3, 21, 10, 0, 0).unwrap(),
-            end: Utc.with_ymd_and_hms(2026, 3, 21, 11, 0, 0).unwrap(),
-            recurrence: Some("FREQ=DAILY;COUNT=5".into()),
-            attendees: vec!["bob@example.com".into()],
+            end: Some(Utc.with_ymd_and_hms(2026, 3, 21, 11, 0, 0).unwrap()),
+            recurrence: Recurrence::from_rrule("FREQ=DAILY;COUNT=5"),
+            attendees: vec![Attendee::from_email("bob@example.com")],
             location: Some("Office".into()),
             description: Some("A meeting".into()),
             source: "google-calendar".into(),
@@ -1689,6 +1694,10 @@ mod tests {
             extensions: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
+            all_day: None,
+            reminders: vec![],
+            timezone: None,
+            status: None,
         };
         let ge = build_google_event(&event);
         assert_eq!(ge.id, "google-123");
@@ -1958,7 +1967,7 @@ mod tests {
             "2026-03-21T04:30:00+00:00"
         );
         assert_eq!(
-            cal_event.end.to_rfc3339(),
+            cal_event.end.unwrap().to_rfc3339(),
             "2026-03-21T05:30:00+00:00"
         );
     }
@@ -1976,9 +1985,10 @@ mod tests {
 
         let cal_event =
             GoogleCalendarClient::normalize_google_event(&event).expect("should normalize");
+        // Only the RRULE component is parsed into Recurrence; EXDATE/RDATE are separate iCal properties
         assert_eq!(
-            cal_event.recurrence.as_deref(),
-            Some("RRULE:FREQ=WEEKLY;BYDAY=MO;EXDATE:20260401T100000Z;RDATE:20260415T100000Z")
+            cal_event.recurrence.as_ref().map(|r| r.to_rrule()).as_deref(),
+            Some("FREQ=WEEKLY;BYDAY=MO")
         );
     }
 
@@ -2009,10 +2019,10 @@ mod tests {
         let cal_event =
             GoogleCalendarClient::normalize_google_event(&event).expect("should normalize");
         assert_eq!(cal_event.attendees.len(), 4);
-        assert_eq!(cal_event.attendees[0], "alice@example.com");
-        assert_eq!(cal_event.attendees[1], "bob@example.com");
-        assert_eq!(cal_event.attendees[2], "carol@example.com");
-        assert_eq!(cal_event.attendees[3], "dave@example.com");
+        assert_eq!(cal_event.attendees[0].email, "alice@example.com");
+        assert_eq!(cal_event.attendees[1].email, "bob@example.com");
+        assert_eq!(cal_event.attendees[2].email, "carol@example.com");
+        assert_eq!(cal_event.attendees[3].email, "dave@example.com");
     }
 
     #[test]

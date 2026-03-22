@@ -2,10 +2,10 @@
   "id": "550e8400-e29b-41d4-a716-446655440000",
   "title": "Implement user authentication flow",
   "description": "Add OAuth2 PKCE flow for third-party identity providers",
-  "status": "active",
+  "status": "in_progress",
   "priority": "high",
   "due_date": "2026-02-01T17:00:00Z",
-  "labels": ["security", "backend", "phase-1"],
+  "tags": ["security", "backend", "phase-1"],
   "source": "manual",
   "source_id": "fixture-task-001",
   "extensions": {

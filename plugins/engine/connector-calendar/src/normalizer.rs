@@ -7,6 +7,7 @@ use chrono::Utc;
 use dav_utils::ical::{is_date_only, parse_ical_datetime};
 use ical::parser::ical::component::IcalEvent;
 use life_engine_types::CalendarEvent;
+use life_engine_types::events::{Attendee, Recurrence};
 use uuid::Uuid;
 
 /// Normalize a parsed iCal VEVENT into the Life Engine CDM `CalendarEvent` type.
@@ -37,7 +38,7 @@ pub fn normalize_vevent(event: &IcalEvent, source: &str) -> anyhow::Result<Calen
         }
     };
 
-    let recurrence = get_property(event, "RRULE");
+    let recurrence = get_property(event, "RRULE").and_then(|r| Recurrence::from_rrule(&r));
     let location = get_property(event, "LOCATION");
     let description = get_property(event, "DESCRIPTION");
     let attendees = extract_attendees(event);
@@ -57,7 +58,7 @@ pub fn normalize_vevent(event: &IcalEvent, source: &str) -> anyhow::Result<Calen
         id: Uuid::new_v4(),
         title,
         start,
-        end,
+        end: Some(end),
         recurrence,
         attendees,
         location,
@@ -67,6 +68,10 @@ pub fn normalize_vevent(event: &IcalEvent, source: &str) -> anyhow::Result<Calen
         extensions: None,
         created_at,
         updated_at,
+        all_day: None,
+        reminders: vec![],
+        timezone: None,
+        status: None,
     })
 }
 
@@ -128,18 +133,19 @@ fn get_property_params(
 ///
 /// Attendee values are typically `mailto:user@example.com` — we strip the
 /// `mailto:` prefix and return just the email address.
-fn extract_attendees(event: &IcalEvent) -> Vec<String> {
+fn extract_attendees(event: &IcalEvent) -> Vec<Attendee> {
     event
         .properties
         .iter()
         .filter(|p| p.name == "ATTENDEE")
         .filter_map(|p| {
             p.value.as_ref().map(|v| {
-                v.trim()
+                let email = v.trim()
                     .strip_prefix("mailto:")
                     .or_else(|| v.trim().strip_prefix("MAILTO:"))
                     .unwrap_or(v.trim())
-                    .to_string()
+                    .to_string();
+                Attendee::from_email(email)
             })
         })
         .collect()
@@ -187,7 +193,7 @@ mod tests {
         assert_eq!(event.description.as_deref(), Some("Weekly sync"));
         assert!(event.recurrence.is_none());
         assert!(event.attendees.is_empty());
-        assert!(event.start < event.end);
+        assert!(event.start < event.end.unwrap());
     }
 
     #[test]
@@ -201,7 +207,7 @@ mod tests {
         ]);
 
         let event = normalize_vevent(&vevent, "caldav").expect("should normalize");
-        assert_eq!(event.recurrence.as_deref(), Some("FREQ=DAILY;COUNT=10"));
+        assert_eq!(event.recurrence.as_ref().map(|r| r.to_rrule()).as_deref(), Some("FREQ=DAILY;COUNT=10"));
     }
 
     #[test]
@@ -231,9 +237,9 @@ mod tests {
 
         let event = normalize_vevent(&vevent, "caldav").expect("should normalize");
         assert_eq!(event.attendees.len(), 3);
-        assert_eq!(event.attendees[0], "alice@example.com");
-        assert_eq!(event.attendees[1], "bob@example.com");
-        assert_eq!(event.attendees[2], "carol@example.com");
+        assert_eq!(event.attendees[0].email, "alice@example.com");
+        assert_eq!(event.attendees[1].email, "bob@example.com");
+        assert_eq!(event.attendees[2].email, "carol@example.com");
     }
 
     #[test]
@@ -251,7 +257,7 @@ mod tests {
         let event = normalize_vevent(&vevent, "caldav").expect("should normalize");
         assert_eq!(event.title, "NYC Meeting");
         // Currently treated as UTC — the important thing is it doesn't error
-        assert!(event.start < event.end);
+        assert!(event.start < event.end.unwrap());
     }
 
     #[test]
@@ -287,7 +293,7 @@ mod tests {
         assert_eq!(event.title, "Holiday");
         // All-day: start should be midnight of 2026-03-25
         assert_eq!(event.start.date_naive().to_string(), "2026-03-25");
-        assert_eq!(event.end.date_naive().to_string(), "2026-03-26");
+        assert_eq!(event.end.unwrap().date_naive().to_string(), "2026-03-26");
     }
 
     #[test]
@@ -304,7 +310,7 @@ mod tests {
         let event = normalize_vevent(&vevent, "caldav").expect("should normalize");
         // No DTEND on an all-day event defaults to start + 1 day
         assert_eq!(event.start.date_naive().to_string(), "2026-04-01");
-        assert_eq!(event.end.date_naive().to_string(), "2026-04-02");
+        assert_eq!(event.end.unwrap().date_naive().to_string(), "2026-04-02");
     }
 
     #[test]
@@ -316,7 +322,7 @@ mod tests {
         ]);
 
         let event = normalize_vevent(&vevent, "caldav").expect("should normalize");
-        let duration = event.end - event.start;
+        let duration = event.end.unwrap() - event.start;
         assert_eq!(duration.num_hours(), 1);
     }
 
@@ -500,8 +506,8 @@ END:VCALENDAR\r\n";
 
         let attendees = extract_attendees(&vevent);
         assert_eq!(attendees.len(), 2);
-        assert_eq!(attendees[0], "test@example.com");
-        assert_eq!(attendees[1], "plain@example.com");
+        assert_eq!(attendees[0].email, "test@example.com");
+        assert_eq!(attendees[1].email, "plain@example.com");
     }
 
     #[test]
@@ -516,7 +522,7 @@ END:VCALENDAR\r\n";
 
         let event = normalize_vevent(&vevent, "caldav").expect("should normalize");
         assert_eq!(
-            event.recurrence.as_deref(),
+            event.recurrence.as_ref().map(|r| r.to_rrule()).as_deref(),
             Some("FREQ=WEEKLY;BYDAY=MO,WE,FR;UNTIL=20261231T000000Z")
         );
     }
@@ -544,7 +550,7 @@ END:VCALENDAR\r\n";
         assert_eq!(events.len(), 1);
         let event = &events[0];
         assert_eq!(event.title, "Recurring Meeting");
-        assert_eq!(event.recurrence.as_deref(), Some("FREQ=WEEKLY;BYDAY=MO"));
+        assert_eq!(event.recurrence.as_ref().map(|r| r.to_rrule()).as_deref(), Some("FREQ=WEEKLY;BYDAY=MO"));
         assert_eq!(event.attendees.len(), 2);
         assert_eq!(event.location.as_deref(), Some("Board Room"));
         assert_eq!(event.description.as_deref(), Some("Weekly planning session"));

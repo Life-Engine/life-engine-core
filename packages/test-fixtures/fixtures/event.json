@@ -3,8 +3,15 @@
   "title": "Architecture review session",
   "start": "2026-01-20T14:00:00Z",
   "end": "2026-01-20T15:30:00Z",
-  "recurrence": "FREQ=MONTHLY;BYDAY=3MO",
-  "attendees": ["eng-lead@company.com", "architect@company.com"],
+  "recurrence": {
+    "frequency": "monthly",
+    "interval": 1,
+    "by_day": ["3MO"]
+  },
+  "attendees": [
+    { "email": "eng-lead@company.com" },
+    { "email": "architect@company.com" }
+  ],
   "location": "Building 4, Room 301",
   "description": "Monthly review of system architecture decisions and plugin API changes",
   "source": "caldav",

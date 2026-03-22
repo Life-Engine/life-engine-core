@@ -32,18 +32,17 @@ const CORE_PLUGIN_ID: &str = "core";
 /// Task priority levels matching CDM TaskPriority.
 #[derive(Enum, Copy, Clone, Eq, PartialEq)]
 pub enum GqlTaskPriority {
-    None,
     Low,
     Medium,
     High,
-    Critical,
+    Urgent,
 }
 
 /// Task status values matching CDM TaskStatus.
 #[derive(Enum, Copy, Clone, Eq, PartialEq)]
 pub enum GqlTaskStatus {
     Pending,
-    Active,
+    InProgress,
     Completed,
     Cancelled,
 }
@@ -70,7 +69,7 @@ pub struct GqlTask {
     pub status: GqlTaskStatus,
     pub priority: GqlTaskPriority,
     pub due_date: Option<DateTime<Utc>>,
-    pub labels: Vec<String>,
+    pub tags: Vec<String>,
     pub source: String,
     pub source_id: String,
     pub extensions: Option<async_graphql::Json<JsonValue>>,
@@ -553,22 +552,21 @@ fn record_to_task(data: &JsonValue) -> GqlTask {
         title: data["title"].as_str().unwrap_or_default().into(),
         description: data["description"].as_str().map(Into::into),
         status: match data["status"].as_str().unwrap_or("pending") {
-            "active" => GqlTaskStatus::Active,
+            "in_progress" => GqlTaskStatus::InProgress,
             "completed" => GqlTaskStatus::Completed,
             "cancelled" => GqlTaskStatus::Cancelled,
             _ => GqlTaskStatus::Pending,
         },
-        priority: match data["priority"].as_str().unwrap_or("none") {
+        priority: match data["priority"].as_str().unwrap_or("medium") {
             "low" => GqlTaskPriority::Low,
-            "medium" => GqlTaskPriority::Medium,
             "high" => GqlTaskPriority::High,
-            "critical" => GqlTaskPriority::Critical,
-            _ => GqlTaskPriority::None,
+            "urgent" => GqlTaskPriority::Urgent,
+            _ => GqlTaskPriority::Medium,
         },
         due_date: data["due_date"]
             .as_str()
             .and_then(|s| s.parse().ok()),
-        labels: data["labels"]
+        tags: data["tags"]
             .as_array()
             .map(|a| a.iter().filter_map(|v| v.as_str().map(Into::into)).collect())
             .unwrap_or_default(),
@@ -1375,7 +1373,7 @@ mod tests {
                     "description": "A test",
                     "status": "pending",
                     "priority": "high",
-                    "labels": ["test"],
+                    "tags": ["test"],
                     "source": "test",
                     "source_id": "t1",
                     "created_at": "2026-03-22T00:00:00Z",
@@ -1387,7 +1385,7 @@ mod tests {
 
         let result = schema
             .execute(
-                r#"{ tasks { data { id title description status priority labels source sourceId createdAt updatedAt } total } }"#,
+                r#"{ tasks { data { id title description status priority tags source sourceId createdAt updatedAt } total } }"#,
             )
             .await;
 
@@ -1397,7 +1395,7 @@ mod tests {
         assert_eq!(task["title"], "Test task");
         assert_eq!(task["status"], "PENDING");
         assert_eq!(task["priority"], "HIGH");
-        assert_eq!(task["labels"][0], "test");
+        assert_eq!(task["tags"][0], "test");
     }
 
     #[tokio::test]
@@ -1505,7 +1503,7 @@ mod tests {
             .create(
                 CORE_PLUGIN_ID,
                 "tasks",
-                json!({"title": "Find me", "status": "active", "priority": "low", "source": "t", "source_id": "x"}),
+                json!({"title": "Find me", "status": "in_progress", "priority": "low", "source": "t", "source_id": "x"}),
             )
             .await
             .unwrap();
@@ -1516,7 +1514,7 @@ mod tests {
 
         let data = result.data.into_json().unwrap();
         assert_eq!(data["task"]["title"], "Find me");
-        assert_eq!(data["task"]["status"], "ACTIVE");
+        assert_eq!(data["task"]["status"], "IN_PROGRESS");
     }
 
     #[tokio::test]

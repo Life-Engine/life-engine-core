@@ -216,7 +216,7 @@ pub fn build_vevent_ical(event: &CalendarEvent) -> String {
     let uid = &event.source_id;
     let summary = &event.title;
     let dtstart = event.start.format("%Y%m%dT%H%M%SZ").to_string();
-    let dtend = event.end.format("%Y%m%dT%H%M%SZ").to_string();
+    let dtend = event.end.unwrap_or(event.start).format("%Y%m%dT%H%M%SZ").to_string();
 
     let mut lines = vec![
         "BEGIN:VCALENDAR".to_string(),
@@ -236,10 +236,10 @@ pub fn build_vevent_ical(event: &CalendarEvent) -> String {
         lines.push(format!("DESCRIPTION:{desc}"));
     }
     if let Some(ref rrule) = event.recurrence {
-        lines.push(format!("RRULE:{rrule}"));
+        lines.push(format!("RRULE:{}", rrule.to_rrule()));
     }
     for attendee in &event.attendees {
-        lines.push(format!("ATTENDEE:mailto:{attendee}"));
+        lines.push(format!("ATTENDEE:mailto:{}", attendee.email));
     }
 
     lines.push("END:VEVENT".to_string());
@@ -525,9 +525,13 @@ mod tests {
             id: uuid::Uuid::new_v4(),
             title: "Team Sync".into(),
             start: Utc.with_ymd_and_hms(2026, 3, 21, 10, 0, 0).unwrap(),
-            end: Utc.with_ymd_and_hms(2026, 3, 21, 11, 0, 0).unwrap(),
-            recurrence: Some("FREQ=WEEKLY;BYDAY=MO".into()),
-            attendees: vec!["alice@example.com".into()],
+            end: Some(Utc.with_ymd_and_hms(2026, 3, 21, 11, 0, 0).unwrap()),
+            all_day: None,
+            recurrence: life_engine_types::events::Recurrence::from_rrule("FREQ=WEEKLY;BYDAY=MO"),
+            attendees: vec![life_engine_types::events::Attendee::from_email("alice@example.com")],
+            reminders: vec![],
+            timezone: None,
+            status: None,
             location: Some("Room A".into()),
             description: Some("Weekly sync".into()),
             source: "caldav".into(),

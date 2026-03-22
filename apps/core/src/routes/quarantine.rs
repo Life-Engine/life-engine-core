@@ -205,7 +205,7 @@ mod tests {
                 "title": { "type": "string" },
                 "status": {
                     "type": "string",
-                    "enum": ["pending", "active", "completed", "cancelled"]
+                    "enum": ["pending", "in_progress", "completed", "cancelled"]
                 }
             },
             "additionalProperties": false

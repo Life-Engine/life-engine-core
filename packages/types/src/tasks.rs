@@ -6,23 +6,34 @@ use uuid::Uuid;
 
 /// Task priority levels.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 pub enum TaskPriority {
-    None,
     Low,
     Medium,
     High,
-    Critical,
+    Urgent,
+}
+
+impl Default for TaskPriority {
+    fn default() -> Self {
+        Self::Medium
+    }
 }
 
 /// Task status values.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 pub enum TaskStatus {
     Pending,
-    Active,
+    InProgress,
     Completed,
     Cancelled,
+}
+
+impl Default for TaskStatus {
+    fn default() -> Self {
+        Self::Pending
+    }
 }
 
 /// A task in the Life Engine canonical data model.
@@ -32,12 +43,20 @@ pub struct Task {
     pub title: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    #[serde(default)]
     pub status: TaskStatus,
+    #[serde(default)]
     pub priority: TaskPriority,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub due_date: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub completed_at: Option<DateTime<Utc>>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub labels: Vec<String>,
+    pub tags: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub assignee: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<Uuid>,
     pub source: String,
     pub source_id: String,
     /// Plugin-specific extension data, namespaced by plugin ID (reverse-domain format).

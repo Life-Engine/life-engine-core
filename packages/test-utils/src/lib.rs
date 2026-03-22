@@ -13,8 +13,8 @@ pub use life_engine_types;
 
 use chrono::Utc;
 use life_engine_types::{
-    CalendarEvent, Contact, ContactName, Credential, CredentialType, Email, EmailAddress,
-    FileMetadata, Note, PhoneNumber, PostalAddress, Task, TaskPriority, TaskStatus,
+    Attendee, CalendarEvent, Contact, ContactName, Credential, CredentialType, Email, EmailAddress,
+    FileMetadata, Note, PhoneNumber, PostalAddress, Recurrence, Task, TaskPriority, TaskStatus,
 };
 use uuid::Uuid;
 
@@ -28,7 +28,10 @@ pub fn create_test_task() -> Task {
         status: TaskStatus::Pending,
         priority: TaskPriority::Medium,
         due_date: Some(now + chrono::Duration::days(3)),
-        labels: vec!["review".into(), "auth".into()],
+        completed_at: None,
+        tags: vec!["review".into(), "auth".into()],
+        assignee: None,
+        parent_id: None,
         source: "test".into(),
         source_id: "test-task-001".into(),
         extensions: None,
@@ -44,9 +47,16 @@ pub fn create_test_event() -> CalendarEvent {
         id: Uuid::new_v4(),
         title: "Weekly standup".into(),
         start: now + chrono::Duration::hours(1),
-        end: now + chrono::Duration::hours(2),
-        recurrence: Some("FREQ=WEEKLY;BYDAY=MO".into()),
-        attendees: vec!["alice@example.com".into(), "bob@example.com".into()],
+        end: Some(now + chrono::Duration::hours(2)),
+        all_day: None,
+        recurrence: Recurrence::from_rrule("FREQ=WEEKLY;BYDAY=MO"),
+        attendees: vec![
+            Attendee::from_email("alice@example.com"),
+            Attendee::from_email("bob@example.com"),
+        ],
+        reminders: vec![],
+        timezone: None,
+        status: None,
         location: Some("Conference Room A".into()),
         description: Some("Weekly team sync-up".into()),
         source: "test".into(),
@@ -189,7 +199,7 @@ mod tests {
     fn test_create_test_event() {
         let event = create_test_event();
         assert!(!event.id.is_nil());
-        assert!(event.start < event.end);
+        assert!(event.start < event.end.unwrap());
         assert_eq!(event.attendees.len(), 2);
         let json = serde_json::to_string(&event);
         assert!(json.is_ok(), "CalendarEvent should serialize to JSON");

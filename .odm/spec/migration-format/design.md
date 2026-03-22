@@ -1,6 +1,6 @@
 <!--
 domain: core
-updated: 2026-03-22
+updated: 2026-03-23
 spec-brief: ./brief.md
 -->
 
@@ -10,8 +10,8 @@ spec-brief: ./brief.md
 
 Related documents:
 
-- [[Spec — Data Layer]] — Schema Evolution section
-- [[Spec — Canonical Data Models]] — Schema Versioning section
+- Data Layer spec — Schema Evolution section
+- Canonical Data Models spec — Schema Versioning section
 
 ---
 
@@ -21,37 +21,34 @@ Data schemas evolve over time. When a field is renamed, a type changes, or a new
 
 Two tiers of migration exist:
 
-- **Canonical schema migrations** — Platform-owned. Applied when the SDK ships a new major version that changes a canonical collection schema (tasks, events, contacts, emails, files, notes, credentials). These migrations are bundled with the SDK release and run automatically on Core startup.
-- **Plugin schema migrations** — Plugin-owned. Applied when a plugin updates its version and declares migration transforms in `plugin.json`. These run when Core detects that a plugin's installed version differs from the version recorded for its data.
+- **Canonical schema migrations** — Platform-owned. Applied when a new version changes a canonical collection schema (tasks, events, contacts, emails, files, notes, credentials). These migrations are bundled with `packages/types` and run automatically on Core startup.
+- **Plugin schema migrations** — Plugin-owned. Applied when a plugin updates its version and declares migration transforms in `manifest.toml`. These run when Core detects that a plugin's installed version differs from the version recorded for its data.
 
-Both tiers share the same transform script contract and execution semantics.
+Both tiers share the same WASM transform contract and execution semantics.
 
 ---
 
 ## Migration Manifest Structure
 
-Plugin authors declare migrations in their `plugin.json` manifest under a `migrations` array:
+Plugin authors declare migrations in their `manifest.toml` under a `[[migrations]]` array:
 
-```json
-{
-  "id": "com.example.my-plugin",
-  "version": "2.0.0",
-  "migrations": [
-    {
-      "from": "1.x",
-      "to": "2.0.0",
-      "transform": "./migrations/v2.js",
-      "description": "Rename 'dueDate' field to 'due_date', add 'priority' with default 'none'"
-    }
-  ]
-}
+```toml
+[plugin]
+id = "com.example.my-plugin"
+version = "2.0.0"
+
+[[migrations]]
+from = "1.x"
+to = "2.0.0"
+transform = "migrate_v2"
+description = "Rename 'dueDate' field to 'due_date', add 'priority' with default 'none'"
 ```
 
 Each migration entry has these fields:
 
 - **from** (string, required) — Semver range matching the source version. Supports `x` wildcards for minor/patch (e.g., `1.x`, `1.0.x`). Records whose schema version matches this range are eligible for this migration.
 - **to** (string, required) — The exact semver version that records will have after the transform runs.
-- **transform** (string, required) — Relative path from the plugin root to the migration script file.
+- **transform** (string, required) — The name of the exported WASM function in `plugin.wasm` that performs the migration.
 - **description** (string, optional) — Human-readable summary of what the migration does. Logged in the migration log.
 
 ### Version Matching Rules
@@ -63,69 +60,62 @@ Each migration entry has these fields:
 
 ---
 
-## Transform Script API
+## WASM Transform API
 
-Migration scripts implement a pure transformation function that receives one record and returns the transformed record.
+Migration transforms are exported functions in the plugin's WASM module. They run inside the WASM sandbox with no access to host functions — no storage, no network, no filesystem. This ensures migrations are pure data transformations.
 
-### App Plugins (JavaScript)
+### Rust Implementation
 
-The script must export a `migrate` function:
+The transform function has this signature (compiled to WASM):
 
-```javascript
-export function migrate(record) {
-  return {
-    ...record,
-    due_date: record.dueDate,
-    priority: record.priority ?? "none",
-  };
+```rust
+#[no_mangle]
+pub fn migrate_v2(record: serde_json::Value) -> Result<serde_json::Value, String> {
+    let mut data = record;
+    // Rename field
+    if let Some(due_date) = data.get("dueDate").cloned() {
+        data.as_object_mut().unwrap().insert("due_date".into(), due_date);
+        data.as_object_mut().unwrap().remove("dueDate");
+    }
+    // Add default
+    if data.get("priority").is_none() {
+        data.as_object_mut().unwrap().insert("priority".into(), "none".into());
+    }
+    Ok(data)
 }
 ```
 
 Contract:
 
-- The function receives a deep clone of the record's JSON data — not the original
-- The function must return the transformed record object
-- The function must be pure: no side effects, no network access, no storage access, no `Date.now()` or other non-deterministic calls
-- If the function throws, the migration is aborted for that individual record (the record is quarantined)
-- The function runs synchronously — no `async`/`await`
-
-### Core Plugins (Rust)
-
-The transform function has the equivalent signature:
-
-```rust
-pub fn migrate(record: serde_json::Value) -> Result<serde_json::Value, String> {
-    // Transform and return
-}
-```
-
+- The function receives a serialized JSON record via the WASM ABI
 - Returns `Ok(transformed)` on success
 - Returns `Err(message)` to quarantine the record with the given error message
-- Must be pure: no I/O, no global state mutation
+- Must be pure: no I/O, no global state mutation, no host function calls
+- The function is called once per record — it transforms a single record at a time
 
 ---
 
 ## Canonical Schema Migrations
 
-Canonical collection schemas are platform-owned and evolve with SDK releases. Their migrations differ from plugin migrations in how they are declared:
+Canonical collection schemas are platform-owned and evolve with releases. Their migrations differ from plugin migrations in how they are declared:
 
-- Migration scripts are bundled with the SDK, not declared in plugin manifests
+- Migration transforms are compiled WASM modules bundled with `packages/types`
 - Located at the well-known path: `packages/types/migrations/`
-- Named by target version: `v{major}.{minor}.js` (for App-side) or `v{major}.{minor}.rs` (for Core-side)
-- Applied automatically on Core startup when the `version` column in `plugin_data` for any canonical collection record does not match the current SDK schema version
-- Migration metadata is hard-coded in the SDK release, not read from a manifest
+- Named by target version: `v{major}_{minor}.wasm` under the collection subdirectory
+- Applied automatically on Core startup when the `version` column in `plugin_data` for any canonical collection record does not match the current schema version
+- Migration metadata is defined in code within `packages/types`, not read from a manifest
 
 Example file layout:
 
-```
+```text
 packages/types/migrations/
-├── tasks/
-│   └── v2.0.js
-├── events/
-│   └── v2.0.js
-└── contacts/
-    ├── v2.0.js
-    └── v3.0.js
+  tasks/
+    v2_0.wasm
+  events/
+    v2_0.wasm
+  contacts/
+    v2_0.wasm
+    v3_0.wasm
 ```
 
 ---
@@ -150,7 +140,7 @@ Individual records that fail migration are quarantined rather than blocking the 
 
 ### Migration Log
 
-Every migration run is recorded in a `migration_log` table:
+Every migration run is recorded in a `migration_log` table with these columns:
 
 - **id** — Auto-increment primary key
 - **plugin_id** — The plugin that owns the migrated collection
@@ -165,6 +155,10 @@ Every migration run is recorded in a `migration_log` table:
 ### Version Column Update
 
 After a record is successfully transformed, its `version` column in the `plugin_data` table is updated to the migration's `to` version. This ensures the record is not re-migrated on subsequent startups.
+
+### Schema Validation
+
+After a transform produces output, the system validates it against the target schema version using the `StorageBackend` trait's validation logic. Records that fail schema validation are quarantined with a validation error message.
 
 ---
 
@@ -181,23 +175,10 @@ Before any migration begins, Core creates a SQLite backup of the database file a
 Core validates migration declarations before executing them:
 
 - `from` version range must be strictly less than `to` version
-- Transform script path must exist relative to the plugin root
-- Transform script file must be under 1 MB
+- Transform export name must exist in the plugin's `plugin.wasm` module
+- Plugin WASM files exceeding 10 MB generate a warning but are still loaded
 - Migration chain must be contiguous — no version gaps between consecutive entries (the `to` of one entry must match the `from` of the next in the chain)
 - `from` ranges must not overlap between entries — each source version must map to exactly one migration path
 - The final `to` version in the chain must match the plugin's current `version` field in the manifest
 
 If any validation rule fails, the plugin update is rejected and the previous version remains active.
-
----
-
-## Acceptance Criteria
-
-- Migration manifest structure is formally defined and enforced by JSON Schema (`migration.schema.json`)
-- Plugin manifest schema includes the optional `migrations` array field
-- Transform script API contract is documented for both JS and Rust
-- Canonical migration path (`packages/types/migrations/`) is defined
-- Execution semantics specify transaction boundaries, ordering, quarantine, and logging
-- Rollback policy is documented (forward-only with pre-migration backup)
-- All validation rules are enumerated and testable
-- The specification is consistent with the Data Layer spec's Schema Evolution section and the CDM spec's Schema Versioning policy

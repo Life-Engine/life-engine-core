@@ -1,7 +1,9 @@
 # ADR-011: Design for WASM plugin isolation now, implement in Phase 4
 
 ## Status
-Accepted
+Superseded
+
+**Superseded by:** Architecture redesign (2026-03-23). WASM isolation is now implemented from the start. Plugins are compiled to WASM and loaded at runtime via Extism. There is no phased rollout — all plugins (first-party and third-party) run in WASM sandboxes from day one. See `ARCHITECTURE.md` and `Design/Core/Plugins.md` for the current plugin model.
 
 ## Context
 

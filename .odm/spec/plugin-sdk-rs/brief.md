@@ -2,38 +2,43 @@
 domain: sdk
 status: draft
 tier: 1
-updated: 2026-03-22
+updated: 2026-03-23
 -->
 
 # Plugin SDK RS Spec
 
 ## Overview
 
-This spec defines the Rust SDK for Core plugin authors. The SDK provides the trait definitions, types, and helpers that plugin authors need to implement a Core plugin, compile it to WASM, and load it into the Core runtime.
+This spec defines the Rust SDK (`life-engine-plugin-sdk`) for Life Engine plugin authors. The SDK is the single dependency a plugin author adds to their `Cargo.toml`. It re-exports everything from `packages/types` (CDM types, `PipelineMessage`, envelopes) and `packages/traits` (`Plugin` trait, `EngineError` trait), and provides additional DX features: a `StorageContext` query builder, helper macros for registration, and test utilities.
+
+Plugin authors never directly depend on `packages/types` or `packages/traits`. Internal module developers (building storage backends, transports) depend on `types` + `traits` directly.
 
 ## Goals
 
-- Ergonomic authoring — Plugin authors implement a single trait and compile to WASM with no boilerplate.
-- Type safety — Canonical collection types ship as Rust structs with serde derives.
-- Isolation — The SDK has no dependency on Core internals; plugins depend only on the public crate.
-- Versioning — Major-version compatibility windows let authors upgrade at their own pace.
+- **Single dependency** — Plugin authors add one crate and get everything they need.
+- **Type safety** — CDM types, `PipelineMessage`, and `EngineError` are fully typed Rust structs with serde derives.
+- **Isolation** — The SDK has no dependency on Core internals. Plugins depend only on the public SDK crate.
+- **Ergonomic authoring** — Implement the `Plugin` trait, declare actions, compile to WASM. No boilerplate.
+- **Testability** — Mock `StorageContext` and `PipelineMessage` builders ship in the SDK for unit testing.
+- **Versioning** — Major-version compatibility windows let authors upgrade at their own pace.
 
 ## User Stories
 
-- As a plugin author, I want to implement the `CorePlugin` trait so that Core can load and manage my plugin.
-- As a plugin author, I want a builder pattern so that I can configure my plugin without repetitive code.
-- As a plugin author, I want typed canonical structs so that I can read and write platform data safely.
-- As a plugin author, I want to declare capabilities so that Core grants only the permissions I need.
+- As a plugin author, I want to implement the `Plugin` trait so that Core can load and manage my plugin.
+- As a plugin author, I want typed CDM structs and `PipelineMessage` envelopes so that I can read and write platform data safely.
+- As a plugin author, I want a `StorageContext` query builder so that I can read and write collections without importing database crates.
+- As a plugin author, I want to declare actions so that workflows can invoke my plugin's functionality.
 - As a plugin author, I want to compile to `wasm32-wasi` so that my plugin runs in the Core sandbox.
+- As a plugin author, I want mock `StorageContext` and `PipelineMessage` builders so that I can unit-test my plugin without a running Core.
+- As a plugin author, I want helper macros so that plugin registration requires minimal boilerplate.
 
 ## Functional Requirements
 
-- The SDK must expose a `CorePlugin` trait with lifecycle, route, and event methods.
-- The SDK must provide a `PluginContext` struct granting scoped access to storage, config, events, and logging.
-- The SDK must define a `Capability` enum covering all permission types.
-- The SDK must support route registration under the plugin namespace.
-- The SDK must include serde-ready Rust structs for all 7 canonical collection types.
-- The SDK must provide a builder pattern for constructing plugin instances.
+- The SDK must re-export all public types from `packages/types` (CDM types, `PipelineMessage`, `TypedPayload`, `MessageMetadata`).
+- The SDK must re-export the `Plugin` trait and `EngineError` trait from `packages/traits`.
+- The SDK must provide a `StorageContext` with a fluent query builder API.
+- The SDK must provide helper macros for plugin registration boilerplate.
+- The SDK must provide test utilities: mock `StorageContext` and mock `PipelineMessage` builders.
 - The SDK must compile to the `wasm32-wasi` target.
 - The SDK must be versioned independently from Core with additive-only minor releases.
 

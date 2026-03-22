@@ -1,6 +1,6 @@
 <!--
 domain: canonical-data-models
-updated: 2026-03-22
+updated: 2026-03-23
 spec-brief: ./brief.md
 -->
 
@@ -10,6 +10,7 @@ spec-brief: ./brief.md
 
 - [[#Purpose]]
 - [[#Principle]]
+- [[#PipelineMessage Envelope]]
 - [[#Canonical Collections]]
   - [[#Events]]
   - [[#Tasks]]
@@ -26,15 +27,64 @@ spec-brief: ./brief.md
 
 ## Purpose
 
-This spec defines the 7 canonical collection schemas that form the shared data language of the Life Engine ecosystem. Every connector and plugin that works with these data types uses the same field names, types, and semantics — enabling interoperability without per-integration mapping.
+This spec defines the 7 canonical collection schemas that form the shared data language of the Life Engine ecosystem, and the `PipelineMessage` envelope that carries data through workflow pipelines. Every connector and plugin that works with these data types uses the same field names, types, and semantics — enabling interoperability without per-integration mapping.
 
 Reference: [[03 - Projects/Life Engine/Design/Core/Data]]
 
 ## Principle
 
-Canonical collections are platform-owned and defined in both SDKs (Rust structs in `plugin-sdk-rs`, TypeScript interfaces in `plugin-sdk-js`). They are shared across all plugins and connectors.
+Canonical collections are platform-owned and defined in `packages/types` as Rust structs. The plugin SDK (`packages/plugin-sdk`) re-exports all types so plugin authors have a single dependency.
 
 Using canonical types is the path of least resistance for plugin authors. A plugin that reads or writes canonical collections needs no schema definition — the types are already available as imports. Plugins only define custom schemas when they need private collections with non-canonical shapes.
+
+Every workflow step receives a `PipelineMessage` and returns a `PipelineMessage`. This uniform contract means plugins compose without custom adapters — a step that produces an Events payload can feed directly into any step that consumes Events.
+
+## PipelineMessage Envelope
+
+The `PipelineMessage` is the standard envelope for all data flowing through workflows. It separates metadata (who, when, why) from payload (what).
+
+```rust
+struct PipelineMessage {
+    metadata: MessageMetadata,
+    payload: TypedPayload,
+}
+```
+
+### MessageMetadata
+
+Carries context about the message's origin, identity, and traceability:
+
+- **correlation_id** (string, required) — Unique identifier linking all steps in a single pipeline execution. Used for tracing and log correlation.
+- **source** (string, required) — Identifier of the plugin, transport, or system component that produced this message.
+- **timestamp** (string, required) — ISO 8601 datetime when the message was created.
+- **auth_context** (object, optional) — Authentication context for the request. Contains user identity, granted scopes, and session metadata. Omitted for unauthenticated system-internal flows (e.g., cron-triggered pipelines).
+
+### TypedPayload
+
+An enum that distinguishes canonical data from plugin-defined custom data:
+
+- **Cdm(CdmType)** — One of the 7 canonical collection types. Schema is defined by the SDK.
+- **Custom(SchemaValidated\<Value\>)** — Plugin-defined data validated against a JSON Schema declared in the plugin's `manifest.toml`. The `SchemaValidated` wrapper guarantees the value has passed validation before entering the pipeline.
+
+This design means:
+
+- Plugins that work with canonical data get compile-time type safety via `CdmType` variants
+- Plugins that need custom shapes declare a JSON Schema in their manifest and use `Custom`
+- The workflow engine can validate payloads at step boundaries without knowing the plugin's internal logic
+
+### CdmType
+
+A Rust enum with one variant per canonical collection:
+
+- `Event(Event)`
+- `Task(Task)`
+- `Contact(Contact)`
+- `Note(Note)`
+- `Email(Email)`
+- `File(FileMeta)`
+- `Credential(Credential)`
+
+All types and the `PipelineMessage` envelope live in `packages/types`. The plugin SDK re-exports everything.
 
 ## Canonical Collections
 
@@ -210,7 +260,7 @@ Rules for extensions:
 
 ## Schema Versioning
 
-Canonical schemas follow additive-only versioning within a major SDK release.
+Canonical schemas follow additive-only versioning coupled to the SDK semver:
 
 - Adding new optional fields is a non-breaking change and can happen in any minor SDK release
 - Removing fields or changing field types is a breaking change and requires a major SDK version bump
@@ -219,15 +269,15 @@ Canonical schemas follow additive-only versioning within a major SDK release.
 
 ## JSON Schema Files
 
-JSON Schema definitions for all 7 canonical collections are published in the monorepo at `.odm/docs/schemas/`. Each collection has its own schema file:
+JSON Schema definitions for all 7 canonical collections are published in the monorepo at `.odm/doc/schemas/`. Each collection has its own schema file:
 
-- `.odm/docs/schemas/events.schema.json`
-- `.odm/docs/schemas/tasks.schema.json`
-- `.odm/docs/schemas/contacts.schema.json`
-- `.odm/docs/schemas/notes.schema.json`
-- `.odm/docs/schemas/emails.schema.json`
-- `.odm/docs/schemas/files.schema.json`
-- `.odm/docs/schemas/credentials.schema.json`
+- `.odm/doc/schemas/events.schema.json`
+- `.odm/doc/schemas/tasks.schema.json`
+- `.odm/doc/schemas/contacts.schema.json`
+- `.odm/doc/schemas/notes.schema.json`
+- `.odm/doc/schemas/emails.schema.json`
+- `.odm/doc/schemas/files.schema.json`
+- `.odm/doc/schemas/credentials.schema.json`
 
 These schemas are used for validation in tests, documentation generation, and can be consumed by third-party tools.
 
@@ -236,14 +286,15 @@ These schemas are used for validation in tests, documentation generation, and ca
 Plugins that need data structures beyond the 7 canonical types can define private collections. Private collections are namespaced to the plugin and follow these conventions:
 
 - The collection name is prefixed with the plugin ID (e.g. `com.life-engine.todos.checklists`)
-- The plugin provides a JSON Schema definition in its manifest under the `collections` field
+- The plugin provides a JSON Schema definition in its `manifest.toml` under the `collections` field
 - Core validates records against the provided schema on write
 - Other plugins cannot access a plugin's private collections unless the owning plugin exposes them through its API
 
 ## Acceptance Criteria
 
-1. All 7 canonical schemas have corresponding Rust structs in `plugin-sdk-rs` with `serde` derives
-2. All 7 canonical schemas have corresponding TypeScript interfaces in `plugin-sdk-js`
-3. JSON Schema files in `.odm/docs/schemas/` validate successfully against test fixtures for each collection
-4. Extension namespaces do not conflict across plugins — Core rejects writes to another plugin's namespace
-5. Schema changes within a major version are verified as additive-only in CI
+1. All 7 canonical schemas have corresponding Rust structs in `packages/types` with `serde` derives
+2. `PipelineMessage`, `MessageMetadata`, and `TypedPayload` are defined in `packages/types`
+3. The plugin SDK (`packages/plugin-sdk`) re-exports all canonical types and the `PipelineMessage` envelope
+4. JSON Schema files in `.odm/doc/schemas/` validate successfully against test fixtures for each collection
+5. Extension namespaces do not conflict across plugins — Core rejects writes to another plugin's namespace
+6. Schema changes within a major version are verified as additive-only

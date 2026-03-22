@@ -1,6 +1,6 @@
 <!--
 domain: deployment-modes
-updated: 2026-03-22
+updated: 2026-03-23
 spec-brief: ./brief.md
 -->
 
@@ -15,9 +15,11 @@ This plan implements the four deployment modes for Core. Work is structured from
 ## Steering Document Compliance
 
 - Localhost-only default follows Defence in Depth — network exposure is opt-in with mandatory TLS
-- Configuration via YAML + env vars follows Explicit Over Implicit — no hidden defaults
+- Configuration via TOML + env vars follows Explicit Over Implicit — no hidden defaults
 - Same binary across all modes follows Single Source of Truth
 - Bundled mode as the default follows The Pit of Success — the easiest path is also the most secure
+- Deployment includes plugins/ directory (WASM) and workflows/ directory (YAML)
+- Transport sections in config.toml determine which transports are active
 
 ## Atomic Task Requirements
 
@@ -30,39 +32,40 @@ This plan implements the four deployment modes for Core. Work is structured from
 ---
 
 ## 1.1 — Docker Image
-
 > spec: ./brief.md
 
 - [ ] Create multi-stage Dockerfile for Core based on Alpine Linux
   <!-- file: deploy/Dockerfile -->
-  <!-- purpose: Build Core binary in a Rust builder stage and produce a minimal Alpine-based image under 50 MB -->
-  <!-- requirements: 3.1 -->
+  <!-- purpose: Build Core binary in a Rust builder stage and produce a minimal Alpine-based image under 50 MB; include /plugins and /workflows directories -->
+  <!-- requirements: 3.1, 3.6 -->
   <!-- leverage: existing deploy/ directory -->
 
-- [ ] Update docker-compose.yml with volume mounts and environment configuration
+- [ ] Create docker-compose.yml with volume mounts and environment configuration
   <!-- file: deploy/docker-compose.yml -->
-  <!-- purpose: Configure Core + Pocket ID services with persistent volumes and environment-based config -->
+  <!-- purpose: Configure Core service with persistent volumes for data, plugins, and workflows; use environment-based TOML config -->
   <!-- requirements: 3.2, 3.3, 3.4, 3.5 -->
   <!-- leverage: existing deploy/docker-compose.yml -->
 
-## 1.2 — Standalone Binary Configuration
+---
 
+## 1.2 — Standalone Binary Configuration
 > spec: ./brief.md
 
-- [ ] Implement YAML config file loading with environment variable overrides
+- [ ] Implement TOML config file loading with environment variable overrides
   <!-- file: apps/core/src/config.rs -->
-  <!-- purpose: Load core.yaml from platform config directory, merge with LE_* environment variables -->
-  <!-- requirements: 2.1, 6.1, 6.2 -->
+  <!-- purpose: Load config.toml from platform config directory, merge with LE_* environment variables; parse transport sections to determine active transports -->
+  <!-- requirements: 2.1, 2.5, 6.1, 6.2, 7.1, 7.2, 7.3 -->
   <!-- leverage: existing apps/core/src/config.rs -->
 
-- [ ] Add startup logging for deployment mode, bind address, and TLS status
+- [ ] Add startup logging for deployment mode, bind address, transports, and TLS status
   <!-- file: apps/core/src/main.rs -->
-  <!-- purpose: Log active configuration on startup for operational visibility -->
+  <!-- purpose: Log active configuration on startup including which transports are enabled and plugin directory path -->
   <!-- requirements: 6.3 -->
   <!-- leverage: existing apps/core/src/main.rs -->
 
-## 2.1 — Service Management
+---
 
+## 2.1 — Service Management
 > spec: ./brief.md
 
 - [ ] Create systemd service unit for Linux
@@ -83,8 +86,9 @@ This plan implements the four deployment modes for Core. Work is structured from
   <!-- requirements: 2.2, 2.3, 2.4 -->
   <!-- leverage: existing main.rs CLI argument parsing -->
 
-## 2.2 — Reverse Proxy Configuration
+---
 
+## 2.2 — Reverse Proxy Configuration
 > spec: ./brief.md
 
 - [ ] Create Caddy reverse proxy configuration for internet-facing deployment
@@ -94,30 +98,32 @@ This plan implements the four deployment modes for Core. Work is structured from
   <!-- leverage: existing deploy/caddy/ directory -->
 
 - [ ] Add LE_BEHIND_PROXY flag support to Core startup
-  <!-- file: apps/core/src/config.rs, apps/core/src/tls.rs -->
+  <!-- file: apps/core/src/config.rs -->
   <!-- purpose: Skip TLS requirement when behind a reverse proxy, trust X-Forwarded-For headers -->
   <!-- requirements: 4.4, 5.2 -->
-  <!-- leverage: existing apps/core/src/tls.rs -->
+  <!-- leverage: existing apps/core/src/config.rs -->
 
-## 2.3 — ARM64 Build and Verification
+---
+
+## 2.3 — ARM64 Build Verification
 > spec: ./brief.md
 
 - [ ] Verify ARM64 binary builds and runs on Raspberry Pi 4
-  <!-- file: .github/workflows/release.yml -->
-  <!-- purpose: Confirm release pipeline produces aarch64-unknown-linux-gnu binary; verify it starts and responds to API requests with 128 MB available RAM -->
+  <!-- file: Cargo.toml -->
+  <!-- purpose: Confirm build produces aarch64-unknown-linux-gnu binary; verify it starts and responds to requests with 128 MB available RAM -->
   <!-- requirements: 4.1, 4.2 -->
-  <!-- leverage: existing release workflow from ci-and-cd spec -->
+  <!-- leverage: existing Cargo workspace configuration -->
 
 ---
 
 ## 3.1 — Tauri Sidecar Integration
-
 > spec: ./brief.md
 
 - [ ] Configure Tauri sidecar to spawn and manage Core process lifecycle
-  <!-- file: apps/app/src-tauri/tauri.conf.json, apps/app/src-tauri/src/main.rs -->
-  <!-- purpose: Spawn Core as sidecar on App launch, graceful shutdown on close with 5s timeout -->
-  <!-- requirements: 1.1, 1.2, 1.4 -->
+  <!-- file: apps/app/src-tauri/tauri.conf.json -->
+  <!-- file: apps/app/src-tauri/src/main.rs -->
+  <!-- purpose: Spawn Core as sidecar on App launch, graceful shutdown on close with 5s timeout; bundle plugins directory -->
+  <!-- requirements: 1.1, 1.2, 1.4, 1.6 -->
   <!-- leverage: existing apps/app/ Tauri configuration -->
 
 - [ ] Configure platform-standard data directory for bundled mode
@@ -126,12 +132,14 @@ This plan implements the four deployment modes for Core. Work is structured from
   <!-- requirements: 1.3, 1.5 -->
   <!-- leverage: existing config.rs -->
 
-## 3.2 — Network Security Enforcement
+---
 
+## 3.2 — Network Security Enforcement
 > spec: ./brief.md
 
 - [ ] Implement non-localhost startup validation (TLS + auth required)
-  <!-- file: apps/core/src/main.rs, apps/core/src/config.rs -->
-  <!-- purpose: Refuse to start on 0.0.0.0 without TLS config or LE_BEHIND_PROXY; enable rate limiting -->
+  <!-- file: apps/core/src/main.rs -->
+  <!-- file: apps/core/src/config.rs -->
+  <!-- purpose: Refuse to start on 0.0.0.0 without TLS config or LE_BEHIND_PROXY; enable rate limiting; require auth on all transport endpoints -->
   <!-- requirements: 5.1, 5.2, 5.3, 5.4, 5.5 -->
-  <!-- leverage: existing apps/core/src/tls.rs and apps/core/src/rate_limit.rs -->
+  <!-- leverage: packages/auth for auth enforcement -->

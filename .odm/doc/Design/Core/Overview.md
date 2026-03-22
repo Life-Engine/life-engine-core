@@ -1,80 +1,101 @@
 ---
-title: "Engine — Overview"
-tags: [life-engine, engine, architecture, rust]
+title: "Core — Overview"
+tags: [life-engine, core, architecture, rust]
 created: 2026-03-14
+updated: 2026-03-23
 ---
 
 # Core Overview
 
-Core is a self-hosted Rust backend that aggregates personal data from external services, stores it locally, and exposes it through a REST API. It contains no business logic — all features are provided by plugins.
+Core is a self-hosted Rust backend that aggregates personal data from external services, stores it locally with encryption, and exposes it through configurable transports. Core contains no business logic — it is a thin orchestrator that wires together independent modules.
+
+All features are provided by plugins (WASM modules loaded at runtime). Data flows through declarative workflows that chain plugin steps into pipelines.
 
 ## Design Principles
 
-Core's architecture is governed by the project-wide [[03 - Projects/Life Engine/Design/Principles|Design Principles]]. The most prominent in Core:
+Core's architecture is governed by the project-wide Design Principles. The most prominent in Core:
 
-- **Separation of Concerns** — Core contains no business logic. It is an empty orchestrator: plugins provide all features, the workflow engine chains them, and the data layer stores their output.
-- **Open/Closed Principle** — Adding a feature means adding a plugin. Core's binary does not change when a connector, processor, or data model is added.
-- **Defence in Depth** — Every layer is independently secured: TLS on transport, auth middleware on every request, SQLCipher encryption at rest, individual credential encryption, and WASM isolation for plugins.
-- **Principle of Least Privilege** — Plugins get no capabilities unless explicitly granted. All scoping is enforced at runtime by the host, not by convention.
-- **Fail-Fast with Defined States** — Config is validated on startup, schema is validated before storage, and workflow compatibility is validated at creation time. The system never starts or persists data in an ambiguous state.
-
-## Tech Stack
-
-- **Language** — Rust
-- **HTTP** — `axum`
-- **Async runtime** — `tokio`
-- **Storage** — `rusqlite` (SQLite)
-- **Plugin isolation** — Extism (WASM)
-- **Auth** — Pocket ID sidecar (OIDC)
-- **TLS** — `rustls`
-- **Config** — YAML + environment variables
+- **Separation of Concerns** — Core owns orchestration only. Transports handle protocols, the workflow engine chains plugins, plugins provide logic, the data layer persists.
+- **Open/Closed Principle** — Adding a feature means adding a plugin or a workflow. Core's binary does not change.
+- **Defence in Depth** — Every layer is independently secured: TLS on transport, auth middleware on every request, SQLCipher encryption at rest, WASM isolation for plugins.
+- **Principle of Least Privilege** — Plugins get no capabilities unless explicitly granted. All scoping is enforced at runtime by the WASM host.
+- **Fail-Fast with Defined States** — Config is validated on startup, schemas are validated at pipeline boundaries, and workflow compatibility is checked at creation time.
 
 ## Architecture
+
+Four layers, each an independent crate:
 
 ```
   Client Request (App, web, mobile, CLI)
          |
          v
   +---------------------+
-  |    API Layer         |  <- REST/JSON (axum), auth via Pocket ID / API key
-  |    Auth + Validate   |
+  |    Transport Layer   |  <- REST, GraphQL, CalDAV, CardDAV, Webhook
+  |    Auth + Validate   |     (configurable — activate via config)
   +---------+-----------+
-            |  validated input
+            |  PipelineMessage
             v
   +---------------------+
-  |  Workflow Engine     |  <- Chains plugins in sequence
-  |                     |
-  |  Plugin A -> B -> C |  <- WASM-isolated (Extism)
+  |  Workflow Engine     |  <- Declarative YAML pipelines
+  |                      |     Event bus + cron scheduler
+  |  Plugin A -> B -> C  |  <- WASM-isolated (Extism)
   +---------+-----------+
-            |  read/write
+            |  StorageContext
             v
   +---------------------+
-  |    Data Layer        |  <- SQLite (rusqlite), encrypted (SQLCipher)
-  +---------------------+
-
-  +---------------------+
-  |  Background         |  <- Cron-like scheduler (separate from workflows)
-  |  Scheduler          |  <- Connector syncs, token rotation, cleanup
+  |    Data Layer        |  <- StorageBackend trait
+  |                      |     SQLite/SQLCipher (current impl)
   +---------------------+
 ```
 
-- **[[03 - Projects/Life Engine/Design/Core/API|API]]** — Receives requests, authenticates via Pocket ID or API key, validates input
-- **[[03 - Projects/Life Engine/Design/Core/Workflow|Workflow Engine]]** — Chains plugins in sequence to process requests. Workflow definitions are API-managed.
-- **[[03 - Projects/Life Engine/Design/Core/Plugins|Plugins]]** — All features are plugins running in WASM sandboxes. This includes connector plugins that sync data from external services. See [[03 - Projects/Life Engine/Design/Core/Connectors]].
-- **[[03 - Projects/Life Engine/Design/Core/Data|Data]]** — SQLite storage, encryption, schema validation, and isolation per plugin
+- **Transport Layer** — Protocol-specific entry points. Each transport is its own crate. The admin enables transports via config. See Transports.md.
+- **Workflow Engine** — Chains plugin steps into pipelines. Owns the event bus and cron scheduler. Triggered by endpoints, events, or schedules. See Workflow.md.
+- **Plugins** — WASM modules loaded at runtime. Accept and return a standard `PipelineMessage`. See Plugins.md.
+- **Data Layer** — Abstract storage behind a `StorageBackend` trait. Plugins interact via `StorageContext` query builder. See Data.md.
+
+## Tech Stack
+
+- **Language** — Rust (edition 2024)
+- **Async runtime** — tokio
+- **WASM runtime** — Extism
+- **Storage** — SQLite/SQLCipher (via StorageBackend trait)
+- **Auth** — Pocket ID (OIDC)
+- **TLS** — rustls
+- **Config** — TOML (app settings) + YAML (workflow definitions)
+
+## Core Binary
+
+Core is a thin orchestrator. After all modules are extracted, `apps/core/src/` contains three files:
+
+- `main.rs` — Startup wiring
+- `config.rs` — Config loading and validation
+- `shutdown.rs` — Graceful shutdown coordination
+
+```rust
+fn main() {
+    let config = Config::load()?;
+    let storage = storage::init(&config.storage)?;
+    let auth = auth::init(&config.auth)?;
+    let engine = WorkflowEngine::new(storage, auth);
+    engine.load_workflows(&config.workflows)?;
+    engine.load_plugins(&config.plugins)?;
+    let transports = transports::start(&config.transports, &engine)?;
+    shutdown::wait(transports)?;
+}
+```
 
 ## Startup Flow
 
-1. Load config (YAML + env vars)
-2. Validate config — reject insecure settings with clear errors
+1. Load config (TOML + env vars)
+2. Validate config — reject invalid settings with clear errors
 3. Derive database key from master passphrase (Argon2id)
-4. Open encrypted SQLite database (SQLCipher)
-5. Spawn Pocket ID sidecar process
-6. Discover and load plugins from configured paths
-7. Each plugin registers its routes and runs `on_load`
-8. Load workflow definitions from database
-9. Start background scheduler (connector syncs, token rotation, cleanup)
-10. Bind `axum` server to `127.0.0.1:3750`
+4. Initialize storage backend (SQLite/SQLCipher)
+5. Initialize auth module
+6. Create workflow engine (with storage and auth)
+7. Load workflow definitions from `workflows/` directory (YAML)
+8. Discover and load plugins from configured plugins directory (WASM)
+9. Start active transports (as configured)
+10. Wait for shutdown signal
 
 ## Defaults
 

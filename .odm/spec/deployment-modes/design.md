@@ -1,26 +1,23 @@
 <!--
 domain: deployment-modes
-updated: 2026-03-22
+updated: 2026-03-23
 spec-brief: ./brief.md
 -->
 
 # Spec — Deployment Modes
 
-## Contents
-
-- [Purpose](#purpose)
-- [Deployment Modes](#deployment-modes)
-  - [Bundled with App](#bundled-with-app)
-  - [Standalone Binary](#standalone-binary)
-  - [Docker Container](#docker-container)
-  - [Home Server](#home-server)
-- [System Requirements](#system-requirements)
-- [Network Configuration](#network-configuration)
-- [Acceptance Criteria](#acceptance-criteria)
-
 ## Purpose
 
-This spec defines the 4 deployment modes for Core. Each mode targets a different use case and technical comfort level, from zero-configuration desktop usage to self-hosted infrastructure on a home server.
+This spec defines the 4 deployment modes for Core. Each mode targets a different use case and technical comfort level, from zero-configuration desktop usage to self-hosted infrastructure on a home server. Core is a thin binary — all deployment modes share the same binary, `config.toml`, `plugins/` directory (WASM modules), and `workflows/` directory (YAML pipeline definitions).
+
+## Deployment Artifacts
+
+Every deployment, regardless of mode, requires these components:
+
+- **Core binary** — The thin orchestrator (`apps/core/`)
+- **`config.toml`** — Application configuration (storage, auth, transports, plugin activation)
+- **`plugins/` directory** — WASM modules, each in its own subdirectory with `plugin.wasm` and `manifest.toml`
+- **`workflows/` directory** — YAML workflow definitions for pipeline execution
 
 ## Deployment Modes
 
@@ -39,6 +36,8 @@ Characteristics:
 - Data is stored in the App's standard data directory (platform-dependent)
 - Core is not accessible from other devices on the network
 - Updates to Core are bundled with App updates
+- WASM plugins are bundled within the App package
+- Transports are pre-configured (REST on localhost only)
 
 ### Standalone Binary
 
@@ -46,7 +45,7 @@ Core runs as an independent process on any machine. No runtime dependencies — 
 
 This mode is for technical users who want to run Core on a separate machine (e.g. a home server or VPS) and connect to it from the App on another device.
 
-Configuration is handled via a YAML config file and environment variables. The config file location defaults to `~/.config/life-engine/core.yaml` on Linux/macOS and `%APPDATA%\life-engine\core.yaml` on Windows.
+Configuration is handled via `config.toml` and environment variables. The config file location defaults to `~/.config/life-engine/config.toml` on Linux/macOS and `%APPDATA%\life-engine\config.toml` on Windows.
 
 Service management:
 
@@ -55,11 +54,27 @@ Service management:
 
 The standalone binary is the same binary used in all other deployment modes — the sidecar and Docker image both use it internally.
 
+Transport configuration example in `config.toml`:
+
+```toml
+[transports.rest]
+port = 3750
+
+[transports.graphql]
+port = 3751
+
+[plugins]
+path = "./plugins/"
+
+[workflows]
+path = "./workflows/"
+```
+
 ### Docker Container
 
 Core is available as an official Docker image based on Alpine Linux. The target image size is under 50 MB.
 
-A `docker-compose.yml` file is provided that runs Core alongside Pocket ID (the authentication provider):
+A `docker-compose.yml` file is provided:
 
 ```yaml
 services:
@@ -69,24 +84,20 @@ services:
       - "3750:3750"
     volumes:
       - core-data:/data
+      - ./plugins:/plugins
+      - ./workflows:/workflows
     environment:
       - LE_AUTH_PROVIDER=pocket-id
-      - LE_AUTH_URL=http://pocket-id:3751
+      - LE_AUTH_ISSUER=https://auth.local
       - LE_DATA_DIR=/data
-
-  pocket-id:
-    image: ghcr.io/pocket-id/pocket-id:latest
-    ports:
-      - "3751:3751"
-    volumes:
-      - auth-data:/data
+      - LE_PLUGINS_PATH=/plugins
+      - LE_WORKFLOWS_PATH=/workflows
 
 volumes:
   core-data:
-  auth-data:
 ```
 
-Configuration is entirely through environment variables. Volume mounts ensure data persistence across container restarts and upgrades.
+Configuration is entirely through environment variables. Volume mounts ensure data persistence across container restarts and upgrades. WASM plugins and workflow definitions are mounted from the host or baked into the image.
 
 ### Home Server
 
@@ -125,18 +136,24 @@ By default, Core listens on `localhost` only. No ports are exposed to the networ
 
 Exposing Core to the network (required for remote App connections) demands explicit configuration:
 
-- **Bind address** — Change from `127.0.0.1` to `0.0.0.0` in config or environment variable
+- **Bind address** — Change from `127.0.0.1` to `0.0.0.0` in `config.toml` or via `LE_BIND_ADDRESS` environment variable
 - **TLS** — Required for any non-localhost connection. Handled by Core directly (self-signed or provided certificate) or by a reverse proxy (recommended)
-- **Authentication** — Required for any non-localhost connection. Core validates tokens issued by the configured auth provider (Pocket ID)
+- **Authentication** — Required for any non-localhost connection. Core validates tokens via the auth module (Pocket ID OIDC)
 - **Rate limiting** — Enabled by default when listening on non-localhost addresses. Configurable limits per IP and per authenticated user.
 - **Reverse proxy** — Recommended for internet-facing deployments. Handles TLS termination, rate limiting, and provides an additional security layer.
 
 The combination of TLS + authentication + rate limiting is enforced when Core detects a non-localhost bind address. Core refuses to start on a non-localhost address without TLS configured (either directly or via a `LE_BEHIND_PROXY=true` flag indicating a reverse proxy handles TLS).
 
-## Acceptance Criteria
+## Transport Configuration
 
-1. All 4 deployment modes work and Core responds to API requests in each
-2. The Docker image is under 50 MB
-3. The ARM64 binary runs on a Raspberry Pi 4 with 128 MB available RAM
-4. A standalone Core instance accepts connections from a remote App with proper authentication and TLS
-5. The bundled mode starts and stops Core automatically with the App lifecycle — no user intervention required
+Transports are configurable in `config.toml`. Only transports with a declared section are started. All active transports share the same auth module.
+
+```toml
+[transports.rest]
+port = 3750
+
+[transports.caldav]
+port = 5232
+```
+
+If no transport sections are declared, Core starts with REST on the default port as a fallback.

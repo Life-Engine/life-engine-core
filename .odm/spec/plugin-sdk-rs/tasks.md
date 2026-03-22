@@ -1,93 +1,105 @@
 <!--
 domain: sdk
-updated: 2026-03-22
+updated: 2026-03-23
 spec-brief: ./brief.md
 -->
 
 # Plugin SDK RS — Tasks
 
-## 1.1 — CorePlugin Trait Definition
+## 1.1 — Re-export types and traits
+<!-- spec: ./brief.md | depends: none | est: 20m | status: todo -->
 > spec: ./brief.md
 > depends: none
 
-- Define the `CorePlugin` async trait in `crates/plugin-sdk/src/trait.rs`
-- Include all 8 methods: `id`, `display_name`, `version`, `capabilities`, `on_load`, `on_unload`, `routes`, `handle_event`
-- Add `#[async_trait]` derive and `Send + Sync` bounds
-- Export the trait from `crates/plugin-sdk/src/lib.rs`
+- Configure `packages/plugin-sdk/Cargo.toml` to depend on `packages/types` and `packages/traits`
+- In `packages/plugin-sdk/src/lib.rs`, re-export all public types from `packages/types`: CDM structs, `PipelineMessage`, `MessageMetadata`, `TypedPayload`, `CdmType`, `SchemaValidated`
+- Re-export `Plugin` trait and `EngineError` trait from `packages/traits`
+- Re-export `Severity` enum from `packages/traits`
+- Verify that downstream consumers can import everything from the SDK without adding `types` or `traits` as direct dependencies
 
-**Files:** `crates/plugin-sdk/src/trait.rs`, `crates/plugin-sdk/src/lib.rs`
+**Files:** `packages/plugin-sdk/Cargo.toml`, `packages/plugin-sdk/src/lib.rs`
 **Est:** 20 min
 
-## 1.2 — PluginContext Struct
+## 1.2 — StorageContext query builder
+<!-- spec: ./brief.md | depends: 1.1 | est: 40m | status: todo -->
 > spec: ./brief.md
 > depends: 1.1
 
-- Define `PluginContext` in `crates/plugin-sdk/src/context.rs`
-- Include fields for scoped storage handle, config reader, event bus handle, and logger
-- Implement accessor methods that enforce capability scoping
-- Add documentation comments describing each field's purpose
+- Define `StorageContext` struct in `packages/plugin-sdk/src/storage.rs`
+- Implement fluent query builder: `storage.query("collection")` returns a `QueryBuilder`
+- Implement `QueryBuilder` methods: `.where_eq(field, value)`, `.order_by(field)`, `.limit(n)`, `.execute()` returning `Result<Vec<PipelineMessage>>`
+- Implement write methods on `StorageContext`: `.insert(collection, message)`, `.update(collection, id, message)`, `.delete(collection, id)`
+- Define `StorageQuery` and `StorageMutation` value types that the query builder produces
+- Export `StorageContext` and related types from `packages/plugin-sdk/src/lib.rs`
 
-**Files:** `crates/plugin-sdk/src/context.rs`, `crates/plugin-sdk/src/lib.rs`
-**Est:** 25 min
+**Files:** `packages/plugin-sdk/src/storage.rs`, `packages/plugin-sdk/src/lib.rs`
+**Est:** 40 min
 
-## 1.3 — Capability Enum
-> spec: ./brief.md
-> depends: none
-
-- Define the `Capability` enum in `crates/plugin-sdk/src/capability.rs`
-- Include all 9 variants: `StorageRead`, `StorageWrite`, `HttpOutbound`, `CredentialsRead`, `CredentialsWrite`, `EventsSubscribe`, `EventsEmit`, `ConfigRead`, `Logging`
-- Implement `Display` for colon-delimited serialisation (e.g. `storage:read`)
-- Implement `FromStr` for deserialisation from manifest strings
-- Add serde `Serialize`/`Deserialize` derives
-
-**Files:** `crates/plugin-sdk/src/capability.rs`, `crates/plugin-sdk/src/lib.rs`
-**Est:** 20 min
-
-## 1.4 — Route Types and Macro
+## 1.3 — Registration helper macros
+<!-- spec: ./brief.md | depends: 1.1 | est: 25m | status: todo -->
 > spec: ./brief.md
 > depends: 1.1
 
-- Define `PluginRoute` struct in `crates/plugin-sdk/src/route.rs` with method, path, and handler fields
-- Define `CoreEvent` struct for the event bus
-- Implement a `plugin_routes!` convenience macro that reduces route registration boilerplate
-- Export all types from `crates/plugin-sdk/src/lib.rs`
+- Define `register_plugin!` macro in `packages/plugin-sdk/src/macros.rs`
+- The macro SHALL generate Extism WASM entry-point boilerplate for a struct implementing `Plugin`
+- The generated code SHALL wire `execute` to the WASM callable export
+- The macro SHALL NOT require the plugin author to write any unsafe code
+- Export the macro from `packages/plugin-sdk/src/lib.rs`
 
-**Files:** `crates/plugin-sdk/src/route.rs`, `crates/plugin-sdk/src/lib.rs`
+**Files:** `packages/plugin-sdk/src/macros.rs`, `packages/plugin-sdk/src/lib.rs`
 **Est:** 25 min
 
-## 1.5 — Canonical Rust Structs
+## 1.4 — Test utilities
+<!-- spec: ./brief.md | depends: 1.1, 1.2 | est: 30m | status: todo -->
 > spec: ./brief.md
-> depends: none
+> depends: 1.1, 1.2
 
-- Define Rust structs for all 7 canonical types in `crates/plugin-sdk/src/types/`
-- One file per type: `event.rs`, `task.rs`, `contact.rs`, `note.rs`, `email.rs`, `file.rs`, `credential.rs`
-- Add `serde::Serialize` and `serde::Deserialize` derives to each
-- Include an `extensions: HashMap<String, serde_json::Value>` field on each struct for plugin-specific data
-- Add a `types/mod.rs` that re-exports all types
+- Create `packages/plugin-sdk/src/test/mod.rs` with test utility exports
+- Implement `mock_storage()` returning a `MockStorageContext` that stores data in memory and supports the same fluent query API as the real `StorageContext`
+- Implement `mock_message()` returning a `MockMessageBuilder` with sensible defaults for metadata (auto-generated correlation ID, current timestamp, test auth context)
+- `MockMessageBuilder` SHALL support `.with_payload()`, `.with_source()`, `.with_correlation_id()`, and `.build()`
+- Export test utilities under `life_engine_plugin_sdk::test`
 
-**Files:** `crates/plugin-sdk/src/types/mod.rs`, `crates/plugin-sdk/src/types/event.rs`, `crates/plugin-sdk/src/types/task.rs`
+**Files:** `packages/plugin-sdk/src/test/mod.rs`, `packages/plugin-sdk/src/test/mock_storage.rs`, `packages/plugin-sdk/src/test/mock_message.rs`, `packages/plugin-sdk/src/lib.rs`
 **Est:** 30 min
 
-## 1.6 — Builder Pattern
-> spec: ./brief.md
-> depends: 1.1, 1.3, 1.4
-
-- Implement `PluginBuilder` in `crates/plugin-sdk/src/builder.rs`
-- Accept plugin ID in `new()`, chain `display_name()`, `version()`, `capability()`, `route()`, `on_load()`, `on_unload()`
-- Validate required fields in `build()` and return `Result<impl CorePlugin, BuildError>`
-- Define `BuildError` enum with descriptive variants for each missing field
-
-**Files:** `crates/plugin-sdk/src/builder.rs`, `crates/plugin-sdk/src/lib.rs`
-**Est:** 25 min
-
-## 1.7 — WASM Build Configuration
+## 1.5 — WASM build configuration
+<!-- spec: ./brief.md | depends: 1.1, 1.2, 1.3 | est: 20m | status: todo -->
 > spec: ./brief.md
 > depends: 1.1, 1.2, 1.3
 
-- Add `wasm32-wasi` target configuration to `crates/plugin-sdk/Cargo.toml`
-- Create a `.cargo/config.toml` with default WASM build settings
-- Add CI build step that compiles the SDK to `wasm32-wasi` and verifies the output
+- Add `wasm32-wasi` target configuration to `packages/plugin-sdk/Cargo.toml`
+- Ensure all SDK dependencies are WASM-compatible (no host-only crates)
+- Create a `.cargo/config.toml` with default WASM build settings for plugin authors to reference
+- Verify `cargo build --target wasm32-wasi` succeeds and produces a valid WASM module
 - Document the build command in the crate-level doc comment
 
-**Files:** `crates/plugin-sdk/Cargo.toml`, `crates/plugin-sdk/.cargo/config.toml`
+**Files:** `packages/plugin-sdk/Cargo.toml`, `packages/plugin-sdk/.cargo/config.toml`
 **Est:** 20 min
+
+## 1.6 — Action type definition
+<!-- spec: ./brief.md | depends: 1.1 | est: 15m | status: todo -->
+> spec: ./brief.md
+> depends: 1.1
+
+- Define `Action` struct in `packages/traits/src/plugin.rs` (or appropriate location in `packages/traits`)
+- `Action` SHALL include: `name: String`, `description: String`, `input_schema: String`, `output_schema: String`
+- Add serde derives for serialisation
+- Re-export `Action` through the SDK
+
+**Files:** `packages/traits/src/plugin.rs`, `packages/plugin-sdk/src/lib.rs`
+**Est:** 15 min
+
+## 1.7 — Integration smoke test
+<!-- spec: ./brief.md | depends: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6 | est: 30m | status: todo -->
+> spec: ./brief.md
+> depends: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6
+
+- Create a minimal example plugin in `packages/plugin-sdk/examples/` that implements `Plugin`
+- The example plugin SHALL declare at least one action, use `StorageContext` in `execute`, and return a `PipelineMessage`
+- Write a test that uses mock test utilities to exercise the example plugin
+- Verify the example compiles to `wasm32-wasi` without errors
+- Verify plugin authors need only `life-engine-plugin-sdk` in their `Cargo.toml`
+
+**Files:** `packages/plugin-sdk/examples/hello_plugin.rs`, `packages/plugin-sdk/tests/smoke_test.rs`
+**Est:** 30 min

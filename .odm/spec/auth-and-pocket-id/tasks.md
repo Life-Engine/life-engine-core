@@ -1,6 +1,6 @@
 <!--
 domain: auth-and-pocket-id
-updated: 2026-03-22
+updated: 2026-03-23
 spec-brief: ./brief.md
 -->
 
@@ -8,16 +8,17 @@ spec-brief: ./brief.md
 
 ## Task Overview
 
-This plan implements the authentication layer for Core. Work begins with the `AuthProvider` trait definition, then builds the local-token provider (Phase 1 default), adds the middleware stack, wires up API key management endpoints, and finally prepares the Pocket ID sidecar integration for Phase 2. Each task targets 1-3 files and produces a testable outcome.
+This plan implements the auth crate (`packages/auth/`). Work begins with the crate scaffold and `AuthProvider` trait, then builds the Pocket ID OIDC provider, adds the validation pipeline, wires up API key management, and integrates rate limiting. Each task targets 1-3 files and produces a testable outcome.
 
-**Progress:** 0 / 14 tasks complete
+**Progress:** 0 / 12 tasks complete
 
 ## Steering Document Compliance
 
-- Auth middleware runs on all `/api/*` routes except `/api/system/health`
-- Local-token is the Phase 1 default; Pocket ID is Phase 2
+- Auth is an independent crate following the standard layout (lib.rs, config.rs, error.rs, handlers/, types.rs, tests/)
+- Error types implement EngineError trait (code, severity, source_module)
+- Config is a TOML section: `[auth] provider = "pocket-id", issuer = "https://auth.local"`
+- Auth is transport-agnostic — initialized by Core, shared with all transports
 - Plugins inherit auth with no bypass path
-- Credentials stored as salted hashes, never in plaintext
 
 ## Atomic Task Requirements
 
@@ -29,126 +30,129 @@ This plan implements the authentication layer for Core. Work begins with the `Au
 
 ---
 
-## 1.1 — AuthProvider Trait and Types
+## 1.1 — Auth Crate Scaffold
 > spec: ./brief.md
 
-- [ ] Define AuthProvider trait and identity types
-  <!-- file: apps/core/src/auth/mod.rs -->
-  <!-- file: apps/core/src/auth/types.rs -->
-  <!-- purpose: Define the AuthProvider trait with validate_token and revoke_token methods, plus AuthIdentity and AuthError types -->
-  <!-- requirements: 1.1, 1.2, 1.3, 1.4 -->
-  <!-- leverage: existing apps/core/src/auth/types.rs -->
+- [ ] Create the auth crate with standard layout and Cargo.toml
+  <!-- file: packages/auth/Cargo.toml -->
+  <!-- file: packages/auth/src/lib.rs -->
+  <!-- purpose: Scaffold the auth crate with dependencies on packages/types, packages/traits, and packages/crypto; create lib.rs with module declarations -->
+  <!-- requirements: 1.1, 1.3 -->
+  <!-- leverage: none -->
 
 ---
 
-## 1.2 — Local Token Provider
+## 1.2 — Auth Error Types
 > spec: ./brief.md
 
-- [ ] Implement LocalTokenProvider with token generation
-  <!-- file: apps/core/src/auth/local_token.rs -->
-  <!-- purpose: Implement AuthProvider for local-token: generate tokens from master passphrase, store salted hashes, validate bearer tokens -->
-  <!-- requirements: 2.1, 2.2, 2.3 -->
-  <!-- leverage: existing apps/core/src/auth/local_token.rs -->
+- [ ] Define auth error types implementing EngineError
+  <!-- file: packages/auth/src/error.rs -->
+  <!-- purpose: Define AuthError enum with variants (TokenMissing, TokenExpired, TokenInvalid, ProviderUnreachable, ConfigInvalid, RateLimited, KeyRevoked) implementing EngineError trait -->
+  <!-- requirements: 1.2 -->
+  <!-- leverage: packages/traits EngineError trait -->
 
-- [ ] Add token expiry and revocation logic
-  <!-- file: apps/core/src/auth/local_token.rs -->
-  <!-- file: apps/core/src/sqlite_storage.rs -->
-  <!-- purpose: Add expiry checking and DELETE revocation for local tokens, with database queries for token lifecycle -->
-  <!-- requirements: 2.4, 2.5 -->
-  <!-- leverage: existing apps/core/src/auth/local_token.rs -->
+---
 
-- [ ] Add local token integration tests
-  <!-- file: tests/auth/local_token_test.rs -->
-  <!-- purpose: Test generate, validate, expire, and revoke flows for local tokens -->
-  <!-- requirements: 2.1, 2.2, 2.3, 2.4, 2.5 -->
+## 1.3 — Auth Config and Types
+> spec: ./brief.md
+
+- [ ] Define AuthConfig struct and auth types
+  <!-- file: packages/auth/src/config.rs -->
+  <!-- file: packages/auth/src/types.rs -->
+  <!-- purpose: Define AuthConfig with provider and issuer fields for TOML deserialization; define AuthIdentity, AuthToken, ApiKey, and Scope types -->
+  <!-- requirements: 2.1, 8.1, 8.2, 8.3 -->
+  <!-- leverage: none -->
+
+---
+
+## 2.1 — AuthProvider Trait
+> spec: ./brief.md
+
+- [ ] Define AuthProvider trait with validate and identity methods
+  <!-- file: packages/auth/src/lib.rs -->
+  <!-- purpose: Define the AuthProvider trait with validate_token, validate_key, and revoke methods; add factory function that reads config and returns the correct implementation -->
+  <!-- requirements: 2.1, 2.2, 2.3, 2.4 -->
+  <!-- leverage: packages/auth/src/config.rs -->
+
+---
+
+## 2.2 — Pocket ID Provider
+> spec: ./brief.md
+
+- [ ] Implement PocketIdProvider with JWT validation
+  <!-- file: packages/auth/src/handlers/validate.rs -->
+  <!-- purpose: Implement AuthProvider for PocketIdProvider: validate JWTs against issuer public key, handle token refresh, check expiry -->
+  <!-- requirements: 3.1, 3.2, 3.3, 3.4, 3.5 -->
+  <!-- leverage: packages/crypto for key operations -->
+
+---
+
+## 2.3 — Pocket ID Provider Tests
+> spec: ./brief.md
+
+- [ ] Add unit tests for PocketIdProvider
+  <!-- file: packages/auth/src/tests/pocket_id_test.rs -->
+  <!-- purpose: Test JWT validation with valid tokens, expired tokens, invalid signatures, and unreachable issuer scenarios -->
+  <!-- requirements: 3.1, 3.2, 3.3, 3.4, 3.5 -->
   <!-- leverage: packages/test-utils -->
 
 ---
 
-## 1.3 — Auth Middleware Stack
+## 3.1 — Auth Validation Pipeline
 > spec: ./brief.md
 
-- [ ] Implement auth middleware extractor
-  <!-- file: apps/core/src/auth/middleware.rs -->
-  <!-- purpose: Create axum middleware that extracts Bearer token, delegates to active AuthProvider, attaches identity to request extensions -->
-  <!-- requirements: 4.1, 4.2, 4.3, 4.4 -->
-  <!-- leverage: existing apps/core/src/auth/middleware.rs -->
+- [ ] Implement the auth validation handler
+  <!-- file: packages/auth/src/handlers/validate.rs -->
+  <!-- purpose: Create validation function that extracts credential type, delegates to correct provider, returns AuthIdentity or AuthError -->
+  <!-- requirements: 4.1, 4.2, 4.3, 4.4, 4.5 -->
+  <!-- leverage: packages/auth/src/types.rs -->
 
-- [ ] Add health endpoint bypass
-  <!-- file: apps/core/src/auth/middleware.rs -->
-  <!-- file: apps/core/src/routes/health.rs -->
-  <!-- purpose: Skip auth for /api/system/health route; verify health endpoint remains publicly accessible -->
-  <!-- requirements: 4.5 -->
-  <!-- leverage: existing apps/core/src/routes/health.rs -->
+---
 
-- [ ] Add auth middleware tests
-  <!-- file: tests/auth/middleware_test.rs -->
+## 3.2 — Auth Validation Tests
+> spec: ./brief.md
+
+- [ ] Add unit tests for auth validation pipeline
+  <!-- file: packages/auth/src/tests/validate_test.rs -->
   <!-- purpose: Test valid token, missing token, expired token, and health bypass scenarios -->
   <!-- requirements: 4.1, 4.2, 4.3, 4.4, 4.5 -->
   <!-- leverage: packages/test-utils -->
 
 ---
 
-## 1.4 — Rate Limiting
+## 4.1 — Rate Limiting
 > spec: ./brief.md
 
-- [ ] Implement auth rate limiter
-  <!-- file: apps/core/src/rate_limit.rs -->
-  <!-- file: apps/core/src/auth/middleware.rs -->
-  <!-- purpose: Add per-IP sliding window rate limiter (5 failures/minute) that returns HTTP 429 with Retry-After header -->
+- [ ] Implement per-IP sliding window rate limiter in the auth module
+  <!-- file: packages/auth/src/handlers/rate_limit.rs -->
+  <!-- purpose: Add per-IP sliding window rate limiter (5 failures/minute) that returns AuthError::RateLimited with Retry-After value -->
   <!-- requirements: 5.1, 5.2, 5.3 -->
-  <!-- leverage: existing apps/core/src/rate_limit.rs -->
+  <!-- leverage: none -->
 
 - [ ] Add rate limiter tests
-  <!-- file: tests/auth/rate_limit_test.rs -->
-  <!-- purpose: Test that 5 failures trigger 429, window reset allows new attempts, and Retry-After header is present -->
+  <!-- file: packages/auth/src/tests/rate_limit_test.rs -->
+  <!-- purpose: Test that 5 failures trigger rate limit, window reset allows new attempts, and Retry-After value is correct -->
   <!-- requirements: 5.1, 5.2, 5.3 -->
   <!-- leverage: packages/test-utils -->
 
 ---
 
-## 1.5 — API Key Endpoints
+## 5.1 — API Key Management
 > spec: ./brief.md
 
-- [ ] Implement API key CRUD routes
-  <!-- file: apps/core/src/auth/routes.rs -->
-  <!-- file: apps/core/src/auth/local_token.rs -->
-  <!-- purpose: Add POST /api/auth/keys (create scoped key), GET /api/auth/keys (list), DELETE /api/auth/keys/{id} (revoke) -->
-  <!-- requirements: 7.1, 7.3, 7.4 -->
-  <!-- leverage: existing apps/core/src/auth/routes.rs -->
-
-- [ ] Add API key scope enforcement in middleware
-  <!-- file: apps/core/src/auth/middleware.rs -->
-  <!-- purpose: When an API key is used, enforce that the request path matches the key's allowed scope -->
-  <!-- requirements: 7.2 -->
-  <!-- leverage: existing apps/core/src/auth/middleware.rs -->
+- [ ] Implement API key CRUD handlers
+  <!-- file: packages/auth/src/handlers/keys.rs -->
+  <!-- purpose: Implement create (scoped key generation, salted hash storage), list (metadata only), and revoke operations for API keys -->
+  <!-- requirements: 7.1, 7.2, 7.3, 7.4 -->
+  <!-- leverage: packages/crypto for hashing -->
 
 ---
 
-## 1.6 — Plugin Auth Inheritance
+## 5.2 — Plugin Auth Inheritance
 > spec: ./brief.md
 
-- [ ] Verify plugin routes receive authenticated identity
-  <!-- file: apps/core/src/plugin_loader.rs -->
-  <!-- file: apps/core/src/routes/plugins.rs -->
-  <!-- purpose: Ensure plugin-registered routes are nested under the auth middleware layer and handlers receive AuthIdentity from request extensions -->
+- [ ] Verify pipeline messages carry authenticated identity
+  <!-- file: packages/auth/src/tests/identity_test.rs -->
+  <!-- purpose: Test that AuthIdentity is correctly attached to PipelineMessage metadata after auth validation; verify capability enforcement for credentials access -->
   <!-- requirements: 6.1, 6.2, 6.3 -->
-  <!-- leverage: existing apps/core/src/plugin_loader.rs -->
-
----
-
-## 1.7 — Pocket ID Sidecar Integration (Phase 2)
-> spec: ./brief.md
-
-- [ ] Implement Pocket ID process manager
-  <!-- file: apps/core/src/auth/oidc.rs -->
-  <!-- purpose: Spawn Pocket ID binary, monitor process health, restart on crash, terminate on shutdown -->
-  <!-- requirements: 3.1, 3.4, 3.5 -->
-  <!-- leverage: existing apps/core/src/auth/oidc.rs -->
-
-- [ ] Implement PocketIdProvider with JWT validation
-  <!-- file: apps/core/src/auth/oidc.rs -->
-  <!-- file: apps/core/src/auth/jwt.rs -->
-  <!-- purpose: Implement AuthProvider for pocket-id: validate JWTs against Ed25519 public key, handle token refresh -->
-  <!-- requirements: 3.2, 3.3, 3.6 -->
-  <!-- leverage: existing apps/core/src/auth/jwt.rs -->
+  <!-- leverage: packages/types PipelineMessage -->

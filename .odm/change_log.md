@@ -2,6 +2,8 @@
 
 ## 2026-03-23
 
+- Architecture Redesign: add ARCHITECTURE.md as single source of truth defining four-layer modular architecture (transports, workflow engine, plugins, data layer). Rewrite 5 design docs (Overview, Plugins, Workflow, Data, Transports) and mark ADR-011 as superseded (WASM from day one). Delete 5 obsolete docs (Summary, MonoRepo Tooling, Connectors, API). Remove 7 specs no longer aligned (ci-and-cd, connector-architecture, background-scheduler, rest-api, shell-data-api, sync-layer, plugin-loader). Rewrite 11 remaining specs to reflect thin Core orchestrator, WASM plugins via Extism, declarative YAML workflows, configurable transports, StorageBackend trait, and StorageContext query builder.
+
 - WP 2.8 Config Editor — Auth & Storage: add AuthSettingsForm with provider radio selector (local-token/oidc/webauthn), conditional OIDC fields (issuer_url, client_id, client_secret, jwks_uri, audience) and conditional WebAuthn fields (rp_name, rp_id, rp_origin, challenge_ttl_secs). Add StorageSettingsForm with backend radio (sqlite/postgres), encryption toggle, Argon2 inputs (memory_mb, iterations, parallelism), conditional PostgreSQL fields (host, port, dbname, user, password, pool_size, ssl_mode). Wire both forms into ConfigPage with edit buttons on Authentication and Storage sections.
 
 - WP 2.7 Config Editor — Core & Network: add CoreSettingsForm (host, port, log_level, log_format, data_dir inputs with validation) and NetworkSettingsForm (TLS toggle with cert/key path inputs, CORS allowed_origins list editor with add/remove, rate_limit number input). Wire both forms into ConfigPage with per-section edit/view mode toggling. Section component extended with optional Edit button.

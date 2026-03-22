@@ -1,26 +1,56 @@
 <!--
 domain: auth-and-pocket-id
-updated: 2026-03-22
+updated: 2026-03-23
 spec-brief: ./brief.md
 -->
 
 # Auth and Pocket ID
 
-Reference: [[03 - Projects/Life Engine/Design/Core/API]]
-
 ## Purpose
 
-This spec defines the authentication mechanisms for Core and the Pocket ID OIDC sidecar. Core supports two auth mechanisms — Pocket ID (OIDC) for user sessions and API keys for local dev and scripting. Both go through the same middleware stack.
+This spec defines the authentication module for Core. Auth is an independent crate (`packages/auth/`) initialized by Core at startup and shared with all active transports. Two auth mechanisms are supported — Pocket ID (OIDC) for user sessions and API keys for scripting. Both go through the same `AuthProvider` trait and validation pipeline.
+
+## Crate Structure
+
+The auth crate follows the standard crate internal layout:
+
+```
+packages/auth/src/
+  lib.rs          → Public API (init, AuthModule, Config re-export)
+  config.rs       → AuthConfig struct + TOML deserialization
+  error.rs        → Auth error types implementing EngineError
+  handlers/
+    mod.rs
+    validate.rs   → Token/key validation logic
+    keys.rs       → API key CRUD operations
+  types.rs        → AuthIdentity, AuthToken, ApiKey, Scope
+  tests/
+    mod.rs
+    ...
+```
+
+The crate depends on `packages/types`, `packages/traits`, and `packages/crypto`. It has no dependency on any transport, storage implementation, or the core binary.
+
+## Configuration
+
+Auth is configured via the `[auth]` section in `config.toml`. Core reads this section at startup and passes it to the auth module for initialization:
+
+```toml
+[auth]
+provider = "pocket-id"
+issuer = "https://auth.local"
+```
+
+The `AuthConfig` struct in `packages/auth/src/config.rs` deserializes this section. Required fields are `provider` and `issuer`. Missing or invalid values cause Core to reject startup with a `Fatal` severity error.
 
 ## Auth Mechanisms
 
 ### Pocket ID (OIDC) — Primary Auth
 
-Pocket ID is the primary authentication mechanism for user sessions. It runs as a bundled Go binary sidecar, spawned and managed by Core.
+Pocket ID is the primary authentication mechanism for user sessions. Core validates tokens against the configured OIDC issuer.
 
-- Core handles the OIDC flow and token exchange
-- Every request is validated against Pocket ID tokens
-- JWT with 15-minute access tokens and 7-day refresh tokens
+- Core validates JWTs against the Pocket ID issuer's public key
+- JWT access tokens have a 15-minute expiry, refresh tokens have a 7-day expiry
 - Ed25519 signatures for token signing
 - Supports passkey/WebAuthn for passwordless login
 - Supports user registration (single-user by default, multi-user configurable)
@@ -28,82 +58,81 @@ Pocket ID is the primary authentication mechanism for user sessions. It runs as 
 
 ### API Keys — Secondary Auth
 
-API keys provide a simpler alternative for local development, CLI tools, and automation scripts.
+API keys provide a simpler alternative for CLI tools and automation scripts.
 
-- Generated and managed through the `/api/auth` endpoints
-- Same middleware validation as OIDC tokens — API keys are not a bypass or lower-security path
-- Scoped — keys can be restricted to specific route groups
-- Revocable individually or in bulk
-- Stored as salted hashes — the raw key is shown once at creation and never retrievable again
+- Generated and managed through auth module handlers
+- Same validation pipeline as OIDC tokens — API keys are not a bypass or lower-security path
+- Scoped — keys can be restricted to specific capabilities
+- Revocable individually
+- Stored as salted hashes using `packages/crypto` — the raw key is shown once at creation and never retrievable again
 
 ## AuthProvider Trait
 
-Core abstracts authentication behind an `AuthProvider` trait so the local-token and Pocket ID implementations are swappable. The active provider is set in config:
+Core abstracts authentication behind an `AuthProvider` trait so implementations are swappable. The active provider is set in `config.toml`:
 
-```yaml
-auth:
-  provider: "local-token"  # Phase 1 default
-  # provider: "pocket-id"  # Phase 2 default
+```toml
+[auth]
+provider = "pocket-id"
+issuer = "https://auth.local"
 ```
 
-- **local-token** — Simple bearer token auth. Default in Phase 1. Suitable for local development and single-user setups.
-- **pocket-id** — Full OIDC auth via the Pocket ID sidecar. Default in Phase 2. Required for multi-user and remote access.
+- **pocket-id** — Full OIDC auth via a Pocket ID instance. The primary and default provider.
+- **api-key** — API key validation against stored hashes. Used for scripting and automation.
 
-Both providers implement the same trait and plug into the same middleware. Switching requires only a config change and restart.
+Both providers implement the same trait and plug into the same validation pipeline. The auth module determines which provider to use based on the credential type presented (JWT vs API key prefix).
 
-## Local Token Auth (Phase 1)
+## Transport Integration
 
-Local token auth is the default in Phase 1. It provides a simple bearer token mechanism without the complexity of OIDC.
+Auth is transport-agnostic. Core initializes the auth module once at startup and passes it to every active transport. Each transport is responsible for:
 
-- `POST /api/auth/token` — Generate a new token. Requires the master passphrase in the request body for verification.
-- Tokens are stored as salted hashes in the database — the raw token is returned once at creation.
-- Configurable expiry (default 30 days).
-- Revocation via `DELETE /api/auth/token/{id}`.
-- Expired tokens are rejected automatically.
+1. Extracting the credential from the transport-specific location (e.g., `Authorization` header for REST, connection params for GraphQL)
+2. Calling the auth module's `validate` method with the extracted credential
+3. Attaching the returned `AuthIdentity` to the request context
+4. Skipping auth for health check endpoints
 
-## Auth Middleware
+The auth module handles all validation logic — transports only extract and forward.
 
-The auth middleware runs on every `/api/*` route (except `/api/system/health` which is unauthenticated for monitoring). It performs the following checks in order:
+## Auth Validation Flow
 
-1. **Extract token** — Read the `Authorization: Bearer <token>` header.
-2. **Validate** — Check the token against stored hashes (local-token) or validate the JWT against Pocket ID's public key (OIDC).
-3. **Reject expired tokens** — Return `AUTH_TOKEN_EXPIRED` with HTTP 401.
-4. **Rate-limit failed attempts** — After 5 failed auth attempts per minute from the same IP, return HTTP 429. This applies regardless of which auth provider is active.
-5. **Attach identity** — On success, attach the authenticated identity to the request context for downstream handlers.
+1. **Extract credential** — Transport extracts the bearer token or API key from the request
+2. **Validate** — Auth module validates the credential against the active provider (JWT verification or hash comparison)
+3. **Reject expired/invalid** — Return error with `AUTH_TOKEN_EXPIRED` or `AUTH_TOKEN_MISSING` code
+4. **Rate-limit failures** — After 5 failed auth attempts per minute from the same IP, reject with rate limit error
+5. **Return identity** — On success, return `AuthIdentity` (user ID, provider type) to the transport
 
-## Pocket ID Sidecar Architecture
+## Error Types
 
-Pocket ID runs as a bundled Go binary, managed by Core as a subprocess.
+Auth errors implement the `EngineError` trait defined in `packages/traits`:
 
-- **Binary location** — Configured via `auth.pocket_id.binary_path` in the YAML config.
-- **Port** — Listens on a separate port (default `3751`), configured via `auth.pocket_id.port`.
-- **Lifecycle** — Core spawns Pocket ID during startup (step 5 of the startup sequence). Core monitors the process and restarts it if it crashes. Core terminates it during shutdown.
-- **Storage** — Pocket ID uses Core's data directory for its database and configuration.
-- **Communication** — Core communicates with Pocket ID over localhost HTTP. No external network exposure for the sidecar.
+```rust
+// packages/auth/src/error.rs
+enum AuthError {
+    TokenMissing,       // code: "AUTH_001", severity: Warning
+    TokenExpired,       // code: "AUTH_002", severity: Warning
+    TokenInvalid,       // code: "AUTH_003", severity: Warning
+    ProviderUnreachable,// code: "AUTH_004", severity: Fatal
+    ConfigInvalid,      // code: "AUTH_005", severity: Fatal
+    RateLimited,        // code: "AUTH_006", severity: Warning
+    KeyRevoked,         // code: "AUTH_007", severity: Warning
+}
+```
 
-Pocket ID capabilities:
-
-- OIDC token issuance and validation
-- Passkey/WebAuthn registration and authentication
-- User registration and management
-- Token refresh and revocation
+Each variant implements `code()`, `severity()`, and `source_module()` (always `"auth"`).
 
 ## Plugin Auth
 
 Plugins do not implement their own authentication. They inherit Core's token validation automatically.
 
-- Every request reaching a plugin route has already been authenticated by Core's middleware
-- Plugins receive the authenticated identity via the request context
+- Every request reaching a workflow pipeline has already been authenticated by the transport + auth module
+- The `PipelineMessage` metadata includes the authenticated identity
 - Plugins cannot access credentials directly — they use the scoped `credentials:read`/`credentials:write` capabilities
 - There is no mechanism for a plugin to bypass auth
 
-## Acceptance Criteria
+## Rate Limiting
 
-- All `/api/*` routes (except `/api/system/health`) require a valid auth token
-- Local token auth works end-to-end: generate token with master passphrase, use token in requests, revoke token
-- Pocket ID OIDC flow completes (Phase 2): login via browser, receive tokens, access API, token refresh works silently
-- Rate limiting blocks brute force attempts — 5 failed attempts per minute per IP triggers HTTP 429
-- Token refresh works silently — clients receive a new access token before the old one expires
-- Expired tokens are rejected with `AUTH_TOKEN_EXPIRED`
-- Switching between `local-token` and `pocket-id` providers requires only a config change
-- Plugin routes receive only authenticated requests — no bypass is possible
+Rate limiting is built into the auth module, not into individual transports:
+
+- Sliding window: 5 failed attempts per minute per IP
+- On trigger: reject with rate limit error and `Retry-After` header value
+- On window expiry: allow requests from that IP again
+- Applies regardless of which auth provider is active

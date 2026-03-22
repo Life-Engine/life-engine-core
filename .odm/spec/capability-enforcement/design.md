@@ -1,88 +1,147 @@
 <!--
 domain: capability-enforcement
-updated: 2026-03-22
+updated: 2026-03-23
 spec-brief: ./brief.md
 -->
 
 # Spec — Capability Enforcement
 
-Reference: [[03 - Projects/Life Engine/Design/App/Architecture/Capability System]]
+Reference: [Plugins Design Document](../../doc/Design/Core/Plugins.md)
 
 ## Purpose
 
-This spec defines the capability system that governs plugin access to shell resources. Capabilities are declared in the plugin manifest, granted at install time with user approval, and enforced at runtime on every API call. It is the implementor contract for all permission checking logic.
+This spec defines the capability system that governs plugin access to Core host functions. Capabilities are declared in the plugin's `manifest.toml`, approved via config policy, and enforced at the WASM boundary. It is the implementor contract for all capability checking, host function injection, and error handling logic.
 
 ## Principle
 
-Deny by default. A plugin receives no access to any protected resource unless it explicitly declares the capability in its manifest and the user approves it during installation. There are no implicit grants, no escalation paths, and no way to acquire capabilities after installation without reinstalling.
+Deny by default. A plugin receives no access to any host function unless it explicitly declares the capability in its manifest and the capability is approved. First-party plugins are auto-granted. Third-party plugins require explicit approval in `config.toml`. There are no install dialogs, no interactive prompts, and no implicit grants.
 
-## Capability Namespaces
+## Available Capabilities
 
-The following capability strings are recognized by the shell:
+The following capability strings are recognized by Core:
 
-- **data:read:collection** — Read records from a specific collection (canonical or private). Example: `data:read:todos` grants read access to the `todos` collection. The plugin can call `data.query()` and `data.subscribe()` for that collection.
-- **data:write:collection** — Write, update, or delete records in a specific collection. Example: `data:write:todos` grants write access. The plugin can call `data.create()`, `data.update()`, and `data.delete()` for that collection. Write implies read for the same collection.
-- **sync:pull** — Request the shell to trigger a pull sync from Core for the plugin's declared collections. Used by plugins that need fresher data than the default sync interval provides.
-- **sync:push** — Request the shell to immediately push pending local mutations to Core, rather than waiting for the next sync cycle.
-- **ui:overlay** — Render floating UI outside the plugin's main container. Required for `ui.openModal()`. Without this capability, the plugin can only render inside its own container.
-- **notify:local** — Show local OS-level notifications via the Tauri notification API. Used for reminders, alerts, and background event notifications.
-- **ipc:send:target-plugin** — Send inter-plugin messages to a specific target plugin. Example: `ipc:send:com.life-engine.calendar` allows sending messages to the calendar plugin. Each target requires a separate capability declaration.
-- **storage:local** — Read and write to plugin-private key-value storage. Required for `storage.get()`, `storage.set()`, and `storage.delete()`.
-- **network:fetch** — Make outbound HTTP requests. Sandboxed to the domains listed in the manifest's `allowedDomains` array. Without this capability, the `http` namespace methods throw on every call.
+- `storage:read` — Read from collections via StorageContext host functions. The plugin can execute read queries through the storage query builder.
+- `storage:write` — Write to collections via StorageContext host functions. The plugin can execute mutations (create, update, delete) through the storage query builder.
+- `http:outbound` — Make outbound HTTP requests via HTTP host functions. The plugin can call external APIs and services.
+- `events:emit` — Emit events into the workflow engine. The plugin can produce events that trigger other workflows.
+- `events:subscribe` — Subscribe to events from the workflow engine. The plugin can register interest in specific event types.
+- `config:read` — Read the plugin's own config section from `config.toml`. The plugin can access its configuration values at runtime.
 
-## High-Trust Capabilities
+Each capability maps directly to a set of host functions. A plugin only receives the host functions corresponding to its approved capabilities.
 
-Two capabilities are considered high-trust and receive special treatment during installation:
+## Approval Policy
 
-- **data:write** — Writing to collections can modify shared data that other plugins and Core depend on. The install dialog highlights this capability with a warning: "This plugin can modify your data in the following collections: [list]."
-- **network:fetch** — Outbound network access could exfiltrate data. The install dialog highlights this capability with a warning: "This plugin can make network requests to the following domains: [list]."
+### First-Party Plugins
 
-High-trust capabilities are visually distinguished in the install approval dialog (e.g. yellow warning icon, bold text) so the user can make an informed decision.
+Plugins located in the monorepo `plugins/` directory are first-party. All declared capabilities are auto-granted at load time. No config entry is required.
+
+First-party plugins are trusted because they are developed, reviewed, and shipped as part of the same codebase. The monorepo path acts as the trust boundary.
+
+### Third-Party Plugins
+
+Plugins not in the monorepo require explicit approval in `config.toml`:
+
+```toml
+[plugins.some-third-party]
+approved_capabilities = ["storage:read", "http:outbound"]
+```
+
+Core compares the manifest's declared capabilities against the `approved_capabilities` array. If the manifest declares any capability not in the approved list, Core refuses to load the plugin and logs a warning identifying each unapproved capability.
+
+If a third-party plugin has no `[plugins.<plugin-id>]` section, Core treats it as having an empty approved set and refuses to load it if it declares any capabilities.
+
+## Host Function Injection
+
+When Core loads a plugin into the Extism WASM runtime, it constructs the set of host functions to inject based on the plugin's approved capabilities:
+
+- `storage:read` approved — inject storage read host functions (`storage_query`)
+- `storage:write` approved — inject storage write host functions (`storage_mutate`)
+- `http:outbound` approved — inject HTTP host functions (`http_request`)
+- `events:emit` approved — inject event emit host function (`event_emit`)
+- `events:subscribe` approved — inject event subscribe host function (`event_subscribe`)
+- `config:read` approved — inject config read host function (`config_get`), scoped to the plugin's own section
+
+Host functions not corresponding to an approved capability are not registered in the plugin's WASM instance. This provides a structural guarantee: the plugin literally cannot call a function that does not exist in its runtime.
 
 ## Runtime Enforcement
 
-The shell wraps every ShellAPI method with a capability check. Enforcement happens synchronously at the start of each method call, before any work is performed.
+Even though unapproved host functions are not injected, a second enforcement layer exists at the host function level. Every host function checks the calling plugin's capability set synchronously before executing:
 
-- If the plugin has the required capability, the method executes normally.
-- If the plugin does not have the required capability, the method throws a `CapabilityError` immediately. It does not return `undefined`, return an empty result, or silently fail.
+- If the plugin has the required capability, the function executes normally.
+- If the plugin does not have the required capability, the function returns a fatal `EngineError` immediately without performing any work.
 
-The `CapabilityError` includes the plugin ID, the attempted operation, and the missing capability, making debugging straightforward:
+This two-layer approach (injection gating + runtime checking) follows the defence-in-depth principle. The injection layer prevents calls structurally; the runtime layer catches any edge case where a host function is shared across capabilities or invoked through an unexpected path.
 
-```text
-CapabilityError: Plugin "com.example.weather" attempted data.query("contacts")
-  but does not have capability "data:read:contacts"
+Enforcement is synchronous. There is no async overhead, no network call, and no external lookup. The approved capability set is held in memory for each loaded plugin.
+
+## EngineError for Capability Violations
+
+Capability violations produce an error implementing the `EngineError` trait:
+
+```rust
+// Example error
+CapabilityViolation {
+    plugin_id: "com.example.weather",
+    attempted_capability: "storage:write",
+    source_module: "capability-enforcement",
+}
 ```
 
-Enforcement is synchronous. There is no async overhead, no network call, and no promise resolution involved in the capability check itself. The shell holds the approved capability set in memory for each loaded plugin.
+The error fields:
 
-## Install-Time Approval Flow
+- `code()` — Returns `CAP_001` for load-time violations (unapproved capability preventing load) or `CAP_002` for runtime violations (denied host function call).
+- `severity()` — Always `Fatal`. Capability violations are not retryable or ignorable.
+- `source_module()` — Always `capability-enforcement`.
 
-When a plugin is installed for the first time, the shell presents a capability approval dialog:
+The error message follows the format:
 
-1. The shell reads the plugin's declared capabilities from `plugin.json`.
-2. The dialog lists each requested capability with a human-readable description.
-3. High-trust capabilities are shown with warning indicators.
-4. The user can approve all capabilities or reject the installation. There is no partial approval — the plugin either gets everything it declared or it does not install.
-5. On approval, the shell records the approved capabilities in `settings.json` for this plugin. Future loads skip the approval dialog.
-6. On rejection, the plugin is not installed and its files remain in the `plugins/` directory but are marked as unapproved.
+```text
+CapabilityViolation: Plugin "com.example.weather" attempted "storage:write"
+  but does not have that capability [CAP_002]
+```
 
-If a plugin update adds new capabilities, the approval dialog is shown again for the new capabilities only.
+Core never returns a default result or silently succeeds on a capability violation. It is always an explicit error.
 
-## Scoping
+## Load-Time Flow
 
-Capabilities are scoped to prevent overly broad access:
+When Core discovers a plugin during startup:
 
-- **Data capabilities** are scoped to specific collection names. `data:read:todos` does not grant access to `contacts`. A plugin must declare each collection separately.
-- **Network fetch** is scoped to the `allowedDomains` array in the manifest. `network:fetch` alone is not sufficient — the target domain must also be listed.
-- **IPC send** is scoped to specific target plugin IDs. `ipc:send:com.life-engine.calendar` does not grant access to send messages to any other plugin.
+1. Read `manifest.toml` and extract the `[capabilities].required` array.
+2. Determine if the plugin is first-party (in monorepo `plugins/` directory) or third-party.
+3. If first-party, auto-grant all declared capabilities.
+4. If third-party, look up `[plugins.<plugin-id>].approved_capabilities` in `config.toml`.
+5. Compare declared capabilities against the approved set.
+6. If any declared capability is not approved, refuse to load the plugin. Log a `CAP_001` error identifying each unapproved capability.
+7. If all capabilities are approved, load the WASM module and inject only the approved host functions.
 
-The shell enforces scoping at the same point as capability checks — synchronously, before the operation executes.
+## Config Format
+
+Third-party approval is declared in `config.toml` under the plugin's section:
+
+```toml
+[plugins.some-third-party]
+approved_capabilities = ["storage:read", "http:outbound"]
+```
+
+Rules:
+
+- The key under `[plugins.*]` matches the plugin's `id` from its `manifest.toml`.
+- `approved_capabilities` is an array of capability strings.
+- An empty array means the plugin loads with no host functions (it can still receive and return `PipelineMessage` values).
+- Invalid capability strings in the array are logged as warnings and ignored.
+- A missing `approved_capabilities` key is treated as an empty set.
+
+## Scope
+
+This spec covers Core-only enforcement. There is no App-side capability checking. The WASM boundary is the single enforcement point. All capability logic lives in the plugin loading and host function infrastructure within Core.
 
 ## Acceptance Criteria
 
-- A plugin cannot access any protected resource (data, http, storage, ipc send, ui overlay, notifications) without the corresponding capability declared and approved.
-- Attempting an undeclared operation throws a `CapabilityError` with a descriptive message, not a silent failure.
-- High-trust capabilities (`data:write`, `network:fetch`) trigger a visible warning in the install approval dialog.
+- A plugin cannot access any host function (storage, HTTP, events, config) without the corresponding capability declared in its manifest and approved by the policy.
+- First-party plugins have all declared capabilities auto-granted.
+- Third-party plugins require explicit `approved_capabilities` in `config.toml`.
+- If a manifest declares an unapproved capability, Core refuses to load the plugin.
+- Host functions are injected per-plugin based on the approved capability set.
+- Attempting an unapproved host function call returns a fatal `EngineError` with the plugin ID, attempted capability, and `CAP_xxx` error code.
 - Runtime capability checks are synchronous with no async overhead.
-- The install-time approval flow shows all requested capabilities, blocks installation on rejection, and does not re-prompt on subsequent loads unless new capabilities are added.
-- Data scoping, domain scoping, and IPC target scoping are enforced at runtime.
+- Capability violations never result in silent success or default return values.

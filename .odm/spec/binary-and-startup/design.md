@@ -1,98 +1,123 @@
 <!--
 domain: binary-and-startup
-updated: 2026-03-22
+updated: 2026-03-23
 spec-brief: ./brief.md
 -->
 
 # Core Binary and Startup
 
-Reference: [[03 - Projects/Life Engine/Design/Core/Overview]]
+Reference: ARCHITECTURE.md
 
 ## Purpose
 
-This spec defines the Core binary entry point and startup sequence. Core is a self-hosted Rust backend that aggregates personal data, stores it locally in an encrypted SQLite database, and exposes a REST API. It contains no business logic — all features are provided by plugins.
+This spec defines the Core binary entry point and startup sequence. Core is a thin orchestrator — a self-hosted Rust backend that wires together independent modules but contains no business logic, route handlers, database queries, or protocol implementations. After all modules are extracted, `apps/core/src/` contains three files: `main.rs`, `config.rs`, and `shutdown.rs`. Everything else lives in independent crates under `packages/`.
 
 ## Tech Stack
 
-- **Language** — Rust
-- **HTTP** — `axum`
+- **Language** — Rust (edition 2024)
 - **Async runtime** — `tokio`
-- **Storage** — `rusqlite` with SQLCipher
-- **Plugin isolation** — Extism (WASM)
-- **Auth** — Pocket ID sidecar (Go binary, OIDC)
+- **WASM runtime** — Extism
+- **Storage** — `StorageBackend` trait; SQLite/SQLCipher is the current implementation (`packages/storage-sqlite`)
+- **Auth** — Pocket ID (OIDC) via `packages/auth`
 - **TLS** — `rustls`
-- **Config** — YAML file + environment variable overrides + CLI argument overrides
+- **Config** — TOML (app settings) + YAML (workflow definitions, separate files)
 - **Logging** — `tracing` crate with JSON output
+
+## Binary Structure
+
+The Core binary lives at `apps/core/`. It contains exactly three source files:
+
+- `main.rs` — Startup wiring. Calls into modules in dependency order. No logic beyond sequencing.
+- `config.rs` — Config loading and top-level validation. Reads `config.toml`, applies env var overrides, and hands sections to modules.
+- `shutdown.rs` — Graceful shutdown coordination. Tears down resources in reverse startup order.
+
+Core depends on every module crate but only calls their public `init` functions and passes config sections. Core never reaches into module internals.
 
 ## Startup Sequence
 
 Core performs the following steps in order on launch:
 
-1. **Load config** — Read YAML file at `~/.life-engine/config.yaml`. Apply environment variable overrides (prefixed `LIFE_ENGINE_*`). Apply CLI argument overrides. Later sources override earlier ones.
-2. **Validate config** — Reject insecure settings with clear error messages. Refuse to start if critical values are missing or invalid.
+1. **Load config** — Read `config.toml`. Apply environment variable overrides (prefixed `LIFE_ENGINE_*`). Later sources override earlier ones.
+2. **Validate config** — Reject insecure or invalid settings with clear error messages. Each config section is handed to its owning module for module-specific validation.
 3. **Derive database key** — Derive the encryption key from the master passphrase using Argon2id with these parameters: 64 MB memory, 3 iterations, 4 parallelism, 32-byte output.
-4. **Open encrypted database** — Open the SQLite database via SQLCipher using the derived key. Create the database on first launch.
-5. **Spawn Pocket ID sidecar** — Start the bundled Pocket ID Go binary as a managed subprocess. Core owns its lifecycle.
-6. **Discover and load plugins** — Read plugin paths from config. Load each WASM module into the Extism runtime.
-7. **Register plugin routes and run on_load** — Each loaded plugin registers its HTTP routes and executes its `on_load` initialisation.
-8. **Load workflow definitions** — Read stored workflow definitions from the database. Validate that referenced plugins are loaded and step types are compatible.
-9. **Start background scheduler** — Initialise the cron-like scheduler for connector syncs, token rotation, and cleanup tasks.
-10. **Bind HTTP server** — Start the `axum` server on `127.0.0.1:3750`. Core is now ready to accept requests.
+4. **Initialize storage backend** — Call `StorageBackend::init()` with the derived key and the `[storage]` config section. The current implementation uses SQLite/SQLCipher. The storage backend handles database creation on first launch and schema migrations.
+5. **Initialize auth module** — Call `auth::init()` with the `[auth]` config section. The auth module handles provider setup (Pocket ID/OIDC, WebAuthn).
+6. **Create workflow engine** — Instantiate the workflow engine with references to the storage backend and auth module.
+7. **Load workflow definitions** — Read YAML files from the configured `workflows/` directory. The workflow engine validates that referenced plugins exist and step types are compatible.
+8. **Discover and load plugins** — Scan the configured plugins directory. Each plugin directory contains a `plugin.wasm` and a `manifest.toml`. Load each WASM module into the Extism runtime, grant approved capabilities, and reject plugins with unapproved capability requests.
+9. **Start active transports** — Read the `[transports]` config section. For each enabled transport, call its `start()` function, passing a reference to the workflow engine. Only configured transports are started — there is no default transport.
+10. **Wait for shutdown signal** — Block on `SIGTERM` or `SIGINT`. When received, begin graceful shutdown.
+
+```rust
+#[tokio::main]
+async fn main() -> Result<()> {
+    let config = Config::load()?;
+    config.validate()?;
+    let db_key = crypto::derive_key(&config.storage.passphrase)?;
+    let storage = storage_sqlite::init(&config.storage, &db_key)?;
+    let auth = auth::init(&config.auth)?;
+    let engine = WorkflowEngine::new(storage.clone(), auth.clone());
+    engine.load_workflows(&config.workflows.path)?;
+    engine.load_plugins(&config.plugins)?;
+    let transports = transports::start(&config.transports, &engine)?;
+    shutdown::wait(transports, engine, storage).await?;
+}
+```
 
 ## Config Structure
 
-```yaml
-core:
-  host: "127.0.0.1"
-  port: 3750
-  log_level: "info"
-  log_format: "json"
-  data_dir: "~/.life-engine/data"
+Config is TOML for application settings. Workflow definitions are separate YAML files in a configured directory.
 
-auth:
-  provider: "local-token"  # "local-token" (Phase 1) or "pocket-id" (Phase 2)
-  pocket_id:
-    binary_path: "/usr/local/bin/pocket-id"
-    port: 3751
+```toml
+[storage]
+backend = "sqlite"
+path = "./data/core.db"
 
-storage:
-  encryption: true
-  argon2:
-    memory_mb: 64
-    iterations: 3
-    parallelism: 4
+[auth]
+provider = "pocket-id"
+issuer = "https://auth.local"
 
-plugins:
-  paths:
-    - /usr/local/lib/life-engine/plugins/
-  auto_enable: false
+[transports.rest]
+host = "127.0.0.1"
+port = 3000
 
-network:
-  tls:
-    enabled: false  # auto-enabled when host is not 127.0.0.1
-    cert_path: ""
-    key_path: ""
-  cors:
-    allowed_origins:
-      - "http://localhost:1420"
-  rate_limit:
-    requests_per_minute: 60
+[transports.graphql]
+host = "127.0.0.1"
+port = 3001
+
+[workflows]
+path = "./workflows/"
+
+[plugins]
+path = "./plugins/"
+
+[logging]
+level = "info"
+format = "json"
 ```
 
-Environment variables override any YAML value. The naming convention maps the YAML hierarchy to underscore-separated uppercase keys. For example, `core.port` becomes `LIFE_ENGINE_CORE_PORT`.
+Each module declares its own config struct. Core reads top-level section keys to determine which modules are active, then hands the raw TOML section to the relevant module for parsing:
 
-CLI arguments follow the same naming with dot notation: `--core.port=3750`.
+- `[storage]` is handed to `packages/storage-sqlite`
+- `[auth]` is handed to `packages/auth`
+- `[transports.rest]` is handed to `packages/transport-rest`
+- `[transports.graphql]` is handed to `packages/transport-graphql`
+- `[plugins]` is used by Core for plugin discovery; individual plugin configs like `[plugins.connector-email]` are handed to each plugin
+- `[workflows]` is used by the workflow engine for definition loading
+
+Environment variables override any TOML value. The naming convention maps the TOML hierarchy to underscore-separated uppercase keys. For example, `storage.path` becomes `LIFE_ENGINE_STORAGE_PATH`.
 
 ## Defaults
 
-- **Localhost-only** — Binds to `127.0.0.1` by default. No network exposure without explicit config change.
-- **Encrypted storage** — SQLCipher encryption at rest is always enabled. TLS required for all outbound connections.
-- **Deny-by-default plugins** — Plugins receive no capabilities unless explicitly granted in their manifest and approved at install time.
+- **Localhost-only** — Transports bind to `127.0.0.1` by default. No network exposure without explicit config change.
+- **Encrypted storage** — SQLCipher encryption at rest is always enabled.
+- **Deny-by-default plugins** — Plugins receive no capabilities unless explicitly granted in their manifest and approved in config.
 - **Offline-capable** — Everything works without internet access except syncing from external services.
+- **No default transport** — If no transports are configured, Core starts but accepts no connections. This is valid for headless/scheduler-only deployments.
 
 ## Deployment Modes
 
-- **Bundled with App** — Core runs as a sidecar subprocess of the Tauri desktop app. One install, zero server setup. The App manages Core's lifecycle.
+- **Bundled with App** — Core runs as a subprocess of the Tauri desktop app. One install, zero server setup. The App manages Core's lifecycle.
 - **Standalone binary** — Run on any machine directly. No runtime dependencies beyond the binary itself.
 - **Docker container** — Single `docker run` command. Config mounted as a volume.
 - **Home server** — Raspberry Pi, old laptop, NAS. Runs on 128 MB RAM minimum.
@@ -105,27 +130,29 @@ CLI arguments follow the same naming with dot notation: `--core.port=3750`.
 
 ## Graceful Shutdown
 
-When Core receives a `SIGTERM` signal:
+When Core receives `SIGTERM` or `SIGINT`, it shuts down in reverse startup order:
 
-1. Stop accepting new HTTP connections
-2. Wait for in-flight requests to complete (up to 5 seconds)
-3. Stop the background scheduler and wait for running tasks to finish
-4. Call `on_unload` on every loaded plugin
-5. Close the SQLite database connection
-6. Terminate the Pocket ID sidecar process
-7. If any step exceeds the 5-second timeout, force shutdown
+1. Stop all active transports — cease accepting new connections, drain in-flight requests
+2. Unload all WASM plugins
+3. Stop the workflow engine — stop the scheduler, wait for running tasks to complete
+4. Shut down the auth module
+5. Close the storage backend
+6. If any step exceeds the configurable shutdown timeout, force shutdown and log a warning
 
 ## Structured Logging
 
-Core uses the `tracing` crate for structured logging with JSON output. Every log entry includes a timestamp, level, module path, and structured fields. Request logs include method, path, status code, and duration.
+Core uses the `tracing` crate for structured logging with JSON output. Every log entry includes a timestamp, level, module path, and structured fields. Startup steps are logged with step number, name, and duration.
 
-Log levels are configurable via the `core.log_level` config key. Default is `info`.
+Request-level logging (method, path, status, duration) is the responsibility of each transport crate, not Core.
+
+Log levels are configurable via the `logging.level` config key. Default is `info`.
 
 ## Acceptance Criteria
 
-- `cargo run` starts Core, loads zero plugins, and binds to `127.0.0.1:3750`
-- `GET /api/system/health` returns a valid health response
+- `cargo run -p core` starts Core, loads zero plugins, and waits for shutdown
+- If the REST transport is configured, `GET /api/system/health` returns a valid health response
 - Core shuts down cleanly on `SIGTERM` with no error output
-- Config loads correctly from YAML, with env var and CLI overrides applied in the correct priority order
+- Config loads correctly from TOML with env var overrides applied in the correct priority order
 - Invalid or insecure config values produce clear error messages and prevent startup
-- Database encryption key is derived correctly and the database opens on subsequent launches with the same passphrase
+- Database encryption key is derived correctly and the storage backend opens on subsequent launches with the same passphrase
+- Core starts with no transports configured (headless/scheduler-only mode)

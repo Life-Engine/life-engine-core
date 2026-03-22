@@ -1,66 +1,82 @@
 <!--
 domain: sdk
-updated: 2026-03-22
+updated: 2026-03-23
 spec-brief: ./brief.md
 -->
 
 # Plugin SDK RS — Requirements
 
-## 1 — CorePlugin Trait
+## 1 — Plugin Trait
 
-- **1.1** — WHEN a plugin author implements `CorePlugin` on a struct, THEN the compiler SHALL enforce that all eight methods (`id`, `display_name`, `version`, `capabilities`, `on_load`, `on_unload`, `routes`, `handle_event`) are implemented.
-- **1.2** — WHEN `id()` is called, THEN it SHALL return a non-empty string in reverse-domain format (e.g. `com.life-engine.todos`).
-- **1.3** — WHEN `version()` is called, THEN it SHALL return a valid semver string.
-- **1.4** — WHEN `capabilities()` is called, THEN it SHALL return the full list of capabilities the plugin requires; Core uses this list for capability enforcement.
-- **1.5** — WHEN `on_load()` is called with a `PluginContext`, THEN the plugin SHALL perform initialisation and return `Ok(())` on success or an error describing the failure.
-- **1.6** — WHEN `on_unload()` is called, THEN the plugin SHALL release resources and return `Ok(())` on success.
-- **1.7** — WHEN `routes()` is called, THEN it SHALL return a `Vec<PluginRoute>` that Core mounts under `/api/plugins/{plugin-id}/`.
-- **1.8** — WHEN `handle_event()` is called with a `CoreEvent`, THEN the plugin SHALL process the event and return `Ok(())` or an error.
+- **1.1** — WHEN a plugin author implements `Plugin` on a struct, THEN the compiler SHALL enforce that all five methods (`id`, `display_name`, `version`, `actions`, `execute`) are implemented.
+- **1.2** — WHEN `id()` is called, THEN it SHALL return a non-empty string in reverse-domain format (e.g. `com.life-engine.connector-email`).
+- **1.3** — WHEN `display_name()` is called, THEN it SHALL return a human-readable name for UI and logging.
+- **1.4** — WHEN `version()` is called, THEN it SHALL return a valid semver string.
+- **1.5** — WHEN `actions()` is called, THEN it SHALL return a `Vec<Action>` declaring all pipeline actions the plugin provides.
+- **1.6** — WHEN `execute(action, input)` is called with an action name and a `PipelineMessage`, THEN it SHALL return a `Result<PipelineMessage>` containing the output or an error implementing `EngineError`.
 
-## 2 — PluginContext
+## 2 — Re-exports from packages/types
 
-- **2.1** — WHEN `on_load` is called, THEN the `PluginContext` SHALL provide scoped storage access limited to the plugin's own namespace.
-- **2.2** — WHEN a plugin reads config via `PluginContext`, THEN it SHALL receive only its own configuration values.
-- **2.3** — WHEN a plugin subscribes to events via `PluginContext`, THEN only events matching declared capabilities SHALL be delivered.
-- **2.4** — WHEN a plugin logs via `PluginContext`, THEN log entries SHALL be tagged with the plugin's ID automatically.
-- **2.5** — WHEN a plugin attempts an operation outside its granted capabilities, THEN the `PluginContext` SHALL return an error.
+- **2.1** — WHEN the SDK is compiled, THEN it SHALL re-export all 7 CDM type structs: Event, Task, Contact, Email, Note, File, Credential.
+- **2.2** — WHEN the SDK is compiled, THEN it SHALL re-export `PipelineMessage`, `MessageMetadata`, and `TypedPayload`.
+- **2.3** — WHEN a CDM struct is serialised with serde, THEN it SHALL produce valid JSON matching the platform schema.
+- **2.4** — WHEN a CDM struct is deserialised from JSON, THEN unknown fields SHALL be preserved in an `extensions` map.
+- **2.5** — WHEN a CDM struct includes an `id` field, THEN it SHALL be typed as `String` and required.
+- **2.6** — WHEN a CDM struct includes timestamp fields (`_created`, `_updated`), THEN they SHALL be ISO 8601 / RFC 3339 strings.
 
-## 3 — Capability Enum
+## 3 — Re-exports from packages/traits
 
-- **3.1** — WHEN the `Capability` enum is defined, THEN it SHALL include at minimum: `StorageRead`, `StorageWrite`, `HttpOutbound`, `CredentialsRead`, `CredentialsWrite`, `EventsSubscribe`, `EventsEmit`, `ConfigRead`, `Logging`.
-- **3.2** — WHEN a new capability is added in a minor release, THEN existing plugins that do not use it SHALL continue to compile without changes.
-- **3.3** — WHEN `Capability` values are serialised (for manifests), THEN each variant SHALL map to a colon-delimited string (e.g. `StorageRead` to `storage:read`).
+- **3.1** — WHEN the SDK is compiled, THEN it SHALL re-export the `Plugin` trait from `packages/traits`.
+- **3.2** — WHEN the SDK is compiled, THEN it SHALL re-export the `EngineError` trait from `packages/traits`.
+- **3.3** — WHEN a plugin author imports from the SDK, THEN they SHALL NOT need to add `packages/types` or `packages/traits` as direct dependencies.
 
-## 4 — Route Registration
+## 4 — PipelineMessage Envelope
 
-- **4.1** — WHEN a `PluginRoute` is constructed, THEN it SHALL specify an HTTP method, a relative path, and a handler function.
-- **4.2** — WHEN Core mounts plugin routes, THEN each route SHALL be prefixed with `/api/plugins/{plugin-id}/`.
-- **4.3** — WHEN a plugin is unloaded, THEN its routes SHALL be unmounted and return 404.
+- **4.1** — WHEN a `PipelineMessage` is constructed, THEN it SHALL contain `metadata` (`MessageMetadata`) and `payload` (`TypedPayload`).
+- **4.2** — WHEN `MessageMetadata` is constructed, THEN it SHALL include a correlation ID, source, timestamp, and auth context.
+- **4.3** — WHEN `TypedPayload` is constructed, THEN it SHALL be either `Cdm(CdmType)` for one of the 7 canonical types or `Custom(SchemaValidated<Value>)` for plugin-defined types.
+- **4.4** — WHEN a `PipelineMessage` is passed between pipeline steps, THEN metadata SHALL be preserved and payload SHALL be the output of the previous step.
 
-## 5 — Canonical Collection Types
+## 5 — EngineError Trait
 
-- **5.1** — WHEN the SDK is compiled, THEN it SHALL include Rust struct definitions for all 7 canonical types: Event, Task, Contact, Note, Email, File, Credential.
-- **5.2** — WHEN a canonical struct is serialised with serde, THEN it SHALL produce valid JSON matching the platform schema.
-- **5.3** — WHEN a canonical struct is deserialised from JSON, THEN unknown fields SHALL be preserved in an `extensions` map.
-- **5.4** — WHEN a canonical struct includes an `id` field, THEN it SHALL be typed as `String` and required.
-- **5.5** — WHEN a canonical struct includes timestamp fields (`_created`, `_updated`), THEN they SHALL be ISO 8601 / RFC 3339 strings.
+- **5.1** — WHEN a plugin defines an error type, THEN it SHALL implement the `EngineError` trait.
+- **5.2** — WHEN `code()` is called on an error, THEN it SHALL return a module-scoped error code string (e.g. `EMAIL_001`).
+- **5.3** — WHEN `severity()` is called on an error, THEN it SHALL return one of `Fatal`, `Retryable`, or `Warning`.
+- **5.4** — WHEN `source_module()` is called on an error, THEN it SHALL return the plugin or module identifier.
+- **5.5** — WHEN the workflow engine receives a `Fatal` error, THEN it SHALL abort the pipeline. WHEN it receives `Retryable`, THEN it SHALL retry up to the configured limit. WHEN it receives `Warning`, THEN it SHALL log and continue.
 
-## 6 — WASM Target
+## 6 — StorageContext
 
-- **6.1** — WHEN the SDK crate is compiled with `--target wasm32-wasi`, THEN it SHALL produce a valid WASM module with no host-specific dependencies.
-- **6.2** — WHEN the resulting `.wasm` binary is loaded by Extism, THEN it SHALL expose the expected entry points for lifecycle and route dispatch.
-- **6.3** — WHEN the WASM module executes, THEN it SHALL have no direct filesystem, network, or OS access outside of host-provided functions.
+- **6.1** — WHEN a plugin uses `StorageContext`, THEN it SHALL provide a fluent query builder API for reading collections.
+- **6.2** — WHEN `storage.query("contacts")` is called, THEN it SHALL begin a query builder chain scoped to the named collection.
+- **6.3** — WHEN `.where_eq(field, value)` is called on a query builder, THEN it SHALL add an equality filter.
+- **6.4** — WHEN `.order_by(field)` is called on a query builder, THEN it SHALL set the sort order.
+- **6.5** — WHEN `.limit(n)` is called on a query builder, THEN it SHALL cap the result count.
+- **6.6** — WHEN `.execute()` is called on a query builder, THEN it SHALL return a `Result<Vec<PipelineMessage>>`.
+- **6.7** — WHEN a plugin performs a write via `StorageContext`, THEN it SHALL produce a `StorageMutation` value that the active `StorageBackend` translates to a native operation.
+- **6.8** — WHEN a plugin uses `StorageContext`, THEN access SHALL be scoped to the plugin's declared `storage:read` or `storage:write` capabilities.
 
-## 7 — Builder Pattern
+## 7 — Helper Macros
 
-- **7.1** — WHEN `PluginBuilder::new(id)` is called, THEN it SHALL accept a plugin ID string and return a builder instance.
-- **7.2** — WHEN the builder is used, THEN `display_name`, `version`, and at least one capability SHALL be required before `build()` succeeds.
-- **7.3** — WHEN `build()` is called with missing required fields, THEN it SHALL return a descriptive error (not panic).
-- **7.4** — WHEN the builder adds routes via `.route(method, path, handler)`, THEN each route SHALL be included in the built plugin's `routes()` output.
-- **7.5** — WHEN the builder adds capabilities via `.capability(cap)`, THEN each capability SHALL be included in the built plugin's `capabilities()` output.
+- **7.1** — WHEN a plugin author uses the registration macro, THEN it SHALL generate the WASM entry-point boilerplate needed by Extism.
+- **7.2** — WHEN the registration macro is applied to a struct implementing `Plugin`, THEN the generated code SHALL expose the struct's `execute` method as the WASM callable entry point.
+- **7.3** — WHEN the registration macro is used, THEN it SHALL NOT require the plugin author to write any unsafe code.
 
-## 8 — Versioning
+## 8 — Test Utilities
 
-- **8.1** — WHEN the SDK ships a v1.x minor release, THEN it SHALL contain only additive changes; no removals or breaking signature changes.
-- **8.2** — WHEN a v2.x release ships, THEN v1.x SHALL continue to receive security fixes for 12 months.
-- **8.3** — WHEN Core loads a plugin, THEN it SHALL check the SDK version declared in the WASM manifest and reject plugins built against unsupported major versions.
+- **8.1** — WHEN a plugin author uses the mock `StorageContext`, THEN it SHALL behave identically to the real `StorageContext` API but store data in memory.
+- **8.2** — WHEN a plugin author uses the mock `PipelineMessage` builder, THEN it SHALL produce valid `PipelineMessage` instances with sensible defaults for metadata.
+- **8.3** — WHEN a plugin author runs tests with mock utilities, THEN no running Core instance or database SHALL be required.
+
+## 9 — WASM Target
+
+- **9.1** — WHEN the SDK crate is compiled with `--target wasm32-wasi`, THEN it SHALL produce a valid WASM module with no host-specific dependencies.
+- **9.2** — WHEN the resulting `.wasm` binary is loaded by Extism, THEN it SHALL expose the expected entry points for action dispatch.
+- **9.3** — WHEN the WASM module executes, THEN it SHALL have no direct filesystem, network, or OS access outside of host-provided functions.
+
+## 10 — Versioning
+
+- **10.1** — WHEN the SDK ships a minor release, THEN it SHALL contain only additive changes; no removals or breaking signature changes.
+- **10.2** — WHEN a new major release ships, THEN the previous major version SHALL continue to receive security fixes for 12 months.
+- **10.3** — WHEN Core loads a plugin, THEN it SHALL check the SDK version declared in the WASM manifest and reject plugins built against unsupported major versions.
+- **10.4** — WHEN the SDK version changes, THEN it SHALL NOT require a corresponding Core version change. The SDK is versioned independently.

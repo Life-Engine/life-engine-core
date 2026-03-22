@@ -1,6 +1,6 @@
 <!--
 domain: sdk
-updated: 2026-03-22
+updated: 2026-03-23
 spec-brief: ./brief.md
 -->
 
@@ -10,112 +10,157 @@ spec-brief: ./brief.md
 
 - [[#Purpose]]
 - [[#Package]]
-- [[#CorePlugin Trait]]
-- [[#PluginContext]]
-- [[#Capability Enum]]
-- [[#Route Registration]]
+- [[#Plugin Trait]]
+- [[#PipelineMessage Envelope]]
+- [[#EngineError Trait]]
+- [[#StorageContext]]
 - [[#Canonical Collection Types]]
+- [[#Helper Macros]]
+- [[#Test Utilities]]
 - [[#WASM Target]]
-- [[#Builder Pattern]]
 - [[#Versioning]]
 - [[#Acceptance Criteria]]
 
 ## Purpose
 
-This spec defines the Rust SDK for Core plugin authors. The SDK provides the trait definitions, types, and helpers that plugin authors need to implement a Core plugin, compile it to WASM, and load it into the Core runtime.
+This spec defines the Rust SDK for Life Engine plugin authors. The SDK is the single crate a plugin author depends on. It re-exports everything from `packages/types` and `packages/traits`, and provides additional DX features: a `StorageContext` query builder, helper macros for plugin registration, and test utilities.
+
+Internal module developers (building storage backends, transports, or the workflow engine) depend on `packages/types` + `packages/traits` directly. They do not use the SDK.
 
 Reference: [[03 - Projects/Life Engine/Design/Core/Plugins]]
 
 ## Package
 
-The SDK is published as the `life-engine-plugin-sdk` crate on crates.io. Plugin authors add it as a dependency in their `Cargo.toml`:
+The SDK is published as the `life-engine-plugin-sdk` crate. Plugin authors add it as their sole Life Engine dependency:
 
 ```toml
 [dependencies]
 life-engine-plugin-sdk = "1"
 ```
 
-The crate re-exports all public types, traits, and macros needed to author a Core plugin. It has no dependency on Core internals.
+The crate re-exports all public types, traits, and macros needed to author a plugin. It has no dependency on Core internals.
 
-## CorePlugin Trait
+## Plugin Trait
 
-Every Core plugin must implement the `CorePlugin` trait. This is the single entry point that Core uses to manage the plugin lifecycle, discover routes, and dispatch events.
+Every plugin implements the `Plugin` trait (defined in `packages/traits`, re-exported via the SDK). This is the single contract between plugins and Core.
 
 ```rust
 #[async_trait]
-pub trait CorePlugin: Send + Sync {
+pub trait Plugin: Send + Sync {
     fn id(&self) -> &str;
     fn display_name(&self) -> &str;
     fn version(&self) -> &str;
-    fn capabilities(&self) -> Vec<Capability>;
-    async fn on_load(&mut self, ctx: &PluginContext) -> Result<()>;
-    async fn on_unload(&mut self) -> Result<()>;
-    fn routes(&self) -> Vec<PluginRoute>;
-    async fn handle_event(&self, event: &CoreEvent) -> Result<()>;
+    fn actions(&self) -> Vec<Action>;
+    async fn execute(&self, action: &str, input: PipelineMessage) -> Result<PipelineMessage>;
 }
 ```
 
 Method responsibilities:
 
-- **id** — Returns the unique plugin identifier (reverse-domain format, e.g. `com.life-engine.google-calendar`).
+- **id** — Returns the unique plugin identifier in reverse-domain format (e.g. `com.life-engine.connector-email`).
 - **display_name** — Returns a human-readable name for UI and logging.
 - **version** — Returns the plugin version string (semver).
-- **capabilities** — Declares which scoped capabilities this plugin requires. Core grants only the requested capabilities at load time.
-- **on_load** — Called when Core loads the plugin. Receives a `PluginContext` for accessing storage, config, events, and logging. Use this for initialisation logic.
-- **on_unload** — Called when Core unloads the plugin. Use this for cleanup (close connections, flush buffers).
-- **routes** — Returns the HTTP routes this plugin exposes. Core mounts them under the plugin namespace.
-- **handle_event** — Called when an event the plugin subscribed to is emitted on the event bus.
+- **actions** — Declares the pipeline actions this plugin provides. Each action is a step that can be referenced in a workflow definition.
+- **execute** — Called by the workflow engine when a pipeline step invokes one of this plugin's actions. Receives the action name and a `PipelineMessage` as input, returns a `PipelineMessage` as output.
 
-## PluginContext
+Key differences from the previous architecture:
 
-The `PluginContext` struct is passed to the plugin during `on_load`. It provides scoped access to Core services. A plugin can only use the services matching its declared capabilities.
+- No `CorePlugin` trait — it is now simply `Plugin`.
+- No `PluginContext` — replaced by `StorageContext` (for storage) and config passed at init.
+- No `routes()` method — plugins declare actions, transports handle routing.
+- No `capabilities()` method — capabilities are declared in `manifest.toml`, not in Rust code.
+- No `on_load()` / `on_unload()` lifecycle methods — the plugin lifecycle is managed by the WASM runtime.
+- No `handle_event()` method — event handling is done through actions invoked by workflows.
 
-PluginContext provides:
+## PipelineMessage Envelope
 
-- **Scoped storage access** — Read and write to the plugin's own namespace within the data store. Plugins cannot access another plugin's storage directly.
-- **Config access** — Read the plugin's configuration values as set by the user.
-- **Event bus** — Subscribe to and emit events on the Core event bus. Subscriptions are filtered by the plugin's declared event capabilities.
-- **Logging** — Structured logging that Core collects and surfaces in diagnostics. Log entries are tagged with the plugin ID automatically.
-
-## Capability Enum
-
-The `Capability` enum defines the permissions a plugin can request. Core enforces these at runtime — any operation outside the granted capabilities returns an error.
+The standard envelope for all data flowing through workflows. Defined in `packages/types`, re-exported via the SDK.
 
 ```rust
-pub enum Capability {
-    StorageRead,
-    StorageWrite,
-    HttpOutbound,
-    CredentialsRead,
-    CredentialsWrite,
-    EventsSubscribe,
-    EventsEmit,
-    ConfigRead,
-    Logging,
+pub struct PipelineMessage {
+    pub metadata: MessageMetadata,
+    pub payload: TypedPayload,
+}
+
+pub struct MessageMetadata {
+    pub correlation_id: String,
+    pub source: String,
+    pub timestamp: String,
+    pub auth_context: AuthContext,
+}
+
+pub enum TypedPayload {
+    Cdm(CdmType),
+    Custom(SchemaValidated<Value>),
 }
 ```
 
-All capabilities are scoped to the requesting plugin's namespace. For example, `StorageRead` grants read access to the plugin's own storage partition, not the entire data store. `HttpOutbound` allows the plugin to make outbound HTTP requests (subject to allowlisting in future versions).
+- **metadata** — Correlation ID for tracing, source identifier, timestamp, and auth context from the originating request.
+- **payload** — Either a CDM type (one of the 7 canonical collection types) or a custom type validated against a JSON Schema declared in the plugin manifest.
 
-## Route Registration
+Every plugin action receives a `PipelineMessage` and returns a `PipelineMessage`. This standard contract is what makes plugins composable — any plugin's output can be another plugin's input, as long as the schemas are compatible.
 
-Plugins expose HTTP endpoints by returning a `Vec<PluginRoute>` from the `routes()` method. Core mounts all plugin routes under the namespace:
+## EngineError Trait
 
+The error contract for all module boundaries. Defined in `packages/traits`, re-exported via the SDK.
+
+```rust
+pub trait EngineError: std::error::Error {
+    fn code(&self) -> &str;
+    fn severity(&self) -> Severity;
+    fn source_module(&self) -> &str;
+}
+
+pub enum Severity {
+    Fatal,
+    Retryable,
+    Warning,
+}
 ```
-/api/plugins/{plugin-id}/
+
+Plugin authors define their own error types and implement `EngineError`. The workflow engine uses severity to decide behavior:
+
+- **Fatal** — Abort the pipeline, run error handler if configured.
+- **Retryable** — Retry the step up to the configured limit, then fail.
+- **Warning** — Log and continue.
+
+## StorageContext
+
+Plugins interact with storage through a query builder abstraction provided by the SDK. The `StorageContext` produces `StorageQuery` and `StorageMutation` values. The active `StorageBackend` (injected by the host) translates these to native database queries. Plugins never import database crates directly.
+
+Fluent query API:
+
+```rust
+let results = storage
+    .query("contacts")
+    .where_eq("email", "alice@example.com")
+    .order_by("last_name")
+    .limit(10)
+    .execute()
+    .await?;
 ```
 
-For example, a plugin with ID `com.life-engine.todos` that registers a route `/items` is reachable at:
+Write API:
 
-```
-/api/plugins/com.life-engine.todos/items
+```rust
+storage
+    .insert("contacts", contact_message)
+    .await?;
+
+storage
+    .update("contacts", id, updated_message)
+    .await?;
+
+storage
+    .delete("contacts", id)
+    .await?;
 ```
 
-Each `PluginRoute` specifies the HTTP method, path, and handler function. Core handles authentication and authorisation before dispatching to the plugin handler.
+All storage operations are scoped by the plugin's declared capabilities (`storage:read`, `storage:write`). A plugin that calls a storage method it was not granted receives an error.
 
 ## Canonical Collection Types
 
-The SDK includes Rust struct definitions for the 7 canonical collection types. These structs have `serde::Serialize` and `serde::Deserialize` derives, making them ready for JSON serialisation out of the box.
+The SDK re-exports the 7 CDM type structs from `packages/types`. These structs have `serde::Serialize` and `serde::Deserialize` derives for JSON serialisation.
 
 The canonical types are:
 
@@ -127,7 +172,45 @@ The canonical types are:
 - **File** — File metadata with checksum
 - **Credential** — Secure credential storage with typed claims
 
-Full schema definitions for each type are in [[03 - Projects/Life Engine/Planning/specs/sdk/Canonical Data Models]].
+Each struct includes an `extensions: HashMap<String, serde_json::Value>` field for plugin-specific data. Unknown fields encountered during deserialisation are preserved in this map.
+
+## Helper Macros
+
+The SDK provides macros to reduce plugin registration boilerplate:
+
+```rust
+use life_engine_plugin_sdk::register_plugin;
+
+register_plugin!(MyPlugin);
+```
+
+The `register_plugin!` macro generates the WASM entry-point code required by Extism, wiring the struct's `Plugin` trait implementation to the callable WASM exports. Plugin authors do not write any unsafe code.
+
+## Test Utilities
+
+The SDK ships test utilities so plugin authors can unit-test without a running Core instance:
+
+- **Mock StorageContext** — In-memory implementation of the `StorageContext` API. Supports the same fluent query builder and write methods. Stores data in a `HashMap` for assertion.
+- **Mock PipelineMessage builder** — Produces valid `PipelineMessage` instances with sensible defaults for metadata (auto-generated correlation ID, current timestamp, test auth context). Allows overriding any field.
+
+Example usage:
+
+```rust
+use life_engine_plugin_sdk::test::{mock_storage, mock_message};
+
+#[tokio::test]
+async fn test_fetch_action() {
+    let storage = mock_storage();
+    let input = mock_message()
+        .with_payload(TypedPayload::Cdm(CdmType::Emails(vec![])))
+        .build();
+
+    let plugin = MyPlugin::new(storage);
+    let output = plugin.execute("fetch", input).await.unwrap();
+
+    assert!(matches!(output.payload, TypedPayload::Cdm(CdmType::Emails(_))));
+}
+```
 
 ## WASM Target
 
@@ -141,36 +224,14 @@ cargo build --target wasm32-wasi --release
 
 The resulting `.wasm` file is the distributable plugin artifact. Core loads it at runtime without requiring the plugin source code or a Rust toolchain on the host machine.
 
-WASI provides the plugin with a sandboxed environment — file system access, environment variables, and network access are all mediated by the runtime and constrained by the plugin's declared capabilities.
-
-## Builder Pattern
-
-The SDK provides a builder pattern for constructing plugin instances, reducing boilerplate for common configurations:
-
-```rust
-use life_engine_plugin_sdk::PluginBuilder;
-
-let plugin = PluginBuilder::new("com.example.my-plugin")
-    .display_name("My Plugin")
-    .version("0.1.0")
-    .capability(Capability::StorageRead)
-    .capability(Capability::StorageWrite)
-    .capability(Capability::EventsSubscribe)
-    .route(Method::GET, "/items", handle_list_items)
-    .route(Method::POST, "/items", handle_create_item)
-    .on_load(init)
-    .on_unload(cleanup)
-    .build();
-```
-
-The builder validates required fields at compile time where possible and returns clear errors for missing configuration at runtime.
+WASI provides the plugin with a sandboxed environment. File system access, network access, and OS access are all mediated by the runtime and constrained by the plugin's declared capabilities in `manifest.toml`.
 
 ## Versioning
 
 The SDK is versioned independently from Core.
 
-- **v1.x** — Additive changes only. New capabilities, new canonical fields, new helper methods. No removals or breaking signature changes.
-- **v2.x** — Breaking changes permitted. When v2 ships, v1 continues to receive security fixes for 12 months. Core maintains compatibility with both v1 and v2 plugins during the overlap window.
+- **Minor releases** — Additive changes only. New optional trait methods, new CDM fields, new helper functions. No removals or breaking signature changes.
+- **Major releases** — Breaking changes permitted. When a new major version ships, the previous major version continues to receive security fixes for 12 months. Core maintains compatibility with both versions during the overlap window.
 
 Plugin authors pin to a major version in their `Cargo.toml` and receive non-breaking updates automatically.
 
@@ -178,8 +239,11 @@ Plugin authors pin to a major version in their `Cargo.toml` and receive non-brea
 
 A community plugin author can:
 
-1. Add `life-engine-plugin-sdk` as a Cargo dependency
-2. Implement the `CorePlugin` trait on their own struct
-3. Use the builder pattern for convenience if desired
-4. Compile the plugin to `wasm32-wasi` target
-5. Load the resulting `.wasm` file in Core and have it respond to events and serve routes
+1. Add `life-engine-plugin-sdk` as their sole Life Engine dependency
+2. Implement the `Plugin` trait on their own struct
+3. Declare actions that receive and return `PipelineMessage`
+4. Use `StorageContext` to read and write collections via the fluent query builder
+5. Use helper macros for registration boilerplate
+6. Unit-test with mock `StorageContext` and mock `PipelineMessage` builders
+7. Compile the plugin to `wasm32-wasi` target
+8. Drop the resulting `.wasm` and `manifest.toml` into Core's plugins directory and have it work

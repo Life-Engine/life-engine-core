@@ -1,150 +1,157 @@
 <!--
 domain: core
-updated: 2026-03-22
+updated: 2026-03-23
 spec-brief: ./brief.md
 -->
 
-# Migration Format Tasks
+# Implementation Plan — Migration Format
 
+## Task Overview
+
+This plan implements the data migration system. Work starts with the manifest validation logic for `manifest.toml` entries, then builds the WASM transform runner, quarantine and logging tables, backup mechanism, the migration execution engine, and canonical migration support. Each task targets 1-3 files and produces a testable outcome.
+
+**Progress:** 0 / 11 tasks complete
+
+## Steering Document Compliance
+
+- Migrations are declared in `manifest.toml` (not a separate JSON manifest)
+- Transforms run inside the WASM sandbox — no dual-runtime (JS/Rust), WASM only
+- Schema validation uses the `StorageBackend` trait
+- No JavaScript or TypeScript — Core is Rust/WASM only
+- Error types implement EngineError trait (code, severity, source_module)
+
+## Atomic Task Requirements
+
+- **File Scope:** 1-3 related files maximum
+- **Time Boxing:** 15-30 minutes per task
+- **Single Purpose:** one testable outcome per task
+- **Specific Files:** exact file paths specified
+- **Agent-Friendly:** clear input/output, minimal context switching
+
+---
+
+## 1.1 — Migration Manifest Validation
 > spec: ./brief.md
 
-## 1.1 — Migration Manifest Schema
+- [ ] Implement manifest.toml migration entry parsing and validation
+  <!-- file: packages/workflow-engine/src/migration/manifest.rs -->
+  <!-- purpose: Parse [[migrations]] array from manifest.toml; validate from/to version fields, semver range format, and chain contiguity -->
+  <!-- requirements: 1.1, 1.2, 1.3, 1.5, 1.6 -->
+  <!-- leverage: none -->
+
+---
+
+## 1.2 — Migration Entry Overlap Detection
 > spec: ./brief.md
-
-Define the JSON Schema for migration manifest entries.
-
-- Create `schemas/migration.schema.json` with `from`, `to`, `transform`, and `description` fields
-- Add semver range validation pattern for `from` field
-- Add exact semver validation pattern for `to` field
-
-> estimate: 20 min
-
-## 1.2 — Manifest Validation Logic
-> spec: ./brief.md
-
-Implement migration manifest validation in Core.
-
-- Add validation that `from` minimum is strictly less than `to`
-- Add validation that `from` ranges do not overlap between entries
-- Add chain contiguity check (each `to` matches next `from`, final `to` matches plugin version)
-
-> estimate: 25 min
 > depends: 1.1
 
-## 1.3 — Transform Script File Validation
+- [ ] Add overlap detection for migration `from` ranges
+  <!-- file: packages/workflow-engine/src/migration/manifest.rs -->
+  <!-- purpose: Validate that no two migration entries have overlapping from ranges; reject plugin update on overlap -->
+  <!-- requirements: 1.4 -->
+  <!-- leverage: manifest parsing from WP 1.1 -->
+
+---
+
+## 1.3 — WASM Export Validation
 > spec: ./brief.md
+> depends: 1.1
 
-Validate transform script files before execution.
+- [ ] Validate transform export names exist in plugin.wasm
+  <!-- file: packages/workflow-engine/src/migration/validate.rs -->
+  <!-- purpose: Load plugin.wasm and verify the declared transform function name exists as an export; reject plugin if missing -->
+  <!-- requirements: 8.1, 8.2, 8.3 -->
+  <!-- leverage: Extism WASM loading -->
 
-- Verify transform script path exists relative to plugin root
-- Verify file size is under 1 MB
-- Reject plugin update and keep previous version active on any validation failure
+---
 
-> estimate: 15 min
-> depends: 1.2
-
-## 2.1 — JS Transform Runner
+## 2.1 — WASM Transform Runner
 > spec: ./brief.md
+> depends: 1.1
 
-Implement the JavaScript migration script executor.
+- [ ] Implement the WASM migration transform executor
+  <!-- file: packages/workflow-engine/src/migration/runner.rs -->
+  <!-- purpose: Load the plugin WASM module, call the exported migrate function with serialized JSON record, handle Ok/Err results, enforce sandbox (no host functions) -->
+  <!-- requirements: 2.1, 2.2, 2.3, 2.4, 2.5 -->
+  <!-- leverage: Extism WASM runtime -->
 
-- Create a sandboxed JS execution environment that calls `migrate(record)` with a deep-cloned record
-- Enforce synchronous execution with no access to network, storage, or non-deterministic APIs
-- Catch thrown errors and route the record to quarantine with the error message
-
-> estimate: 30 min
-> depends: 1.2
-
-## 2.2 — Rust Transform Runner
-> spec: ./brief.md
-
-Implement the Rust migration function executor.
-
-- Create a Rust execution path that calls `migrate(record: serde_json::Value)` and handles `Result`
-- Route `Ok(value)` to the transformed record output
-- Route `Err(message)` to quarantine with the provided error message
-
-> estimate: 25 min
-> depends: 1.2
+---
 
 ## 3.1 — Quarantine Table
 > spec: ./brief.md
 
-Create the quarantine table and CRUD operations.
+- [ ] Create the quarantine table schema and CRUD operations
+  <!-- file: packages/storage-sqlite/src/migration/quarantine.rs -->
+  <!-- purpose: Define quarantine table with columns (id, record_data, plugin_id, collection, from_version, to_version, error_message, timestamp); implement insert and retry operations -->
+  <!-- requirements: 5.1, 5.2, 5.3 -->
+  <!-- leverage: packages/storage-sqlite StorageBackend -->
 
-- Define `quarantine` table schema with columns: id, record_data, plugin_id, collection, from_version, to_version, error_message, timestamp
-- Implement insert operation for failed records
-- Implement retry operation that re-runs the transform and moves the record back on success
-
-> estimate: 25 min
+---
 
 ## 3.2 — Migration Log Table
 > spec: ./brief.md
 
-Create the migration log table and logging operations.
+- [ ] Create the migration log table schema and logging operations
+  <!-- file: packages/storage-sqlite/src/migration/log.rs -->
+  <!-- purpose: Define migration_log table with columns (id, plugin_id, collection, from_version, to_version, records_migrated, records_quarantined, duration_ms, backup_path, timestamp); implement insert and failure logging -->
+  <!-- requirements: 6.1, 6.2 -->
+  <!-- leverage: packages/storage-sqlite StorageBackend -->
 
-- Define `migration_log` table schema with columns: id, plugin_id, collection, from_version, to_version, records_migrated, records_quarantined, duration_ms, backup_path, timestamp
-- Implement insert operation for completed migration runs
-- Implement failure logging with zero records_migrated and error context
-
-> estimate: 20 min
+---
 
 ## 4.1 — Backup Mechanism
 > spec: ./brief.md
 
-Implement pre-migration SQLite backup.
+- [ ] Implement pre-migration SQLite backup
+  <!-- file: packages/storage-sqlite/src/migration/backup.rs -->
+  <!-- purpose: Copy database to {data_dir}/backups/pre-migration-{timestamp}.db before migration; record backup path in migration log; implement restore function -->
+  <!-- requirements: 7.1, 7.2, 7.3 -->
+  <!-- leverage: packages/storage-sqlite -->
 
-- Create backup logic that copies the database to `{data_dir}/backups/pre-migration-{timestamp}.db`
-- Record the backup path in the migration log entry
-- Add restore function that replaces the current database with a backup file
-
-> estimate: 20 min
+---
 
 ## 4.2 — Migration Execution Engine
 > spec: ./brief.md
+> depends: 2.1, 3.1, 3.2, 4.1
 
-Implement the core migration execution loop.
+- [ ] Implement the core migration execution loop
+  <!-- file: packages/workflow-engine/src/migration/engine.rs -->
+  <!-- purpose: Begin SQLite transaction, iterate eligible records, apply WASM transform chain in ascending version order, update version column on success, quarantine on failure, validate output against StorageBackend schema, commit or rollback -->
+  <!-- requirements: 4.1, 4.2, 4.3, 4.4, 9.1, 9.2 -->
+  <!-- leverage: WASM runner from WP 2.1, quarantine from WP 3.1, log from WP 3.2, backup from WP 4.1 -->
 
-- Begin a SQLite transaction for each migration run
-- Iterate all eligible records, apply the transform chain in ascending version order
-- Update each record's `version` column on success, quarantine on failure
-- Commit the transaction or roll back on failure
-
-> estimate: 30 min
-> depends: 2.1, 2.2, 3.1, 3.2, 4.1
+---
 
 ## 5.1 — Canonical Migration Path
 > spec: ./brief.md
-
-Set up the canonical migration file structure and startup trigger.
-
-- Create `packages/types/migrations/` directory structure with subdirectories per collection
-- Add startup check that compares record `version` to current SDK schema version
-- Wire canonical migration scripts through the same execution engine as plugin migrations
-
-> estimate: 25 min
 > depends: 4.2
+
+- [ ] Set up canonical migration file structure and startup trigger
+  <!-- file: packages/types/src/migrations/mod.rs -->
+  <!-- purpose: Create packages/types/migrations/ directory structure with subdirectories per collection; add startup check that compares record version to current schema version; wire canonical WASM transforms through the same execution engine -->
+  <!-- requirements: 3.1, 3.2, 3.3 -->
+  <!-- leverage: migration engine from WP 4.2 -->
+
+---
 
 ## 5.2 — Version Column Update
 > spec: ./brief.md
-
-Implement post-transform version stamping.
-
-- After successful transform, update the record's `version` column in `plugin_data` to the migration's `to` version
-- Ensure version update is within the same SQLite transaction as the data transform
-- Prevent re-migration of already-updated records on subsequent startups
-
-> estimate: 15 min
 > depends: 4.2
+
+- [ ] Implement post-transform version stamping
+  <!-- file: packages/storage-sqlite/src/migration/version.rs -->
+  <!-- purpose: After successful transform, update record's version column in plugin_data to migration's to version within the same SQLite transaction; prevent re-migration on subsequent startups -->
+  <!-- requirements: 4.4 -->
+  <!-- leverage: migration engine from WP 4.2 -->
+
+---
 
 ## 6.1 — Integration Testing
 > spec: ./brief.md
-
-Verify end-to-end migration behaviour.
-
-- Test a JS migration that renames a field and adds a default value, verifying all records transform correctly
-- Test quarantine by providing a script that fails on specific records, verifying failed records are quarantined and successful records complete
-- Test chain migration (v1 to v2 to v3) in a single run, verifying records pass through both transforms
-
-> estimate: 30 min
 > depends: 5.1, 5.2
+
+- [ ] Verify end-to-end migration behaviour
+  <!-- file: packages/workflow-engine/src/tests/migration_test.rs -->
+  <!-- purpose: Test a WASM migration that renames a field and adds a default; test quarantine by providing a transform that fails on specific records; test chain migration (v1 to v2 to v3) in a single run; verify schema validation on transform output -->
+  <!-- requirements: 2.1, 2.2, 2.3, 4.1, 4.3, 5.1, 5.2, 9.1 -->
+  <!-- leverage: packages/test-utils -->

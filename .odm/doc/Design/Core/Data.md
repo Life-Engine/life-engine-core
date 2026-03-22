@@ -1,14 +1,64 @@
 ---
-title: "Engine — Data Layer"
-tags: [life-engine, engine, data, sqlite, encryption, schema]
+title: "Core — Data Layer"
+tags: [life-engine, core, data, storage, encryption, schema]
 created: 2026-03-14
+updated: 2026-03-23
 ---
 
 # Data Layer
 
-SQLite is the storage backend. All plugin data is stored in a document model with a fixed envelope. Canonical collections provide the shared data language of the ecosystem. All data is encrypted at rest.
+The data layer provides persistent storage behind an abstract `StorageBackend` trait. SQLite/SQLCipher is the current implementation. The backend is swappable without changing any plugin or module code.
 
-The data layer implements several [[03 - Projects/Life Engine/Design/Principles|Design Principles]]: *Parse, Don't Validate* (typed canonical collections with schema validation at the boundary — what passes validation is guaranteed to conform), *Single Source of Truth* (canonical schemas defined once in `packages/types/`, consumed everywhere), *Defence in Depth* (SQLCipher encryption, individual credential encryption, audit logging), and *Fail-Fast with Defined States* (bad data is rejected before it hits SQLite).
+Plugins never interact with the database directly. All storage access goes through a `StorageContext` query builder provided by the plugin SDK.
+
+## StorageBackend Trait
+
+Defined in `packages/traits`. Each storage implementation (SQLite, Postgres, etc.) implements this trait:
+
+```rust
+trait StorageBackend: Send + Sync {
+    async fn execute(&self, query: StorageQuery) -> Result<Vec<PipelineMessage>>;
+    async fn mutate(&self, op: StorageMutation) -> Result<()>;
+}
+```
+
+The trait is intentionally minimal. `StorageQuery` and `StorageMutation` are data structures produced by the query builder — the backend translates them to native queries for its engine.
+
+## StorageContext Query Builder
+
+Plugins interact with storage through a fluent query builder API provided by the plugin SDK:
+
+```rust
+// Read
+let contacts = storage
+    .query("contacts")
+    .where_eq("city", "Sydney")
+    .order_by("name")
+    .limit(10)
+    .execute()
+    .await?;
+
+// Write
+storage
+    .insert("contacts", &contact_message)
+    .execute()
+    .await?;
+
+// Update
+storage
+    .update("contacts", id)
+    .set("phone", new_phone)
+    .execute()
+    .await?;
+
+// Delete
+storage
+    .delete("contacts", id)
+    .execute()
+    .await?;
+```
+
+The query builder produces `StorageQuery` / `StorageMutation` values. The active `StorageBackend` translates these to native queries (SQL for SQLite/Postgres, scan+filter for key-value stores). Plugins never import database crates directly.
 
 ## Document Model
 
@@ -29,24 +79,17 @@ CREATE INDEX idx_plugin_collection
     ON plugin_data(plugin_id, collection);
 ```
 
-Benefits of this approach:
+Benefits:
 
 - **No dynamic DDL** — Plugins never run `CREATE TABLE`. No SQL injection surface, no migration headaches.
-- **Sync is trivial** — One table shape means every plugin's data syncs the same way. See [[03 - Projects/Life Engine/Design/Core/Client Interface#Sync Protocol (PowerSync)]].
 - **Plugin isolation is automatic** — Queries scoped by `plugin_id` + `collection`. The host enforces this.
-- **Queryable JSON** — SQLite's `json_extract` handles queries at personal scale. Indexable if needed:
-
-```sql
-CREATE INDEX idx_todos_done
-    ON plugin_data(json_extract(data, '$.done'))
-    WHERE collection = 'todos';
-```
+- **Queryable JSON** — SQLite's `json_extract` handles queries at personal scale.
 
 ## Two Tiers of Collections
 
 ### Canonical Collections (platform-owned)
 
-Defined by the SDK, not by any plugin. These are the shared data types for universal personal data. Any plugin can declare read or write access. No plugin owns them.
+Defined by the SDK, not by any plugin. These are the shared data types for universal personal data. Any plugin can declare read or write access.
 
 - `events` — Calendar events
 - `tasks` — To-dos, reminders
@@ -54,17 +97,13 @@ Defined by the SDK, not by any plugin. These are the shared data types for unive
 - `notes` — Freeform text
 - `emails` — Email messages
 - `files` — File metadata
-- `credentials` — Unified credential store (identity documents, OAuth tokens, API keys). Access scoped by type and plugin capabilities.
+- `credentials` — Identity documents, OAuth tokens, API keys
 
-Canonical schemas live in both SDKs: `plugin-sdk-rs` (Core WASM plugins) and `plugin-sdk-js` (App UI plugins). Using canonical collections requires no schema definition — the SDK already defines them. This makes canonical the path of least resistance for plugin authors.
-
-Connector plugins write to canonical collections. Other plugins consume and extend them. This is the interoperability layer that makes the ecosystem composable.
+Using canonical collections requires no schema definition — the SDK already defines them. This makes canonical the path of least resistance for plugin authors.
 
 ### Private Collections (plugin-owned)
 
-For data that only makes sense within a single plugin. A Pomodoro plugin has `pomodoro_sessions`. A habit tracker has `habit_streaks`.
-
-Private collections are namespaced automatically — `com.example.pomodoro/pomodoro_sessions` can never collide with another plugin's collection. Plugin authors define the schema via JSON Schema in their manifest.
+For data that only makes sense within a single plugin. Namespaced automatically to prevent collisions. Plugin authors define the schema via JSON Schema in their manifest.
 
 ### Extensions on Canonical Data
 
@@ -89,35 +128,13 @@ Plugins that need custom fields on canonical records use a namespaced `extension
 - Other plugins ignore extensions they don't understand
 - No schema conflicts, no field name collisions
 
-This removes the main reason plugin authors create private collections — "the canonical schema doesn't have the fields I need."
-
 ## Schema Validation
 
-Validation happens at the application layer, not in SQLite.
+Validation happens at the application layer, not in the database.
 
-Canonical collections are validated against SDK-defined schemas. Private collections are validated against the JSON Schema declared in the plugin manifest:
+Canonical collections are validated against SDK-defined schemas. Private collections are validated against the JSON Schema declared in the plugin manifest. Bad data is rejected before it reaches storage.
 
-```json
-{
-  "collections": {
-    "canonical": ["events", "tasks"],
-    "private": {
-      "plans": {
-        "schema": {
-          "type": "object",
-          "required": ["name", "event_ids"],
-          "properties": {
-            "name": { "type": "string" },
-            "event_ids": { "type": "array", "items": { "type": "string" } }
-          }
-        }
-      }
-    }
-  }
-}
-```
-
-Bad data is rejected before it hits SQLite.
+Validation level is configurable per workflow — see Workflow.md.
 
 ## Schema Evolution
 
@@ -125,63 +142,15 @@ Canonical schemas are versioned with the SDK:
 
 - Adding fields is non-breaking
 - Removing or changing fields requires a major SDK version bump with a migration path
-- Gives plugin authors confidence that canonical collections won't break their plugin
 
-Plugin migrations on version update:
-
-```json
-{
-  "version": "2.0.0",
-  "migrations": [
-    {
-      "from": "1.x",
-      "transform": "./migrations/v2.js"
-    }
-  ]
-}
-```
-
-The migration script receives each record and returns the transformed version. The host runs it once on update.
-
-## Cross-Plugin Data Sharing
-
-Two plugins that need shared data both declare the same canonical collection in their manifests. The host validates that capabilities are compatible at install time.
-
-- A "Calendar View" plugin and a "Schedule Planner" plugin both read/write `events`
-- A "Pomodoro Timer" plugin reads `tasks` (canonical) and writes `pomodoro_sessions` (private)
-- The email connector writes to `emails` (canonical), an "Email Viewer" plugin reads from it
-
-This is the simplest form of plugin-to-plugin communication — shared data collections. No special mechanism needed.
-
-## SQLite Configuration
-
-- **Core** — `rusqlite` with SQLCipher extension
-- **WAL mode** — Write-Ahead Logging for concurrent reads during writes. Sufficient for personal-scale data.
-- **Single-writer** — SQLite's single-writer model is fine for personal use.
-
-## Storage Abstraction
-
-Pluggable storage behind a trait. SQLite is the only supported backend for now.
-
-```rust
-#[async_trait]
-pub trait StorageAdapter: Send + Sync {
-    async fn get(&self, id: &str) -> Result<Record>;
-    async fn set(&self, id: &str, data: &Record) -> Result<()>;
-    async fn query(&self, filters: &QueryFilters) -> Result<Vec<Record>>;
-    async fn delete(&self, id: &str) -> Result<()>;
-    async fn list(&self, prefix: &str) -> Result<Vec<Record>>;
-}
-```
-
-The trait exists so future backends (Postgres, S3, etc.) can be added without changing plugin code.
+See Schema Versioning Rules.md for the full versioning policy.
 
 ## Encryption at Rest
 
 - **Database** — SQLCipher (transparent, full-database encryption)
 - **Key derivation** — Argon2id (64 MB memory, 3 iterations, 4 parallelism). Configurable for low-resource devices.
 - **Master passphrase** — User provides at first launch. Derived key unlocks the database.
-- **File-level encryption** — `age` for exports and backups.
+- **Shared crypto crate** — Encryption primitives (AES-256-GCM, key derivation, HMAC) live in `packages/crypto`, shared across modules.
 
 ## Credential Storage
 
@@ -195,7 +164,7 @@ The trait exists so future backends (Postgres, S3, etc.) can be added without ch
 - **Full export** — Database, files, config, plugin data as `.tar.gz`
 - **Per-service export** — All data from a specific connector
 - **Standard formats** — `.eml`/`.mbox` for email, `.ics` for calendar, `.vcf` for contacts
-- **API access** — All data readable via REST
+- **API access** — All data readable via configured transports
 
 ## Audit Logging
 

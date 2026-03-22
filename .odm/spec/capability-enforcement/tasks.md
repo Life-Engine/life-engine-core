@@ -1,6 +1,6 @@
 <!--
 domain: capability-enforcement
-updated: 2026-03-22
+updated: 2026-03-23
 spec-brief: ./brief.md
 -->
 
@@ -8,17 +8,18 @@ spec-brief: ./brief.md
 
 ## Task Overview
 
-This plan implements the capability enforcement system for the Life Engine shell (App). Work begins with the CapabilityError class and the core capability checker utility, then builds the install-time approval dialog, wires scoping enforcement for data, network, and IPC, and integrates the checker into every ShellAPI method. The final tasks add the high-trust warning UI and integration tests. All enforcement code lives in the App frontend since the shell is the security boundary.
+This plan implements the capability enforcement system for Life Engine Core. Work begins with the capability error types and the approval policy logic, then builds the host function injection layer, wires runtime enforcement into each host function, and finishes with integration tests. All enforcement code lives in Core since the WASM boundary is the single security enforcement point. There is no App-side capability checking.
 
-**Progress:** 0 / 13 tasks complete
+**Progress:** 0 / 10 tasks complete
 
 ## Steering Document Compliance
 
 - Deny-by-default: no access without declaration and approval
-- Synchronous enforcement at the start of every ShellAPI method
-- CapabilityError thrown (never silent failure) with plugin ID, operation, and missing capability
-- High-trust capabilities (data:write, network:fetch) receive visible warnings in the install dialog
-- Scoping enforced for data collections, network domains, and IPC targets
+- Host functions injected per-plugin based on approved capability set
+- EngineError (Fatal severity) returned on capability violations — never silent failure
+- First-party plugins auto-granted; third-party requires config-based approval
+- Capabilities checked synchronously at host function invocation
+- No install dialogs or interactive prompts — config-based only
 
 ## Atomic Task Requirements
 
@@ -30,113 +31,92 @@ This plan implements the capability enforcement system for the Life Engine shell
 
 ---
 
-## 1.1 — CapabilityError and Types
+## 1.1 — Capability Types and Error Definitions
+
 > spec: ./brief.md
 
-- [ ] Define CapabilityError class and capability types
-  <!-- file: apps/app/src/lib/capabilities.js -->
-  <!-- purpose: Define CapabilityError class with pluginId, operation, and missingCapability fields; define capability string constants -->
-  <!-- requirements: 7.1, 7.2, 7.3 -->
-  <!-- leverage: existing apps/app/src/lib/capabilities.js -->
+- [ ] Define capability enum and CapabilityViolation error type
+  <!-- file: packages/traits/src/capability.rs -->
+  <!-- purpose: Define Capability enum (StorageRead, StorageWrite, HttpOutbound, EventsEmit, EventsSubscribe, ConfigRead) with string conversion; define CapabilityViolation error implementing EngineError with Fatal severity and CAP_xxx codes -->
+  <!-- requirements: 4.1, 4.2, 4.3, 4.4, 6.1 -->
 
-- [ ] Add CapabilityError unit tests
-  <!-- file: apps/app/src/lib/__tests__/capabilities.test.js -->
-  <!-- purpose: Test CapabilityError construction, message format, and that it is a proper Error subclass -->
-  <!-- requirements: 7.1, 7.2, 7.3 -->
-  <!-- leverage: existing apps/app/src/lib/__tests__/ -->
+- [ ] Add unit tests for capability types and error formatting
+  <!-- file: packages/traits/src/capability.rs (inline tests) -->
+  <!-- purpose: Test Capability enum string round-trip; test CapabilityViolation error fields (code, severity, source_module, message format) -->
+  <!-- requirements: 4.1, 4.2, 4.3, 4.4, 4.5 -->
 
 ---
 
-## 1.2 — Capability Checker
+## 1.2 — Manifest Capability Parsing
+
 > spec: ./brief.md
 
-- [ ] Implement capability checker utility
-  <!-- file: apps/app/src/lib/capabilities.js -->
-  <!-- purpose: checkCapability(pluginId, requiredCapability) function that looks up approved set in memory and throws CapabilityError if missing -->
-  <!-- requirements: 1.1, 1.2, 1.3, 1.5 -->
-  <!-- leverage: existing apps/app/src/lib/capabilities.js -->
+- [ ] Parse capabilities from manifest.toml
+  <!-- file: apps/core/src/config.rs -->
+  <!-- purpose: Extend manifest parsing to extract [capabilities].required array; validate each string against recognized Capability enum; reject unknown capability strings -->
+  <!-- requirements: 1.1, 6.1, 6.2 -->
 
-- [ ] Add capability checker unit tests
-  <!-- file: apps/app/src/lib/__tests__/capabilities.test.js -->
-  <!-- purpose: Test that valid capability passes, missing capability throws, and check is synchronous -->
-  <!-- requirements: 1.1, 1.2, 1.3, 1.4, 1.5 -->
-  <!-- leverage: existing apps/app/src/lib/__tests__/ -->
+- [ ] Add tests for manifest capability parsing
+  <!-- file: apps/core/src/config.rs (inline tests) -->
+  <!-- purpose: Test valid capability arrays parse correctly; test unknown capability strings cause load rejection; test missing capabilities section treated as empty -->
+  <!-- requirements: 1.1, 6.1, 6.2 -->
 
 ---
 
-## 1.3 — Install-Time Approval Dialog
+## 1.3 — Approval Policy Logic
+
 > spec: ./brief.md
 
-- [ ] Implement capability approval dialog component
-  <!-- file: apps/app/src/components/plugin-store.js -->
-  <!-- purpose: Show approval dialog listing all requested capabilities with human-readable descriptions; handle approve/reject -->
-  <!-- requirements: 2.1, 2.2, 2.3, 2.4 -->
-  <!-- leverage: existing apps/app/src/components/plugin-store.js -->
+- [ ] Implement first-party detection and third-party config lookup
+  <!-- file: apps/core/src/config.rs -->
+  <!-- purpose: Determine if plugin is first-party (in monorepo plugins/ directory) and auto-grant; for third-party, read [plugins.<id>].approved_capabilities from config.toml; compare declared vs approved; return CapabilityViolation (CAP_001) if unapproved -->
+  <!-- requirements: 1.2, 1.3, 1.4, 1.5, 5.1, 5.2, 5.3, 5.4 -->
 
-- [ ] Implement capability persistence and update detection
-  <!-- file: apps/app/src/lib/plugin-manifest.js -->
-  <!-- file: apps/app/src/lib/plugin-storage.js -->
-  <!-- purpose: Store approved capabilities in settings.json; detect new capabilities on plugin update; skip dialog on subsequent loads -->
-  <!-- requirements: 2.3, 2.5, 2.6 -->
-  <!-- leverage: existing apps/app/src/lib/plugin-manifest.js, apps/app/src/lib/plugin-storage.js -->
+- [ ] Add tests for approval policy
+  <!-- file: apps/core/src/config.rs (inline tests) -->
+  <!-- purpose: Test first-party auto-grant; test third-party approval with matching capabilities; test third-party rejection when manifest declares unapproved capability; test missing config section refuses load; test empty approved_capabilities allows load with no host functions -->
+  <!-- requirements: 1.2, 1.3, 1.4, 1.5, 5.2, 5.4 -->
 
 ---
 
-## 1.4 — Data Capability Scoping
+## 1.4 — Host Function Injection Gating
+
 > spec: ./brief.md
 
-- [ ] Implement data capability scoping in ShellAPI
-  <!-- file: apps/app/src/lib/scoped-api.js -->
-  <!-- purpose: Wrap data.query, data.subscribe, data.create, data.update, data.delete with collection-level capability checks; data:write implies read -->
+- [ ] Inject host functions per-plugin based on approved capabilities
+  <!-- file: apps/core/src/main.rs -->
+  <!-- file: packages/workflow-engine/src/lib.rs -->
+  <!-- purpose: During WASM module loading, construct the host function set from the plugin's approved capabilities; register only approved host functions in the Extism plugin instance -->
+  <!-- requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6 -->
+
+- [ ] Add tests for host function injection
+  <!-- file: apps/core/src/tests/mod.rs -->
+  <!-- purpose: Test that a plugin with storage:read only gets storage read host functions; test that storage:write without storage:read does not inject read functions; test that no capabilities results in no host functions injected -->
+  <!-- requirements: 2.1, 2.2, 2.6 -->
+
+---
+
+## 1.5 — Runtime Capability Checks in Host Functions
+
+> spec: ./brief.md
+
+- [ ] Add synchronous capability check to each host function
+  <!-- file: packages/workflow-engine/src/handlers/mod.rs -->
+  <!-- purpose: At the start of every host function (storage_query, storage_mutate, http_request, event_emit, event_subscribe, config_get), check the calling plugin's approved capability set; return CapabilityViolation (CAP_002, Fatal) if not approved -->
   <!-- requirements: 3.1, 3.2, 3.3, 3.4 -->
-  <!-- leverage: existing apps/app/src/lib/scoped-api.js -->
 
-- [ ] Add data scoping tests
-  <!-- file: apps/app/src/lib/__tests__/scoped-api.test.js -->
-  <!-- purpose: Test that data:read:todos allows query on todos but throws on contacts; test write-implies-read -->
-  <!-- requirements: 3.1, 3.2, 3.3 -->
-  <!-- leverage: existing apps/app/src/lib/__tests__/ -->
+- [ ] Add tests for runtime capability enforcement
+  <!-- file: packages/workflow-engine/src/tests/mod.rs -->
+  <!-- purpose: Test that approved capability allows host function execution; test that unapproved capability returns Fatal EngineError with CAP_002 code; test that check is synchronous -->
+  <!-- requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 4.5 -->
 
 ---
 
-## 1.5 — Network Capability Scoping
+## 1.6 — Integration Tests
+
 > spec: ./brief.md
 
-- [ ] Implement network domain scoping
-  <!-- file: apps/app/src/lib/scoped-api.js -->
-  <!-- purpose: Wrap http.fetch with network:fetch capability check and domain validation against allowedDomains -->
-  <!-- requirements: 4.1, 4.2, 4.3 -->
-  <!-- leverage: existing apps/app/src/lib/scoped-api.js -->
-
----
-
-## 1.6 — IPC Capability Scoping
-> spec: ./brief.md
-
-- [ ] Implement IPC target scoping
-  <!-- file: apps/app/src/lib/scoped-api.js -->
-  <!-- purpose: Wrap ipc.send with ipc:send:{targetId} capability check; throw CapabilityError for undeclared targets -->
-  <!-- requirements: 5.1, 5.2 -->
-  <!-- leverage: existing apps/app/src/lib/scoped-api.js -->
-
----
-
-## 1.7 — High-Trust Warnings
-> spec: ./brief.md
-
-- [ ] Add high-trust warning indicators to install dialog
-  <!-- file: apps/app/src/components/plugin-store.js -->
-  <!-- purpose: Show yellow warning icon and descriptive text for data:write and network:fetch capabilities listing affected collections/domains -->
-  <!-- requirements: 6.1, 6.2, 6.3 -->
-  <!-- leverage: existing apps/app/src/components/plugin-store.js -->
-
----
-
-## 1.8 — Integration Tests
-> spec: ./brief.md
-
-- [ ] Add end-to-end capability enforcement tests
-  <!-- file: tests/capabilities/enforcement_test.js -->
-  <!-- purpose: Load a test plugin with limited capabilities, verify allowed operations succeed, verify unauthorized operations throw CapabilityError with correct fields -->
-  <!-- requirements: 1.1, 1.3, 1.4, 3.3, 4.2, 5.2 -->
-  <!-- leverage: packages/test-utils-js -->
+- [ ] Add end-to-end capability enforcement integration tests
+  <!-- file: apps/core/tests/capability_enforcement.rs -->
+  <!-- purpose: Load a first-party test plugin and verify all capabilities auto-granted; load a third-party test plugin with partial approval and verify approved operations succeed and unapproved operations return Fatal EngineError; verify plugin with unapproved manifest capability refuses to load -->
+  <!-- requirements: 1.2, 1.4, 2.1, 3.3, 4.1, 4.3 -->

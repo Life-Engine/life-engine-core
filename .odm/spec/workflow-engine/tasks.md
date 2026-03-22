@@ -1,6 +1,6 @@
 <!--
 domain: workflow-engine
-updated: 2026-03-22
+updated: 2026-03-23
 spec-brief: ./brief.md
 -->
 
@@ -8,137 +8,164 @@ spec-brief: ./brief.md
 
 > spec: ./brief.md
 
-## 1.1 — Create workflow definitions table
+## 1.1 — Scaffold workflow-engine crate
 > spec: ./brief.md
 > depends: none
 
-Add a database migration for the `workflow_definitions` table with columns: `id` (primary key), `name`, `trigger` (unique route), `steps` (JSON array), `created_at`, `updated_at`.
+Create the `packages/workflow-engine/` crate with the standard internal layout: `lib.rs`, `config.rs`, `error.rs`, `types.rs`, and empty module files for `loader.rs`, `executor.rs`, `event_bus.rs`, `scheduler.rs`. Add `Cargo.toml` with dependencies on `types` and `traits` crates. Add `project.json` for Nx.
 
-- **Files** — `apps/core/src/db/migrations/create_workflow_definitions.rs`
-- **AC** — Migration runs successfully. Table schema matches the spec. `trigger` column has a unique constraint.
+- **Files** — `packages/workflow-engine/Cargo.toml`, `packages/workflow-engine/src/lib.rs`, `packages/workflow-engine/src/config.rs`, `packages/workflow-engine/src/error.rs`, `packages/workflow-engine/src/types.rs`, `packages/workflow-engine/src/loader.rs`, `packages/workflow-engine/src/executor.rs`, `packages/workflow-engine/src/event_bus.rs`, `packages/workflow-engine/src/scheduler.rs`, `packages/workflow-engine/project.json`
+- **AC** — Crate compiles. `lib.rs` re-exports the public API. Config struct accepts a workflow directory path. Error types implement the EngineError trait with severity levels.
 
-## 1.2 — Implement workflow CRUD repository
+## 1.2 — Define workflow types
 > spec: ./brief.md
 > depends: 1.1
 
-Create a `WorkflowRepository` with methods: `create(definition)`, `get(id)`, `list()`, `update(id, definition)`, `delete(id)`. All operations write to the database. Changes take effect immediately.
+Define the internal types: `WorkflowDef` (id, name, mode, validate, trigger, steps), `StepDef` (plugin, action, on_error), `TriggerDef` (endpoint, event, schedule — all optional), `ErrorStrategy` (halt, skip, retry with max_retries and fallback), `ExecutionMode` (sync, async), `ValidationLevel` (strict, edges, none), `ConditionDef` (field, equals, then, else).
 
-- **Files** — `apps/core/src/workflow/repository.rs`
-- **AC** — All CRUD operations work. Creating a workflow with a duplicate trigger returns an error. Deleted workflows are no longer retrievable.
+- **Files** — `packages/workflow-engine/src/types.rs`
+- **AC** — All types are defined with serde Deserialize for YAML parsing. `ExecutionMode` defaults to `sync`. `ValidationLevel` defaults to `edges`. `ErrorStrategy` defaults to `halt`.
 
-## 1.3 — Expose workflow CRUD API endpoints
+## 2.1 — Implement YAML workflow loader
 > spec: ./brief.md
 > depends: 1.2
 
-Register REST endpoints: `GET /api/workflows`, `POST /api/workflows`, `GET /api/workflows/{id}`, `PUT /api/workflows/{id}`, `DELETE /api/workflows/{id}`. Wire to the repository.
+Implement `loader.rs` to discover and parse all `*.yaml` files from the configured workflow directory. Validate required fields (`id`, `steps`). Detect and reject duplicate `id` values and duplicate `endpoint` triggers across files.
 
-- **Files** — `apps/core/src/api/workflows.rs`
-- **AC** — All endpoints return correct status codes and payloads. Create validates required fields. 404 on missing workflows.
+- **Files** — `packages/workflow-engine/src/loader.rs`
+- **AC** — All valid YAML files are parsed into `WorkflowDef` values. Invalid files produce clear errors with the filename. Duplicate IDs and duplicate endpoints fail startup with a clear error identifying the conflicting files.
 
-## 2.1 — Implement step executor
+## 2.2 — Build trigger registry
+> spec: ./brief.md
+> depends: 2.1
+
+After loading all workflows, build an in-memory trigger registry that maps endpoint paths, event names, and cron expressions to their corresponding workflow definitions. The executor, event bus, and scheduler all query this registry.
+
+- **Files** — `packages/workflow-engine/src/loader.rs`, `packages/workflow-engine/src/types.rs`
+- **AC** — Endpoint lookup by HTTP method + path works. Event lookup by event name works. Schedule entries are enumerable for the scheduler. Registry is immutable after construction.
+
+## 3.1 — Implement sequential step executor
 > spec: ./brief.md
 > depends: 1.2
 
-Create a `StepExecutor` that receives a workflow definition and an initial input. For each step, load the plugin, invoke the declared action with the current input, and capture the output for the next step.
+Create the pipeline executor in `executor.rs`. For each step in a workflow, invoke the declared plugin action via Extism with the current PipelineMessage and capture the output PipelineMessage for the next step. Return the final step's output as the workflow result.
 
-- **Files** — `apps/core/src/workflow/executor.rs`
-- **AC** — Steps execute in order. Each step receives the previous step's output. Final step's output is returned as the workflow result.
+- **Files** — `packages/workflow-engine/src/executor.rs`
+- **AC** — Steps execute in order. Each step receives the previous step's PipelineMessage output. Final step's output is returned as the workflow result. Plugin actions are called via Extism.
 
-## 2.2 — Wire workflow trigger to request routing
+## 3.2 — Implement sync and async execution modes
 > spec: ./brief.md
-> depends: 2.1, 1.3
+> depends: 3.1
 
-When a request hits a route matching a workflow's `trigger`, intercept it and pass the validated request body to the step executor instead of routing directly to a plugin.
+Add execution mode handling. For `sync`, await all steps and return the result. For `async`, spawn the pipeline on a background task, return a job ID immediately, and emit a completion/failure event when done.
 
-- **Files** — `apps/core/src/api/router.rs`, `apps/core/src/workflow/executor.rs`
-- **AC** — Requests to trigger routes execute the workflow. Requests to non-trigger routes route normally. Workflow responses are the final step output.
+- **Files** — `packages/workflow-engine/src/executor.rs`
+- **AC** — Sync mode blocks until all steps complete and returns the result. Async mode returns a job ID immediately. Background execution emits an event on completion or failure with the job ID and status.
 
-## 3.1 — Implement inter-step data passing
+## 3.3 — Implement initial PipelineMessage construction
 > spec: ./brief.md
-> depends: 2.1
+> depends: 3.1
 
-Ensure the output of step N is serialised and passed as the input to step N+1. Handle the case where a workflow has zero steps (pass input through unchanged).
+Construct the initial PipelineMessage from the trigger context: request body for endpoint triggers, event payload for event triggers, empty payload for schedule triggers. Populate MessageMetadata with a new correlation ID, source (trigger type + value), and timestamp.
 
-- **Files** — `apps/core/src/workflow/executor.rs`
-- **AC** — Data passes correctly between steps. Zero-step workflows return the input unchanged. Serialisation/deserialisation is lossless.
+- **Files** — `packages/workflow-engine/src/executor.rs`
+- **AC** — Endpoint triggers produce a PipelineMessage with the request body as payload. Event triggers produce a PipelineMessage with the event payload. Schedule triggers produce a PipelineMessage with an empty payload. All messages have a unique correlation ID.
 
-## 4.1 — Implement halt strategy
+## 4.1 — Implement halt error strategy
 > spec: ./brief.md
-> depends: 2.1
+> depends: 3.1
 
-When a step with `on_error: "halt"` (or no `on_error` specified) fails, stop the workflow immediately. Return an error response with the failed step index, plugin ID, action, and error message.
+When a step with `on_error.strategy: halt` (or no `on_error` specified) fails, stop the workflow immediately. Construct an EngineError with `Severity::Fatal` including the failed step index, plugin ID, action, and underlying error.
 
-- **Files** — `apps/core/src/workflow/error_handler.rs`
-- **AC** — Halt stops execution on failure. Error response includes step index, plugin ID, and error details. Subsequent steps do not execute.
+- **Files** — `packages/workflow-engine/src/executor.rs`, `packages/workflow-engine/src/error.rs`
+- **AC** — Halt stops execution on failure. EngineError includes step index, plugin ID, and error details with Fatal severity. Subsequent steps do not execute.
 
-## 4.2 — Implement skip strategy
+## 4.2 — Implement skip error strategy
 > spec: ./brief.md
-> depends: 2.1
+> depends: 3.1
 
-When a step with `on_error: "skip"` fails, log the error, skip the step, and pass the previous step's output (not the failed step's output) to the next step.
+When a step with `on_error.strategy: skip` fails, log a warning, skip the step, and pass the previous step's PipelineMessage (not the failed step's output) to the next step.
 
-- **Files** — `apps/core/src/workflow/error_handler.rs`
-- **AC** — Skipped step does not block the pipeline. Previous output passes through. Error is logged.
+- **Files** — `packages/workflow-engine/src/executor.rs`
+- **AC** — Skipped step does not block the pipeline. Previous PipelineMessage passes through. Warning is logged with the original error.
 
-## 4.3 — Implement retry strategy
+## 4.3 — Implement retry error strategy with fallback
 > spec: ./brief.md
-> depends: 2.1
+> depends: 3.1
 
-When a step with `on_error: "retry"` fails, retry with exponential backoff (1s, 2s, 4s...) up to a configurable maximum (default 3 attempts). If all retries fail, halt the workflow.
+When a step with `on_error.strategy: retry` fails, retry with exponential backoff (1s, 2s, 4s...) up to `max_retries` attempts. If all retries fail and a `fallback` step is declared, execute the fallback step. If no fallback is declared, halt the workflow.
 
-- **Files** — `apps/core/src/workflow/error_handler.rs`
-- **AC** — Retries use exponential backoff. Successful retry continues the workflow. Exhausted retries halt with error. Retry count is configurable per step.
+- **Files** — `packages/workflow-engine/src/executor.rs`
+- **AC** — Retries use exponential backoff. Successful retry continues the workflow. Exhausted retries execute the fallback step if declared. Exhausted retries with no fallback halt with an EngineError. Retry count is configurable per step.
 
-## 5.1 — Implement type compatibility checker
+## 4.4 — Handle EngineError severity from plugins
 > spec: ./brief.md
-> depends: 1.2
+> depends: 4.1, 4.2, 4.3
 
-When a workflow is created or updated, inspect the declared output type of each step's plugin action and the declared input type of the next step's plugin action. Reject incompatible pairs with a 422 error.
+When a plugin returns an EngineError with `Severity::Retryable`, treat it as retryable regardless of the step's declared strategy. When a plugin returns `Severity::Warning`, log the warning and continue execution.
 
-- **Files** — `apps/core/src/workflow/type_validator.rs`
-- **AC** — Compatible workflows save successfully. Incompatible workflows return 422 with a message naming the incompatible steps and explaining the mismatch.
+- **Files** — `packages/workflow-engine/src/executor.rs`
+- **AC** — Retryable errors are retried even if the step declares halt. Warning errors are logged and do not interrupt the pipeline. Fatal errors always halt.
 
-## 5.2 — Wire validation into CRUD endpoints
+## 5.1 — Implement conditional branching
 > spec: ./brief.md
-> depends: 5.1, 1.3
+> depends: 3.1
 
-Run the type compatibility checker before saving workflow definitions in the create and update endpoints. Return the validation error to the caller if it fails.
+When a `condition` step is encountered, evaluate the condition against the current PipelineMessage. Support dot-notation field access (e.g., `payload.category`) and an `equals` comparator. Route to the `then` or `else` branch and execute those steps.
 
-- **Files** — `apps/core/src/api/workflows.rs`
-- **AC** — Create and update reject incompatible workflows. Error message is clear and actionable.
+- **Files** — `packages/workflow-engine/src/executor.rs`
+- **AC** — Condition evaluates correctly against PipelineMessage fields. Matching routes to `then` branch. Non-matching routes to `else` branch. Branch steps execute with the same PipelineMessage data flow.
 
-## 6.1 — Create workflow logs table
+## 6.1 — Implement pipeline validation
 > spec: ./brief.md
-> depends: none
+> depends: 3.1
 
-Add a database migration for the `workflow_logs` table with columns: `id`, `workflow_id`, `trigger_route`, `status` (success/failure), `started_at`, `finished_at`, `duration_ms`, `steps` (JSON array of per-step details), `error` (optional).
+Implement configurable validation per workflow. For `strict`, validate the PipelineMessage output at every step boundary. For `edges`, validate at pipeline entry and exit only. For `none`, skip validation entirely. Validation failures produce an EngineError with `Severity::Fatal`.
 
-- **Files** — `apps/core/src/db/migrations/create_workflow_logs.rs`
-- **AC** — Migration runs successfully. Table schema captures all required fields.
+- **Files** — `packages/workflow-engine/src/executor.rs`
+- **AC** — Strict validates at every boundary. Edges validates entry and exit only. None skips validation. Validation failures halt the pipeline with a Fatal EngineError.
 
-## 6.2 — Expose logs query endpoint
+## 7.1 — Implement event bus
 > spec: ./brief.md
-> depends: 6.1
+> depends: 2.2
 
-Register `GET /api/workflows/{id}/logs` with pagination (`page`, `per_page`) and time-range filtering (`from`, `to` query parameters).
+Create the event bus in `event_bus.rs`. Accept emitted events (from plugins with `events:emit` capability or from the system), match them against workflow `event` triggers in the registry, and dispatch matching workflows to the executor.
 
-- **Files** — `apps/core/src/api/workflow_logs.rs`
-- **AC** — Endpoint returns paginated logs. Time-range filtering works. Empty results return an empty array.
+- **Files** — `packages/workflow-engine/src/event_bus.rs`
+- **AC** — Emitted events are matched to workflow triggers. Matching workflows are executed. Multiple workflows with the same event trigger all execute independently. System events are emitted for plugin lifecycle and storage errors.
 
-## 7.1 — Implement execution logger
+## 7.2 — Implement cron scheduler
 > spec: ./brief.md
-> depends: 2.1, 6.1
+> depends: 2.2
 
-After each workflow execution (success or failure), write a log entry to the `workflow_logs` table. Include per-step details: step index, plugin ID, action, status, duration, input summary, output summary. For failures, include error message, error code, input to the failed step, and retry count.
+Create the scheduler in `scheduler.rs`. At startup, register all workflows with `schedule` triggers using their cron expressions. When a cron interval elapses, trigger the corresponding workflow with an empty PipelineMessage. If a scheduled workflow fails, emit an error event and continue scheduling.
 
-- **Files** — `apps/core/src/workflow/logger.rs`
-- **AC** — Successful executions are logged with per-step details. Failed executions include error context. Skipped steps are logged with the skip reason.
+- **Files** — `packages/workflow-engine/src/scheduler.rs`
+- **AC** — All schedule triggers are registered at startup. Workflows fire at the correct intervals. Failed scheduled workflows emit error events. The scheduler continues after failures.
 
-## 7.2 — Wire logger into executor
+## 8.1 — Wire endpoint triggers to transports
 > spec: ./brief.md
-> depends: 7.1, 2.1
+> depends: 2.2, 3.1
 
-Instrument the step executor to capture timing and status per step. After the workflow completes (or fails), pass the collected data to the execution logger.
+Expose a method on the workflow engine that transports call to check if an incoming request path matches a workflow endpoint trigger. If matched, the transport passes the request to the workflow engine instead of handling it directly.
 
-- **Files** — `apps/core/src/workflow/executor.rs`, `apps/core/src/workflow/logger.rs`
-- **AC** — Every execution produces a log entry. Per-step timing is accurate. Logger does not affect execution performance significantly.
+- **Files** — `packages/workflow-engine/src/lib.rs`
+- **AC** — Transports can query the workflow engine for endpoint matches. Matched requests are routed to the workflow pipeline. Unmatched requests are handled by the transport normally.
+
+## 9.1 — Implement execution logging
+> spec: ./brief.md
+> depends: 3.1
+
+After each workflow execution (success or failure), log the workflow ID, trigger type and value, timestamp, total duration, and per-step details (step index, plugin ID, action, status, duration). For failures, include error message, error code, severity, input to the failed step, and retry count.
+
+- **Files** — `packages/workflow-engine/src/executor.rs`
+- **AC** — Successful executions are logged with per-step details. Failed executions include error context and severity. Skipped steps are logged with the skip reason and original error.
+
+## 9.2 — Wire logging into executor
+> spec: ./brief.md
+> depends: 9.1
+
+Instrument the step executor to capture timing and status per step. After the workflow completes (or fails), emit the collected execution data as a structured log entry.
+
+- **Files** — `packages/workflow-engine/src/executor.rs`
+- **AC** — Every execution produces a structured log entry. Per-step timing is accurate. Logging does not significantly affect execution performance.

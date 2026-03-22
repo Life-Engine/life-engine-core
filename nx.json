@@ -6,6 +6,7 @@
     "rust": [
       "{projectRoot}/src/**/*.rs",
       "{projectRoot}/Cargo.toml",
+      "{projectRoot}/tests/**/*.rs",
       "{workspaceRoot}/Cargo.toml",
       "{workspaceRoot}/Cargo.lock"
     ],
@@ -26,6 +27,7 @@
       "cache": true
     },
     "test": {
+      "dependsOn": ["build"],
       "cache": true
     },
     "test-ts": {

@@ -33,7 +33,7 @@ Progress: 0 / 11 work packages complete
 ## 1.2 — Nx Configuration
 > spec: .odm/spec/monorepo-and-tooling/brief.md
 
-- [ ] Configure Nx task pipelines for Rust build, test, and lint
+- [x] Configure Nx task pipelines for Rust build, test, and lint
   <!-- file: nx.json -->
   <!-- purpose: Define task pipeline with build depending on ^build (upstream first), test depending on build, lint independent. Configure task caching for build and test outputs. Add @monodon/rust plugin configuration for Cargo integration. Set defaultBase to main branch. Configure namedInputs for Rust source files (src/**/*.rs, Cargo.toml, Cargo.lock). Ensure affected detection works by tracking Cargo.toml dependency changes. -->
   <!-- requirements: 2.1, 2.2, 2.3, 2.4 -->

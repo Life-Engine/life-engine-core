@@ -2,6 +2,8 @@
 
 ## 2026-03-23
 
+- WP 1.2 Nx Configuration: add project.json files for 10 packages missing Nx configuration (traits, crypto, storage-sqlite, auth, workflow-engine, transport-rest, transport-graphql, transport-caldav, transport-carddav, transport-webhook) with build, test, and lint targets using cargo commands. Update nx.json to add test→build dependency in targetDefaults and include test files in Rust namedInputs. All 27 projects now discovered by Nx.
+
 - WP 1.1 Cargo Workspace Configuration: restructure root Cargo.toml workspace members to match new modular architecture. Add 10 new package crates as minimal shells (traits, crypto, storage-sqlite, auth, workflow-engine, transport-rest, transport-graphql, transport-caldav, transport-carddav, transport-webhook). Organize workspace members into logical groups (core binary, foundation, infrastructure, transports, utilities, plugins). Add toml and cron to workspace.dependencies. All crates compile and pass clippy.
 
 - WP 1.6 Justfile Development Commands: add justfile with dev-core (cargo-watch on apps/core and packages with auto-restart), dev-app (vite dev server for Admin UI), and dev-all (runs both concurrently) recipes for one-command development workflow.

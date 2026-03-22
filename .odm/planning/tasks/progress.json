@@ -1,13 +1,13 @@
 {
   "version": 1,
   "last_updated": "2026-03-23T00:00:00Z",
-  "completed_wps": ["1.1", "1.2", "1.3", "1.4", "nx:1.1", "nx:1.2", "nx:1.3", "nx:1.4", "nx:1.5", "nx:1.6", "2.1", "2.2", "2.3", "2.4", "2.5", "2.6", "2.7", "2.8", "2.9"],
-  "current_wp": "1.5",
+  "completed_wps": ["1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "nx:1.1", "nx:1.2", "nx:1.3", "nx:1.4", "nx:1.5", "nx:1.6", "2.1", "2.2", "2.3", "2.4", "2.5", "2.6", "2.7", "2.8", "2.9"],
+  "current_wp": null,
   "current_wp_tasks": {
-    "total": 1,
+    "total": 0,
     "completed": [],
     "deferred": [],
-    "remaining": ["Scaffold all first-party plugin crates with WASM-compatible layout"],
+    "remaining": [],
     "failed": []
   },
   "history": [
@@ -161,6 +161,22 @@
       "completed_at": "2026-03-23T00:00:00Z",
       "commit": "bffa4a2",
       "tasks_completed": 2,
+      "tasks_deferred": 0
+    },
+    {
+      "wp": "1.5",
+      "title": "Plugin Crate Scaffolding",
+      "completed_at": "2026-03-23T00:00:00Z",
+      "commit": "573ea51",
+      "tasks_completed": 1,
+      "tasks_deferred": 0
+    },
+    {
+      "wp": "1.6",
+      "title": "Justfile Development Commands",
+      "completed_at": "2026-03-23T00:00:00Z",
+      "commit": "pending",
+      "tasks_completed": 1,
       "tasks_deferred": 0
     }
   ]

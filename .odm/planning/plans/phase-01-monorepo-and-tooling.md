@@ -118,7 +118,7 @@ Progress: 0 / 11 work packages complete
 > depends: 1.1, 1.2, 1.3
 > spec: .odm/spec/monorepo-and-tooling/brief.md
 
-- [ ] Create justfile with dev-core, dev-app, and dev-all recipes
+- [x] Create justfile with dev-core, dev-app, and dev-all recipes
   <!-- file: justfile -->
   <!-- purpose: Add dev-core recipe that runs cargo-watch on apps/core with automatic restart on source changes. Add dev-app recipe that starts the Tauri development server for the frontend. Add dev-all recipe that runs both dev-core and dev-app concurrently using just's parallel execution. Each recipe should include clear console output indicating which service is starting. dev-core should watch packages/ and apps/core/ for changes. -->
   <!-- requirements: 4.1, 4.2, 4.3 -->

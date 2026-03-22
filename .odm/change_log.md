@@ -2,6 +2,8 @@
 
 ## 2026-03-23
 
+- WP 1.6 Justfile Development Commands: add justfile with dev-core (cargo-watch on apps/core and packages with auto-restart), dev-app (vite dev server for Admin UI), and dev-all (runs both concurrently) recipes for one-command development workflow.
+
 - WP 1.5 Plugin Crate Scaffolding: scaffold all 7 first-party plugin crates (connector-email, connector-calendar, connector-contacts, connector-filesystem, webhook-sender, search-indexer, backup) with WASM-compatible standard layout. Add manifest.toml with [plugin], [actions], [capabilities], and [config] sections to each. Set crate-type = ["cdylib", "rlib"] for WASM compilation. Add config.rs, error.rs, steps/mod.rs, transform/mod.rs, types.rs, and tests/mod.rs to each crate. Create search-indexer plugin from scratch with Tantivy dependency. Add thiserror to 4 plugins missing it. All 478 existing tests pass.
 
 - 10-Phase Migration Plan: create comprehensive migration plan in `.odm/planning/plans/` covering the complete transition from the current monolithic architecture to the new modular crate architecture. 10 phase documents (phase-01 through phase-10) with 135 work packages and 172 detailed tasks ordered by dependency graph: monorepo tooling, canonical data models, infrastructure contracts and crypto, plugin SDK, data layer and storage, authentication, workflow engine, plugin system and capabilities, core binary and startup, deployment/migration/plugin conversion.

@@ -98,10 +98,17 @@ fn workspace_members_match_expected_set() {
         "packages/types",
         "packages/plugin-sdk-rs",
         "packages/test-utils",
+        "packages/test-fixtures",
+        "packages/dav-utils",
         "plugins/engine/connector-email",
         "plugins/engine/connector-filesystem",
         "plugins/engine/connector-contacts",
         "plugins/engine/connector-calendar",
+        "plugins/engine/api-caldav",
+        "plugins/engine/api-carddav",
+        "plugins/engine/webhook-receiver",
+        "plugins/engine/webhook-sender",
+        "plugins/engine/backup",
     ];
 
     for member in &expected_members {

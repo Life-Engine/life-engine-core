@@ -7,7 +7,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::RwLock;
+use tokio::sync::RwLock;
 
 // Re-export shared sync primitives for consumers.
 pub use crate::sync_primitives::{
@@ -153,7 +153,7 @@ impl FederationStore {
     }
 
     /// Register a new federation peer. Returns the created peer.
-    pub fn add_peer(&self, req: PeerRequest) -> anyhow::Result<FederationPeer> {
+    pub async fn add_peer(&self, req: PeerRequest) -> anyhow::Result<FederationPeer> {
         let now = Utc::now();
         let peer = FederationPeer {
             id: uuid::Uuid::new_v4().to_string(),
@@ -169,32 +169,32 @@ impl FederationStore {
             created_at: now,
             updated_at: now,
         };
-        let mut peers = self.peers.write().unwrap();
+        let mut peers = self.peers.write().await;
         peers.insert(peer.id.clone(), peer.clone());
         Ok(peer)
     }
 
     /// Get a peer by ID.
-    pub fn get_peer(&self, id: &str) -> Option<FederationPeer> {
-        let peers = self.peers.read().unwrap();
+    pub async fn get_peer(&self, id: &str) -> Option<FederationPeer> {
+        let peers = self.peers.read().await;
         peers.get(id).cloned()
     }
 
     /// List all peers.
-    pub fn list_peers(&self) -> Vec<FederationPeer> {
-        let peers = self.peers.read().unwrap();
+    pub async fn list_peers(&self) -> Vec<FederationPeer> {
+        let peers = self.peers.read().await;
         peers.values().cloned().collect()
     }
 
     /// Remove a peer by ID. Returns true if it existed.
-    pub fn remove_peer(&self, id: &str) -> bool {
-        let mut peers = self.peers.write().unwrap();
+    pub async fn remove_peer(&self, id: &str) -> bool {
+        let mut peers = self.peers.write().await;
         peers.remove(id).is_some()
     }
 
     /// Update a peer's status.
-    pub fn update_peer_status(&self, id: &str, status: PeerStatus) -> anyhow::Result<()> {
-        let mut peers = self.peers.write().unwrap();
+    pub async fn update_peer_status(&self, id: &str, status: PeerStatus) -> anyhow::Result<()> {
+        let mut peers = self.peers.write().await;
         let peer = peers
             .get_mut(id)
             .ok_or_else(|| anyhow::anyhow!("peer not found: {id}"))?;
@@ -204,10 +204,10 @@ impl FederationStore {
     }
 
     /// Record a completed sync operation and update the peer.
-    pub fn record_sync(&self, result: SyncResult) -> anyhow::Result<()> {
+    pub async fn record_sync(&self, result: SyncResult) -> anyhow::Result<()> {
         // Update the peer's last sync info.
         {
-            let mut peers = self.peers.write().unwrap();
+            let mut peers = self.peers.write().await;
             if let Some(peer) = peers.get_mut(&result.peer_id) {
                 if result.success {
                     peer.status = PeerStatus::Connected;
@@ -220,13 +220,13 @@ impl FederationStore {
             }
         }
         // Append to history.
-        self.sync_history.write().unwrap().push(result);
+        self.sync_history.write().await.push(result);
         Ok(())
     }
 
     /// Get the overall federation status.
-    pub fn status(&self) -> FederationStatus {
-        let peers = self.peers.read().unwrap();
+    pub async fn status(&self) -> FederationStatus {
+        let peers = self.peers.read().await;
         let summaries: Vec<PeerStatusSummary> = peers
             .values()
             .map(|p| PeerStatusSummary {
@@ -246,20 +246,20 @@ impl FederationStore {
     }
 
     /// Get the sync cursor for a peer and collection.
-    pub fn get_cursor(&self, peer_id: &str, collection: &str) -> Option<String> {
-        let cursors = self.cursors.read().unwrap();
+    pub async fn get_cursor(&self, peer_id: &str, collection: &str) -> Option<String> {
+        let cursors = self.cursors.read().await;
         cursors.get(peer_id, collection).map(|s| s.to_string())
     }
 
     /// Set the sync cursor for a peer and collection.
-    pub fn set_cursor(&self, peer_id: &str, collection: &str, cursor: String) {
-        let mut cursors = self.cursors.write().unwrap();
+    pub async fn set_cursor(&self, peer_id: &str, collection: &str, cursor: String) {
+        let mut cursors = self.cursors.write().await;
         cursors.set(peer_id, collection, cursor);
     }
 
     /// Get sync history for a specific peer.
-    pub fn sync_history_for_peer(&self, peer_id: &str) -> Vec<SyncResult> {
-        let history = self.sync_history.read().unwrap();
+    pub async fn sync_history_for_peer(&self, peer_id: &str) -> Vec<SyncResult> {
+        let history = self.sync_history.read().await;
         history
             .iter()
             .filter(|r| r.peer_id == peer_id)
@@ -370,12 +370,15 @@ pub async fn sync_with_peer(
     for collection in &collections {
         let cursor = store
             .get_cursor(&peer.id, collection)
+            .await
             .unwrap_or_default();
 
-        // Pull changes from the remote peer.
+        // Pull changes from the remote peer — URL-encode collection and cursor.
         let url = format!(
             "{}/api/federation/changes/{}?since={}",
-            peer.endpoint, collection, cursor
+            peer.endpoint,
+            urlencoding::encode(collection),
+            urlencoding::encode(&cursor)
         );
 
         let response = match client.get(&url).send().await {
@@ -433,7 +436,7 @@ pub async fn sync_with_peer(
 
         // Update cursor.
         if !pull.cursor.is_empty() {
-            store.set_cursor(&peer.id, collection, pull.cursor);
+            store.set_cursor(&peer.id, collection, pull.cursor).await;
         }
     }
 
@@ -781,6 +784,7 @@ mod tests {
                 client_cert_path: None,
                 client_key_path: None,
             })
+            .await
             .unwrap();
 
         // When filtering to only "events", only that collection should be synced.
@@ -807,6 +811,7 @@ mod tests {
                 client_cert_path: None,
                 client_key_path: None,
             })
+            .await
             .unwrap();
 
         // Filter requesting "tasks" which is not in the peer's declared collections.
@@ -935,17 +940,17 @@ mod tests {
 
     // ── TDD:RED — Federation status API reports correctly ──
 
-    #[test]
-    fn federation_status_reports_no_peers() {
+    #[tokio::test]
+    async fn federation_status_reports_no_peers() {
         let store = FederationStore::new();
-        let status = store.status();
+        let status = store.status().await;
         assert!(!status.enabled);
         assert_eq!(status.peer_count, 0);
         assert!(status.peers.is_empty());
     }
 
-    #[test]
-    fn federation_status_reports_configured_peers() {
+    #[tokio::test]
+    async fn federation_status_reports_configured_peers() {
         let store = FederationStore::new();
         store
             .add_peer(PeerRequest {
@@ -956,17 +961,18 @@ mod tests {
                 client_cert_path: None,
                 client_key_path: None,
             })
+            .await
             .unwrap();
 
-        let status = store.status();
+        let status = store.status().await;
         assert!(status.enabled);
         assert_eq!(status.peer_count, 1);
         assert_eq!(status.peers[0].name, "Alice");
         assert_eq!(status.peers[0].status, PeerStatus::Pending);
     }
 
-    #[test]
-    fn federation_status_reflects_sync_result() {
+    #[tokio::test]
+    async fn federation_status_reflects_sync_result() {
         let store = FederationStore::new();
         let peer = store
             .add_peer(PeerRequest {
@@ -977,6 +983,7 @@ mod tests {
                 client_cert_path: None,
                 client_key_path: None,
             })
+            .await
             .unwrap();
 
         let now = Utc::now();
@@ -991,17 +998,18 @@ mod tests {
                 error: None,
                 completed_at: now,
             })
+            .await
             .unwrap();
 
-        let status = store.status();
+        let status = store.status().await;
         let peer_status = &status.peers[0];
         assert_eq!(peer_status.status, PeerStatus::Connected);
         assert_eq!(peer_status.last_sync_records, Some(42));
         assert!(peer_status.last_sync_at.is_some());
     }
 
-    #[test]
-    fn federation_status_reflects_error() {
+    #[tokio::test]
+    async fn federation_status_reflects_error() {
         let store = FederationStore::new();
         let peer = store
             .add_peer(PeerRequest {
@@ -1012,6 +1020,7 @@ mod tests {
                 client_cert_path: None,
                 client_key_path: None,
             })
+            .await
             .unwrap();
 
         store
@@ -1025,16 +1034,17 @@ mod tests {
                 error: Some("connection refused".into()),
                 completed_at: Utc::now(),
             })
+            .await
             .unwrap();
 
-        let status = store.status();
+        let status = store.status().await;
         assert_eq!(status.peers[0].status, PeerStatus::Error);
     }
 
     // ── Federation store CRUD tests ──
 
-    #[test]
-    fn add_and_get_peer() {
+    #[tokio::test]
+    async fn add_and_get_peer() {
         let store = FederationStore::new();
         let peer = store
             .add_peer(PeerRequest {
@@ -1045,17 +1055,18 @@ mod tests {
                 client_cert_path: None,
                 client_key_path: None,
             })
+            .await
             .unwrap();
 
-        let fetched = store.get_peer(&peer.id).expect("peer should exist");
+        let fetched = store.get_peer(&peer.id).await.expect("peer should exist");
         assert_eq!(fetched.name, "Test");
         assert_eq!(fetched.endpoint, "https://test:3750");
         assert_eq!(fetched.collections, vec!["events"]);
         assert_eq!(fetched.status, PeerStatus::Pending);
     }
 
-    #[test]
-    fn remove_peer() {
+    #[tokio::test]
+    async fn remove_peer() {
         let store = FederationStore::new();
         let peer = store
             .add_peer(PeerRequest {
@@ -1066,14 +1077,15 @@ mod tests {
                 client_cert_path: None,
                 client_key_path: None,
             })
+            .await
             .unwrap();
 
-        assert!(store.remove_peer(&peer.id));
-        assert!(store.get_peer(&peer.id).is_none());
+        assert!(store.remove_peer(&peer.id).await);
+        assert!(store.get_peer(&peer.id).await.is_none());
     }
 
-    #[test]
-    fn list_peers_returns_all() {
+    #[tokio::test]
+    async fn list_peers_returns_all() {
         let store = FederationStore::new();
         for i in 0..3 {
             store
@@ -1085,14 +1097,15 @@ mod tests {
                     client_cert_path: None,
                     client_key_path: None,
                 })
+                .await
                 .unwrap();
         }
 
-        assert_eq!(store.list_peers().len(), 3);
+        assert_eq!(store.list_peers().await.len(), 3);
     }
 
-    #[test]
-    fn update_peer_status_works() {
+    #[tokio::test]
+    async fn update_peer_status_works() {
         let store = FederationStore::new();
         let peer = store
             .add_peer(PeerRequest {
@@ -1103,47 +1116,48 @@ mod tests {
                 client_cert_path: None,
                 client_key_path: None,
             })
+            .await
             .unwrap();
 
-        store.update_peer_status(&peer.id, PeerStatus::Connected).unwrap();
-        let fetched = store.get_peer(&peer.id).unwrap();
+        store.update_peer_status(&peer.id, PeerStatus::Connected).await.unwrap();
+        let fetched = store.get_peer(&peer.id).await.unwrap();
         assert_eq!(fetched.status, PeerStatus::Connected);
     }
 
     // ── Sync cursor tests ──
 
-    #[test]
-    fn sync_cursors_get_set() {
+    #[tokio::test]
+    async fn sync_cursors_get_set() {
         let store = FederationStore::new();
-        assert!(store.get_cursor("peer-1", "events").is_none());
+        assert!(store.get_cursor("peer-1", "events").await.is_none());
 
-        store.set_cursor("peer-1", "events", "2026-03-22T00:00:00Z".into());
+        store.set_cursor("peer-1", "events", "2026-03-22T00:00:00Z".into()).await;
         assert_eq!(
-            store.get_cursor("peer-1", "events").as_deref(),
+            store.get_cursor("peer-1", "events").await.as_deref(),
             Some("2026-03-22T00:00:00Z")
         );
     }
 
-    #[test]
-    fn sync_cursors_per_collection() {
+    #[tokio::test]
+    async fn sync_cursors_per_collection() {
         let store = FederationStore::new();
-        store.set_cursor("peer-1", "events", "cursor-a".into());
-        store.set_cursor("peer-1", "contacts", "cursor-b".into());
+        store.set_cursor("peer-1", "events", "cursor-a".into()).await;
+        store.set_cursor("peer-1", "contacts", "cursor-b".into()).await;
 
         assert_eq!(
-            store.get_cursor("peer-1", "events").as_deref(),
+            store.get_cursor("peer-1", "events").await.as_deref(),
             Some("cursor-a")
         );
         assert_eq!(
-            store.get_cursor("peer-1", "contacts").as_deref(),
+            store.get_cursor("peer-1", "contacts").await.as_deref(),
             Some("cursor-b")
         );
     }
 
     // ── Sync history tests ──
 
-    #[test]
-    fn sync_history_for_peer_filters_correctly() {
+    #[tokio::test]
+    async fn sync_history_for_peer_filters_correctly() {
         let store = FederationStore::new();
         let peer_a = store
             .add_peer(PeerRequest {
@@ -1154,6 +1168,7 @@ mod tests {
                 client_cert_path: None,
                 client_key_path: None,
             })
+            .await
             .unwrap();
         let peer_b = store
             .add_peer(PeerRequest {
@@ -1164,6 +1179,7 @@ mod tests {
                 client_cert_path: None,
                 client_key_path: None,
             })
+            .await
             .unwrap();
 
         store
@@ -1177,6 +1193,7 @@ mod tests {
                 error: None,
                 completed_at: Utc::now(),
             })
+            .await
             .unwrap();
         store
             .record_sync(SyncResult {
@@ -1189,13 +1206,14 @@ mod tests {
                 error: None,
                 completed_at: Utc::now(),
             })
+            .await
             .unwrap();
 
-        let history_a = store.sync_history_for_peer(&peer_a.id);
+        let history_a = store.sync_history_for_peer(&peer_a.id).await;
         assert_eq!(history_a.len(), 1);
         assert_eq!(history_a[0].records_pulled, 10);
 
-        let history_b = store.sync_history_for_peer(&peer_b.id);
+        let history_b = store.sync_history_for_peer(&peer_b.id).await;
         assert_eq!(history_b.len(), 1);
         assert_eq!(history_b[0].records_pulled, 5);
     }

@@ -4,6 +4,7 @@
 //! clients to discover, read, create, update, and delete contacts.
 
 use chrono::{DateTime, Utc};
+use dav_utils::dav_xml::xml_escape;
 use life_engine_types::Contact;
 
 /// Response for a PROPFIND request on the address book collection.
@@ -41,12 +42,12 @@ pub fn build_propfind_xml(response: &PropfindResponse) -> String {
     xml.push_str("      <D:prop>\r\n");
     xml.push_str(&format!(
         "        <D:displayname>{}</D:displayname>\r\n",
-        response.display_name
+        xml_escape(&response.display_name)
     ));
     xml.push_str("        <D:resourcetype><D:collection/><CR:addressbook/></D:resourcetype>\r\n");
     xml.push_str(&format!(
         "        <CS:getctag>{}</CS:getctag>\r\n",
-        response.ctag
+        xml_escape(&response.ctag)
     ));
     xml.push_str("      </D:prop>\r\n");
     xml.push_str("      <D:status>HTTP/1.1 200 OK</D:status>\r\n");
@@ -56,16 +57,16 @@ pub fn build_propfind_xml(response: &PropfindResponse) -> String {
     // Individual resource entries
     for entry in &response.resources {
         xml.push_str("  <D:response>\r\n");
-        xml.push_str(&format!("    <D:href>{}</D:href>\r\n", entry.href));
+        xml.push_str(&format!("    <D:href>{}</D:href>\r\n", xml_escape(&entry.href)));
         xml.push_str("    <D:propstat>\r\n");
         xml.push_str("      <D:prop>\r\n");
         xml.push_str(&format!(
             "        <D:getetag>{}</D:getetag>\r\n",
-            entry.etag
+            xml_escape(&entry.etag)
         ));
         xml.push_str(&format!(
             "        <D:getcontenttype>{}</D:getcontenttype>\r\n",
-            entry.content_type
+            xml_escape(&entry.content_type)
         ));
         xml.push_str("      </D:prop>\r\n");
         xml.push_str("      <D:status>HTTP/1.1 200 OK</D:status>\r\n");
@@ -87,12 +88,13 @@ pub fn build_report_xml(contacts: &[(String, String, String)]) -> String {
 
     for (href, etag, vcard_data) in contacts {
         xml.push_str("  <D:response>\r\n");
-        xml.push_str(&format!("    <D:href>{href}</D:href>\r\n"));
+        xml.push_str(&format!("    <D:href>{}</D:href>\r\n", xml_escape(href)));
         xml.push_str("    <D:propstat>\r\n");
         xml.push_str("      <D:prop>\r\n");
-        xml.push_str(&format!("        <D:getetag>{etag}</D:getetag>\r\n"));
+        xml.push_str(&format!("        <D:getetag>{}</D:getetag>\r\n", xml_escape(etag)));
         xml.push_str(&format!(
-            "        <CR:address-data>{vcard_data}</CR:address-data>\r\n"
+            "        <CR:address-data>{}</CR:address-data>\r\n",
+            xml_escape(vcard_data)
         ));
         xml.push_str("      </D:prop>\r\n");
         xml.push_str("      <D:status>HTTP/1.1 200 OK</D:status>\r\n");
@@ -191,7 +193,7 @@ mod tests {
         };
         let xml = build_propfind_xml(&response);
         assert!(xml.contains("ct-001.vcf"));
-        assert!(xml.contains("<D:getetag>\"etag-1\"</D:getetag>"));
+        assert!(xml.contains("<D:getetag>&quot;etag-1&quot;</D:getetag>"));
         assert!(xml.contains("text/vcard"));
     }
 

@@ -118,9 +118,19 @@ async fn main() -> anyhow::Result<()> {
     let start_time = Instant::now();
     let message_bus = Arc::new(MessageBus::new());
 
-    // 4b. Initialise storage (in-memory for now; file-backed when data_dir is configured).
-    let storage = Arc::new(sqlite_storage::SqliteStorage::open_in_memory()?);
-    tracing::info!("storage initialised (in-memory)");
+    // 4b. Initialise storage (file-backed when data_dir is configured).
+    let data_dir_path = std::path::Path::new(&config.core.data_dir);
+    std::fs::create_dir_all(data_dir_path)?;
+    let db_path = data_dir_path.join("life-engine.db");
+    let storage = if config.storage.encryption {
+        tracing::info!(path = %db_path.display(), "opening encrypted storage");
+        // Encrypted storage requires a passphrase provided via the /api/storage/init endpoint.
+        // Start with in-memory storage; the init endpoint will swap it for encrypted file storage.
+        Arc::new(sqlite_storage::SqliteStorage::open_in_memory()?)
+    } else {
+        Arc::new(sqlite_storage::SqliteStorage::open(&db_path)?)
+    };
+    tracing::info!(path = %db_path.display(), encrypted = config.storage.encryption, "storage initialised");
 
     // 4c. Initialise schema registry (must happen before plugin loading).
     let schema_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/schemas");
@@ -281,6 +291,7 @@ async fn main() -> anyhow::Result<()> {
         initialized: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         db_path: data_dir.join("life-engine.db"),
         argon2_settings: config.storage.argon2.clone(),
+        init_attempts: Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new())),
     };
     let storage_init_router = axum::Router::new()
         .route(

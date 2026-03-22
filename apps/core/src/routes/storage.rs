@@ -4,8 +4,11 @@
 //! SQLCipher database. This endpoint does not require authentication and
 //! can only be called once (returns 409 on subsequent calls).
 
+use std::collections::HashMap;
+use std::net::IpAddr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::Instant;
 
 use axum::extract::State;
 use axum::http::StatusCode;
@@ -13,9 +16,15 @@ use axum::response::IntoResponse;
 use axum::Json;
 use serde::Deserialize;
 use serde_json::json;
+use tokio::sync::Mutex;
 
 use crate::config::Argon2Settings;
 use crate::sqlite_storage::SqliteStorage;
+
+/// Maximum number of init attempts per IP within the rate-limit window.
+const MAX_INIT_ATTEMPTS: usize = 5;
+/// Rate-limit window in seconds.
+const INIT_WINDOW_SECS: u64 = 300;
 
 /// State for the storage init endpoint (separate from AppState, no auth).
 #[derive(Clone)]
@@ -26,6 +35,8 @@ pub struct StorageInitState {
     pub db_path: std::path::PathBuf,
     /// Argon2 settings for key derivation.
     pub argon2_settings: Argon2Settings,
+    /// Per-IP rate limiter for init attempts.
+    pub init_attempts: Arc<Mutex<HashMap<IpAddr, Vec<Instant>>>>,
 }
 
 /// Request body for `POST /api/storage/init`.
@@ -44,6 +55,28 @@ pub async fn init_storage(
     State(state): State<StorageInitState>,
     Json(body): Json<InitStorageRequest>,
 ) -> impl IntoResponse {
+    // Rate-limit init attempts (use a fixed key since this is a one-shot endpoint).
+    let client_ip = IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED);
+    {
+        let mut attempts = state.init_attempts.lock().await;
+        let entries = attempts.entry(client_ip).or_default();
+        let cutoff = Instant::now() - std::time::Duration::from_secs(INIT_WINDOW_SECS);
+        entries.retain(|t| *t > cutoff);
+        if entries.len() >= MAX_INIT_ATTEMPTS {
+            tracing::warn!(ip = %client_ip, "storage init rate limited");
+            return (
+                StatusCode::TOO_MANY_REQUESTS,
+                Json(json!({
+                    "error": {
+                        "code": "RATE_LIMITED",
+                        "message": "too many init attempts, try again later"
+                    }
+                })),
+            );
+        }
+        entries.push(Instant::now());
+    }
+
     // Guard: only callable once.
     if state.initialized.swap(true, Ordering::SeqCst) {
         return (
@@ -57,15 +90,16 @@ pub async fn init_storage(
         );
     }
 
-    // Validate passphrase.
-    if body.passphrase.len() < 8 {
+    // Validate passphrase (minimum 12 characters for master encryption key).
+    if body.passphrase.len() < 12 {
         state.initialized.store(false, Ordering::SeqCst);
+        tracing::warn!(ip = %client_ip, "storage init rejected: passphrase too short");
         return (
             StatusCode::BAD_REQUEST,
             Json(json!({
                 "error": {
                     "code": "INVALID_PASSPHRASE",
-                    "message": "passphrase must be at least 8 characters"
+                    "message": "passphrase must be at least 12 characters"
                 }
             })),
         );
@@ -115,6 +149,7 @@ mod tests {
                 iterations: 1,
                 parallelism: 1,
             },
+            init_attempts: Arc::new(Mutex::new(HashMap::new())),
         };
         axum::Router::new()
             .route("/api/storage/init", axum::routing::post(init_storage))
@@ -130,7 +165,7 @@ mod tests {
             .method("POST")
             .uri("/api/storage/init")
             .header("content-type", "application/json")
-            .body(Body::from(r#"{"passphrase":"my-secret-pass"}"#))
+            .body(Body::from(r#"{"passphrase":"my-secret-passphrase-12"}"#))
             .unwrap();
 
         let resp = app.oneshot(req).await.unwrap();
@@ -148,6 +183,7 @@ mod tests {
                 iterations: 1,
                 parallelism: 1,
             },
+            init_attempts: Arc::new(Mutex::new(HashMap::new())),
         };
         let app = axum::Router::new()
             .route("/api/storage/init", axum::routing::post(init_storage))
@@ -157,7 +193,7 @@ mod tests {
             .method("POST")
             .uri("/api/storage/init")
             .header("content-type", "application/json")
-            .body(Body::from(r#"{"passphrase":"my-secret-pass"}"#))
+            .body(Body::from(r#"{"passphrase":"my-secret-passphrase-12"}"#))
             .unwrap();
         let resp1 = app.clone().oneshot(req1).await.unwrap();
         assert_eq!(resp1.status(), StatusCode::CREATED);
@@ -166,7 +202,7 @@ mod tests {
             .method("POST")
             .uri("/api/storage/init")
             .header("content-type", "application/json")
-            .body(Body::from(r#"{"passphrase":"my-secret-pass"}"#))
+            .body(Body::from(r#"{"passphrase":"my-secret-passphrase-12"}"#))
             .unwrap();
         let resp2 = app.oneshot(req2).await.unwrap();
         assert_eq!(resp2.status(), StatusCode::CONFLICT);
@@ -183,7 +219,7 @@ mod tests {
             .uri("/api/storage/init")
             .header("content-type", "application/json")
             // No Authorization header
-            .body(Body::from(r#"{"passphrase":"my-secret-pass"}"#))
+            .body(Body::from(r#"{"passphrase":"my-secret-passphrase-12"}"#))
             .unwrap();
 
         let resp = app.oneshot(req).await.unwrap();

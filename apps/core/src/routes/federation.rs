@@ -26,7 +26,7 @@ pub async fn create_peer(
 ) -> Result<(StatusCode, Json<serde_json::Value>), (StatusCode, Json<serde_json::Value>)> {
     let store = get_federation_store(&state)?;
 
-    match store.add_peer(req) {
+    match store.add_peer(req).await {
         Ok(peer) => Ok((
             StatusCode::CREATED,
             Json(serde_json::to_value(&peer).unwrap()),
@@ -43,7 +43,7 @@ pub async fn list_peers(
     State(state): State<AppState>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
     let store = get_federation_store(&state)?;
-    let peers = store.list_peers();
+    let peers = store.list_peers().await;
     Ok(Json(serde_json::to_value(&peers).unwrap()))
 }
 
@@ -54,7 +54,7 @@ pub async fn delete_peer(
 ) -> Result<StatusCode, (StatusCode, Json<serde_json::Value>)> {
     let store = get_federation_store(&state)?;
 
-    if store.remove_peer(&id) {
+    if store.remove_peer(&id).await {
         Ok(StatusCode::NO_CONTENT)
     } else {
         Err((
@@ -73,7 +73,7 @@ pub async fn trigger_sync(
 ) -> Result<Json<SyncResult>, (StatusCode, Json<serde_json::Value>)> {
     let store = get_federation_store(&state)?;
 
-    let peer = store.get_peer(&body.peer_id).ok_or_else(|| {
+    let peer = store.get_peer(&body.peer_id).await.ok_or_else(|| {
         (
             StatusCode::NOT_FOUND,
             Json(serde_json::json!({"error": "peer not found"})),
@@ -93,7 +93,7 @@ pub async fn trigger_sync(
     let _ = store.update_peer_status(
         &peer.id,
         crate::federation::PeerStatus::Syncing,
-    );
+    ).await;
 
     let result = crate::federation::sync_with_peer(
         &peer,
@@ -104,7 +104,7 @@ pub async fn trigger_sync(
     .await;
 
     // Record the sync result.
-    let _ = store.record_sync(result.clone());
+    let _ = store.record_sync(result.clone()).await;
 
     Ok(Json(result))
 }
@@ -122,7 +122,7 @@ pub async fn federation_status(
     State(state): State<AppState>,
 ) -> Result<Json<FederationStatus>, (StatusCode, Json<serde_json::Value>)> {
     let store = get_federation_store(&state)?;
-    Ok(Json(store.status()))
+    Ok(Json(store.status().await))
 }
 
 // ── Changes endpoint (served to pulling peers) ──────────────────────
@@ -170,9 +170,15 @@ pub async fn serve_changes(
     let since_dt = if query.since.is_empty() {
         None
     } else {
-        chrono::DateTime::parse_from_rfc3339(&query.since)
-            .ok()
-            .map(|dt| dt.with_timezone(&chrono::Utc))
+        match chrono::DateTime::parse_from_rfc3339(&query.since) {
+            Ok(dt) => Some(dt.with_timezone(&chrono::Utc)),
+            Err(_) => {
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    Json(serde_json::json!({"error": "invalid 'since' timestamp, expected RFC 3339 format"})),
+                ));
+            }
+        }
     };
 
     let changes: Vec<crate::federation::ChangeRecord> = result
@@ -228,7 +234,7 @@ mod tests {
         // The OnceLock store is shared across tests in the same process,
         // so we test the store directly for isolation.
         let store = FederationStore::new();
-        let status = store.status();
+        let status = store.status().await;
         assert!(!status.enabled);
         assert_eq!(status.peer_count, 0);
     }
@@ -245,9 +251,10 @@ mod tests {
                 client_cert_path: None,
                 client_key_path: None,
             })
+            .await
             .unwrap();
 
-        let peers = store.list_peers();
+        let peers = store.list_peers().await;
         assert_eq!(peers.len(), 1);
         assert_eq!(peers[0].id, peer.id);
     }
@@ -264,9 +271,10 @@ mod tests {
                 client_cert_path: None,
                 client_key_path: None,
             })
+            .await
             .unwrap();
 
-        assert!(store.remove_peer(&peer.id));
-        assert!(store.get_peer(&peer.id).is_none());
+        assert!(store.remove_peer(&peer.id).await);
+        assert!(store.get_peer(&peer.id).await.is_none());
     }
 }

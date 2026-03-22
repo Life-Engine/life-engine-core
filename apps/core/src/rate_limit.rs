@@ -87,10 +87,19 @@ pub async fn rate_limit_middleware(
         return next.run(request).await;
     }
 
+    // Prefer X-Forwarded-For when behind a reverse proxy, fall back to ConnectInfo.
     let client_ip = request
-        .extensions()
-        .get::<ConnectInfo<SocketAddr>>()
-        .map(|ci| ci.0.ip())
+        .headers()
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.split(',').next())
+        .and_then(|s| s.trim().parse::<IpAddr>().ok())
+        .or_else(|| {
+            request
+                .extensions()
+                .get::<ConnectInfo<SocketAddr>>()
+                .map(|ci| ci.0.ip())
+        })
         .unwrap_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED));
 
     match limiter.check(client_ip) {

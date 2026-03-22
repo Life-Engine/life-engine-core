@@ -72,16 +72,25 @@ pub fn parse_ical_datetime(
         return Ok(Utc.from_utc_datetime(&naive));
     }
 
-    // Local time (no Z suffix) -- treat as UTC
-    // If TZID is present, we note it but still treat as UTC for now
+    // Local time (no Z suffix) — convert using TZID if present.
     if let Some(ps) = params
         && let Some((_key, values)) = ps.iter().find(|(k, _)| k == "TZID")
         && let Some(tz_name) = values.first()
     {
-        tracing::debug!(
-            tzid = %tz_name,
-            "timezone noted but treated as UTC"
-        );
+        let naive = NaiveDateTime::parse_from_str(value, "%Y%m%dT%H%M%S")
+            .map_err(|e| anyhow::anyhow!("invalid DATE-TIME '{}': {}", value, e))?;
+
+        if let Ok(tz) = tz_name.parse::<chrono_tz::Tz>() {
+            let local = tz.from_local_datetime(&naive)
+                .earliest()
+                .ok_or_else(|| anyhow::anyhow!("ambiguous or invalid local time '{value}' in timezone '{tz_name}'"))?;
+            return Ok(local.with_timezone(&Utc));
+        } else {
+            tracing::warn!(
+                tzid = %tz_name,
+                "unknown timezone, treating as UTC"
+            );
+        }
     }
 
     let naive = NaiveDateTime::parse_from_str(value, "%Y%m%dT%H%M%S")
@@ -164,8 +173,8 @@ mod tests {
             vec!["America/New_York".to_string()],
         )]);
         let dt = parse_ical_datetime("20260321T100000", &params).unwrap();
-        // Currently treated as UTC
-        assert_eq!(dt.to_rfc3339(), "2026-03-21T10:00:00+00:00");
+        // 10:00 AM EDT (America/New_York in March = UTC-4) = 14:00 UTC
+        assert_eq!(dt.to_rfc3339(), "2026-03-21T14:00:00+00:00");
     }
 
     #[test]

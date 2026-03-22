@@ -14,25 +14,53 @@ use crate::config::Argon2Settings;
 use crate::error::CoreError;
 
 use argon2::Argon2;
+use rand::RngCore;
 use rusqlite::Connection;
 use std::path::Path;
 
 /// Length of the derived key in bytes (256-bit for SQLCipher).
 const KEY_LENGTH: usize = 32;
 
-/// Fixed salt for deterministic key derivation from passphrase.
-///
-/// SQLCipher manages its own per-page salt internally, so the Argon2
-/// step only needs to stretch the user passphrase into a fixed-length
-/// key. Using a constant salt here is acceptable because the derived
-/// key is never stored — it is used as the SQLCipher raw key.
-const ARGON2_SALT: &[u8; 16] = b"life-engine-salt";
+/// Length of the random salt in bytes.
+const SALT_LENGTH: usize = 16;
 
-/// Derive a 32-byte hex-encoded key from a passphrase using Argon2id.
+/// Generate a random 16-byte salt.
+fn generate_salt() -> [u8; SALT_LENGTH] {
+    let mut salt = [0u8; SALT_LENGTH];
+    rand::thread_rng().fill_bytes(&mut salt);
+    salt
+}
+
+/// Read the salt file for a database, or create one if it does not exist.
+///
+/// The salt file is stored alongside the database at `<db_path>.salt`.
+pub fn load_or_create_salt(db_path: &Path) -> Result<[u8; SALT_LENGTH], CoreError> {
+    let salt_path = db_path.with_extension("db.salt");
+    if salt_path.exists() {
+        let data = std::fs::read(&salt_path)
+            .map_err(|e| CoreError::Rekey(format!("failed to read salt file: {e}")))?;
+        if data.len() != SALT_LENGTH {
+            return Err(CoreError::Rekey(format!(
+                "salt file has wrong length: expected {SALT_LENGTH}, got {}",
+                data.len()
+            )));
+        }
+        let mut salt = [0u8; SALT_LENGTH];
+        salt.copy_from_slice(&data);
+        Ok(salt)
+    } else {
+        let salt = generate_salt();
+        std::fs::write(&salt_path, salt)
+            .map_err(|e| CoreError::Rekey(format!("failed to write salt file: {e}")))?;
+        Ok(salt)
+    }
+}
+
+/// Derive a 32-byte hex-encoded key from a passphrase and salt using Argon2id.
 ///
 /// Returns a 64-character lowercase hex string suitable for use with
 /// SQLCipher's raw key format: `PRAGMA key = "x'<hex>'"`.
-pub fn derive_key(passphrase: &str, settings: &Argon2Settings) -> Result<String, CoreError> {
+pub fn derive_key_with_salt(passphrase: &str, salt: &[u8], settings: &Argon2Settings) -> Result<String, CoreError> {
     let argon2 = Argon2::new(
         argon2::Algorithm::Argon2id,
         argon2::Version::V0x13,
@@ -47,10 +75,20 @@ pub fn derive_key(passphrase: &str, settings: &Argon2Settings) -> Result<String,
 
     let mut output = [0u8; KEY_LENGTH];
     argon2
-        .hash_password_into(passphrase.as_bytes(), ARGON2_SALT, &mut output)
+        .hash_password_into(passphrase.as_bytes(), salt, &mut output)
         .map_err(|e| CoreError::Rekey(format!("Argon2 key derivation failed: {e}")))?;
 
     Ok(hex::encode(output))
+}
+
+/// Derive a key using the salt stored alongside the database file.
+///
+/// Convenience wrapper that loads or creates the salt, then derives the key.
+pub fn derive_key(passphrase: &str, settings: &Argon2Settings) -> Result<String, CoreError> {
+    // Fallback salt for contexts where no database path is available (e.g. tests).
+    // In production, callers should use derive_key_with_salt with load_or_create_salt.
+    let fallback_salt = [0u8; SALT_LENGTH];
+    derive_key_with_salt(passphrase, &fallback_salt, settings)
 }
 
 /// Open a SQLCipher database with the given hex key and verify it is readable.
@@ -152,12 +190,13 @@ pub fn run_rekey(db_path: &Path, argon2_settings: &Argon2Settings) -> Result<(),
         ));
     }
 
-    // 3. Derive keys (drop passphrase strings immediately after).
+    // 3. Load or create salt, then derive keys (drop passphrase strings immediately after).
     eprintln!("Deriving keys...");
-    let current_key = derive_key(&current_passphrase, argon2_settings)?;
+    let salt = load_or_create_salt(db_path)?;
+    let current_key = derive_key_with_salt(&current_passphrase, &salt, argon2_settings)?;
     drop(current_passphrase);
 
-    let new_key = derive_key(&new_passphrase, argon2_settings)?;
+    let new_key = derive_key_with_salt(&new_passphrase, &salt, argon2_settings)?;
     drop(new_passphrase);
     drop(confirm_passphrase);
 

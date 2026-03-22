@@ -75,8 +75,11 @@ pub async fn auth_middleware(
     let path = request.uri().path().to_string();
     let method = request.method().clone();
 
-    // Skip auth for health endpoint, token generation, and OIDC public endpoints.
+    // Skip auth for health endpoint, token generation, storage init, and OIDC public endpoints.
     if path == "/api/system/health" {
+        return next.run(request).await;
+    }
+    if path == "/api/storage/init" && method == axum::http::Method::POST {
         return next.run(request).await;
     }
     if path == "/api/auth/token" && method == axum::http::Method::POST {
@@ -97,11 +100,19 @@ pub async fn auth_middleware(
         return next.run(request).await;
     }
 
-    // Extract client IP from ConnectInfo extension (if available).
+    // Extract client IP: prefer X-Forwarded-For when behind a reverse proxy.
     let client_ip = request
-        .extensions()
-        .get::<ConnectInfo<SocketAddr>>()
-        .map(|ci| ci.0.ip())
+        .headers()
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.split(',').next())
+        .and_then(|s| s.trim().parse::<IpAddr>().ok())
+        .or_else(|| {
+            request
+                .extensions()
+                .get::<ConnectInfo<SocketAddr>>()
+                .map(|ci| ci.0.ip())
+        })
         .unwrap_or(IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED));
 
     // Check rate limit.

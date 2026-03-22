@@ -3,6 +3,15 @@
 //! Provides reusable building blocks for constructing DAV multi-status
 //! XML responses, shared across CalDAV and CardDAV server plugins.
 
+/// Escape XML special characters in a string value.
+pub fn xml_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
+}
+
 /// A single resource entry in a multi-status response.
 #[derive(Debug, Clone)]
 pub struct DavResourceEntry {
@@ -26,21 +35,23 @@ pub enum DavProperty {
 /// Write a `<D:response>` block for a resource entry.
 pub fn write_response_entry(xml: &mut String, entry: &DavResourceEntry) {
     xml.push_str("  <D:response>\r\n");
-    xml.push_str(&format!("    <D:href>{}</D:href>\r\n", entry.href));
+    xml.push_str(&format!("    <D:href>{}</D:href>\r\n", xml_escape(&entry.href)));
     xml.push_str("    <D:propstat>\r\n");
     xml.push_str("      <D:prop>\r\n");
 
     for prop in &entry.properties {
         match prop {
             DavProperty::ETag(etag) => {
-                xml.push_str(&format!("        <D:getetag>{etag}</D:getetag>\r\n"));
+                xml.push_str(&format!("        <D:getetag>{}</D:getetag>\r\n", xml_escape(etag)));
             }
             DavProperty::ContentType(ct) => {
                 xml.push_str(&format!(
-                    "        <D:getcontenttype>{ct}</D:getcontenttype>\r\n"
+                    "        <D:getcontenttype>{}</D:getcontenttype>\r\n",
+                    xml_escape(ct)
                 ));
             }
             DavProperty::Custom(custom) => {
+                // Custom properties are assumed to be pre-escaped XML fragments.
                 xml.push_str(&format!("        {custom}\r\n"));
             }
         }
@@ -83,7 +94,7 @@ mod tests {
 
         assert!(xml.contains("<D:response>"));
         assert!(xml.contains("<D:href>/cal/test.ics</D:href>"));
-        assert!(xml.contains("<D:getetag>\"etag-123\"</D:getetag>"));
+        assert!(xml.contains("<D:getetag>&quot;etag-123&quot;</D:getetag>"));
         assert!(xml.contains("<D:getcontenttype>text/calendar</D:getcontenttype>"));
         assert!(xml.contains("HTTP/1.1 200 OK"));
         assert!(xml.contains("</D:response>"));

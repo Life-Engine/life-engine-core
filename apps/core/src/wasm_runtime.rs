@@ -430,19 +430,29 @@ impl WasmHostBridge {
         &self,
         url: &str,
         method: &str,
-        _headers: Option<serde_json::Value>,
-        _body: Option<String>,
+        headers: Option<serde_json::Value>,
+        body: Option<String>,
     ) -> HostResponse {
         if !self.has_capability(Capability::HttpOutbound) {
             return HostResponse::err("capability not granted: HttpOutbound");
         }
 
-        // Check URL against allowed domains
+        // Check URL against allowed domains.
+        // Default-deny: if the allowlist is empty, block all outbound HTTP.
         if let Ok(parsed) = url::Url::parse(url) {
             if let Some(host) = parsed.host_str() {
-                if !self.config.allowed_http_domains.is_empty()
-                    && !self.config.allowed_http_domains.iter().any(|d| host.ends_with(d.as_str()))
-                {
+                if self.config.allowed_http_domains.is_empty() {
+                    return HostResponse::err(format!(
+                        "HTTP request to '{}' not allowed: no domains in allowlist",
+                        host
+                    ));
+                }
+                // Require exact match or dot-prefixed subdomain match to
+                // prevent suffix bypass (e.g. evilexample.com matching example.com).
+                let allowed = self.config.allowed_http_domains.iter().any(|d| {
+                    host == d.as_str() || host.ends_with(&format!(".{}", d))
+                });
+                if !allowed {
                     return HostResponse::err(format!(
                         "HTTP request to '{}' not allowed: domain not in declared list",
                         host
@@ -455,7 +465,7 @@ impl WasmHostBridge {
 
         // Execute the HTTP request
         let client = reqwest::Client::new();
-        let req = match method.to_uppercase().as_str() {
+        let mut req = match method.to_uppercase().as_str() {
             "GET" => client.get(url),
             "POST" => client.post(url),
             "PUT" => client.put(url),
@@ -463,6 +473,22 @@ impl WasmHostBridge {
             "PATCH" => client.patch(url),
             _ => return HostResponse::err(format!("unsupported HTTP method: {}", method)),
         };
+
+        // Apply headers from the plugin request.
+        if let Some(hdrs) = headers {
+            if let Some(obj) = hdrs.as_object() {
+                for (key, value) in obj {
+                    if let Some(val_str) = value.as_str() {
+                        req = req.header(key.as_str(), val_str);
+                    }
+                }
+            }
+        }
+
+        // Apply request body.
+        if let Some(b) = body {
+            req = req.body(b);
+        }
 
         match tokio::time::timeout(self.config.execution_timeout, req.send()).await {
             Ok(Ok(resp)) => {

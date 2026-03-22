@@ -189,35 +189,55 @@ impl GqlCalendarEvent {
     }
 
     /// Resolve attendee email addresses to Contact records.
+    ///
+    /// Uses a single query with OR filters to batch-fetch all attendee
+    /// contacts instead of issuing one query per attendee (N+1).
     async fn attendee_contacts(&self, ctx: &Context<'_>) -> Result<Vec<GqlContact>> {
         let storage = ctx
             .data::<Arc<crate::sqlite_storage::SqliteStorage>>()
             .map_err(|_| Error::new("storage not available"))?;
 
-        let mut contacts = Vec::new();
-        for attendee_email in &self.attendees {
-            let filters = QueryFilters {
+        if self.attendees.is_empty() {
+            return Ok(vec![]);
+        }
+
+        // Build an OR filter matching any attendee email in a single query.
+        let or_groups: Vec<QueryFilters> = self
+            .attendees
+            .iter()
+            .map(|email| QueryFilters {
                 text_search: vec![TextFilter {
                     field: "emails".into(),
-                    contains: attendee_email.clone(),
+                    contains: email.clone(),
                 }],
                 ..Default::default()
-            };
-            let result = storage
-                .query(
-                    CORE_PLUGIN_ID,
-                    "contacts",
-                    filters,
-                    None,
-                    Pagination { limit: 1, offset: 0 },
-                )
-                .await
-                .map_err(|e| Error::new(format!("query failed: {e}")))?;
+            })
+            .collect();
 
-            for record in result.records {
-                contacts.push(record_to_contact(&record.data));
-            }
-        }
+        let filters = QueryFilters {
+            or: or_groups,
+            ..Default::default()
+        };
+
+        let result = storage
+            .query(
+                CORE_PLUGIN_ID,
+                "contacts",
+                filters,
+                None,
+                Pagination {
+                    limit: self.attendees.len() as u32,
+                    offset: 0,
+                },
+            )
+            .await
+            .map_err(|e| Error::new(format!("query failed: {e}")))?;
+
+        let contacts = result
+            .records
+            .iter()
+            .map(|r| record_to_contact(&r.data))
+            .collect();
         Ok(contacts)
     }
 }

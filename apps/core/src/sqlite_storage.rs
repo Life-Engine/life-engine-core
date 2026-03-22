@@ -467,6 +467,24 @@ fn row_to_record(row: &rusqlite::Row<'_>) -> anyhow::Result<Record> {
 /// Trait to allow `query_row` to return `Option`.
 use rusqlite::OptionalExtension;
 
+/// Validate that a field name contains only safe characters for use in SQL.
+///
+/// Allows alphanumeric characters, underscores, and dots (for nested JSON paths).
+fn validate_field_name(field: &str) -> Result<(), anyhow::Error> {
+    if field.is_empty() || !field.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.') {
+        anyhow::bail!("invalid filter field name: {}", field);
+    }
+    Ok(())
+}
+
+/// Escape LIKE/ILIKE metacharacters (`%`, `_`, `\`) in a search term.
+fn escape_like(value: &str) -> String {
+    value
+        .replace('\\', "\\\\")
+        .replace('%', "\\%")
+        .replace('_', "\\_")
+}
+
 /// Recursively build filter SQL fragments from [`QueryFilters`].
 fn build_filter_sql(
     filters: &QueryFilters,
@@ -475,12 +493,18 @@ fn build_filter_sql(
 ) {
     // Equality filters.
     for f in &filters.equality {
+        if validate_field_name(&f.field).is_err() {
+            continue;
+        }
         parts.push(format!("json_extract(data, '$.{}') = ?", f.field));
         binds.push(f.value.clone());
     }
 
     // Comparison filters.
     for f in &filters.comparison {
+        if validate_field_name(&f.field).is_err() {
+            continue;
+        }
         let op = match f.operator {
             ComparisonOp::Gte => ">=",
             ComparisonOp::Lte => "<=",
@@ -493,8 +517,12 @@ fn build_filter_sql(
 
     // Text search.
     for f in &filters.text_search {
-        parts.push(format!("json_extract(data, '$.{}') LIKE ?", f.field));
-        binds.push(Value::String(format!("%{}%", f.contains)));
+        if validate_field_name(&f.field).is_err() {
+            continue;
+        }
+        let escaped = escape_like(&f.contains);
+        parts.push(format!("json_extract(data, '$.{}') LIKE ? ESCAPE '\\'", f.field));
+        binds.push(Value::String(format!("%{escaped}%")));
     }
 
     // Logical AND groups.

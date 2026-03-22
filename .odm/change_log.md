@@ -2,6 +2,8 @@
 
 ## 2026-03-22
 
+- WP 1.2 High Priority Fixes (26 tasks): proper HMAC-SHA256, HKDF key derivation, SQL injection and LIKE injection prevention, random Argon2 salts, file-backed storage, WebAuthn passphrase fix, async-safe federation locks, URL encoding, X-Forwarded-For rate limiting, WASM HTTP headers/body/allowlist fixes, XML injection escaping in DAV/CalDAV/CardDAV, iCal TZID timezone conversion via chrono-tz, storage init rate-limiting, federation changes validation, GraphQL N+1 fix, credential security headers, household role persistence, backup path traversal prevention, scaffold template path fix, build verification test update
+
 - WP 1.1 Critical Fixes: replace XOR cipher with AES-256-GCM across core crypto, identity, credential store, and backup modules
 - Fix SQL injection via unvalidated sort_by field in SQLite and PostgreSQL storage backends
 - Replace expect() panic in GraphQL handler with 503 SERVICE_UNAVAILABLE error response

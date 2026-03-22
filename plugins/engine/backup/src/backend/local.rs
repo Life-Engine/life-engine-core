@@ -19,15 +19,25 @@ impl LocalBackend {
         }
     }
 
-    fn full_path(&self, key: &str) -> PathBuf {
-        self.base_dir.join(key)
+    /// Resolve a backup key to a full filesystem path, rejecting path traversal.
+    fn full_path(&self, key: &str) -> anyhow::Result<PathBuf> {
+        // Reject keys with path traversal components.
+        if key.contains("..") || key.starts_with('/') || key.starts_with('\\') {
+            anyhow::bail!("invalid backup key: path traversal detected");
+        }
+        let path = self.base_dir.join(key);
+        // Ensure the resolved path is still within base_dir.
+        if !path.starts_with(&self.base_dir) {
+            anyhow::bail!("invalid backup key: resolved path outside base directory");
+        }
+        Ok(path)
     }
 }
 
 #[async_trait]
 impl BackupBackend for LocalBackend {
     async fn put(&self, key: &str, data: &[u8]) -> anyhow::Result<()> {
-        let path = self.full_path(key);
+        let path = self.full_path(key)?;
         if let Some(parent) = path.parent() {
             tokio::fs::create_dir_all(parent).await?;
         }
@@ -36,13 +46,13 @@ impl BackupBackend for LocalBackend {
     }
 
     async fn get(&self, key: &str) -> anyhow::Result<Vec<u8>> {
-        let path = self.full_path(key);
+        let path = self.full_path(key)?;
         let data = tokio::fs::read(&path).await?;
         Ok(data)
     }
 
     async fn delete(&self, key: &str) -> anyhow::Result<bool> {
-        let path = self.full_path(key);
+        let path = self.full_path(key)?;
         if path.exists() {
             tokio::fs::remove_file(&path).await?;
             Ok(true)
@@ -52,7 +62,7 @@ impl BackupBackend for LocalBackend {
     }
 
     async fn list(&self, prefix: &str) -> anyhow::Result<Vec<StoredBackup>> {
-        let search_dir = self.full_path(prefix);
+        let search_dir = self.full_path(prefix).unwrap_or_else(|_| self.base_dir.clone());
         let dir = if search_dir.is_dir() {
             &search_dir
         } else {
@@ -107,7 +117,7 @@ impl BackupBackend for LocalBackend {
     }
 
     async fn exists(&self, key: &str) -> anyhow::Result<bool> {
-        Ok(self.full_path(key).exists())
+        Ok(self.full_path(key)?.exists())
     }
 }
 

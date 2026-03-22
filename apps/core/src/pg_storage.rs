@@ -599,6 +599,21 @@ fn row_to_record(row: &tokio_postgres::Row) -> anyhow::Result<Record> {
     })
 }
 
+/// Validate that a field name contains only safe characters for use in SQL.
+///
+/// Allows alphanumeric characters, underscores, and dots (for nested JSON paths).
+fn validate_field_name(field: &str) -> bool {
+    !field.is_empty() && field.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.')
+}
+
+/// Escape LIKE/ILIKE metacharacters (`%`, `_`, `\`) in a search term.
+fn escape_like(value: &str) -> String {
+    value
+        .replace('\\', "\\\\")
+        .replace('%', "\\%")
+        .replace('_', "\\_")
+}
+
 /// Build PostgreSQL filter SQL from [`QueryFilters`].
 ///
 /// All values are passed as String parameters to keep the params vector
@@ -611,6 +626,9 @@ fn build_pg_filter_clauses(
 ) {
     // Equality filters.
     for f in &filters.equality {
+        if !validate_field_name(&f.field) {
+            continue;
+        }
         parts.push(format!("data->>'{}' = ${param_idx}", f.field));
         params.push(json_value_to_string(&f.value));
         *param_idx += 1;
@@ -618,6 +636,9 @@ fn build_pg_filter_clauses(
 
     // Comparison filters — cast the JSONB field to NUMERIC for comparison.
     for f in &filters.comparison {
+        if !validate_field_name(&f.field) {
+            continue;
+        }
         let op = match f.operator {
             ComparisonOp::Gte => ">=",
             ComparisonOp::Lte => "<=",
@@ -636,8 +657,12 @@ fn build_pg_filter_clauses(
 
     // Text search.
     for f in &filters.text_search {
-        parts.push(format!("data->>'{}' ILIKE ${param_idx}", f.field));
-        params.push(format!("%{}%", f.contains));
+        if !validate_field_name(&f.field) {
+            continue;
+        }
+        let escaped = escape_like(&f.contains);
+        parts.push(format!("data->>'{}' ILIKE ${param_idx} ESCAPE '\\'", f.field));
+        params.push(format!("%{escaped}%"));
         *param_idx += 1;
     }
 

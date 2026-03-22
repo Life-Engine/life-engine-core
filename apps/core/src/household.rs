@@ -140,6 +140,28 @@ impl HouseholdStore {
             .map(|m| m.role)
     }
 
+    /// Update a member's role in their household.
+    ///
+    /// Returns `true` if the member was found and updated, `false` otherwise.
+    pub async fn update_member_role(&self, user_id: &str, new_role: HouseholdRole) -> bool {
+        let map = self.user_household_map.read().await;
+        let household_id = match map.get(user_id) {
+            Some(id) => id.clone(),
+            None => return false,
+        };
+        drop(map);
+
+        let mut households = self.households.write().await;
+        if let Some(household) = households.get_mut(&household_id) {
+            if let Some(member) = household.members.iter_mut().find(|m| m.user_id == user_id) {
+                member.role = new_role;
+                household.updated_at = Utc::now();
+                return true;
+            }
+        }
+        false
+    }
+
     /// Create an invite for a new member.
     pub async fn create_invite(
         &self,

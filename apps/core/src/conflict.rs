@@ -37,6 +37,9 @@ pub enum ConflictResolution {
         /// The merged data.
         data: Value,
     },
+    /// Auto-merge could not resolve conflicting field changes.
+    /// Requires manual resolution from the user.
+    RequiresManual,
 }
 
 /// A detected conflict between local and remote versions of a record.
@@ -203,7 +206,7 @@ pub fn resolve_field_merge(
 
     if has_overlap_conflict {
         // Cannot auto-merge; flag for manual resolution.
-        ConflictResolution::KeepLocal // Placeholder — caller should set ManualResolution
+        ConflictResolution::RequiresManual
     } else {
         ConflictResolution::Merged {
             data: Value::Object(merged),

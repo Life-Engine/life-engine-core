@@ -179,15 +179,19 @@ pub async fn get_credential(
     };
 
     match store.retrieve(&plugin_id, &key).await {
-        Ok(Some(value)) => (
-            StatusCode::OK,
-            Json(json!({
-                "plugin_id": plugin_id,
-                "key": key,
-                "value": value
-            })),
-        )
-            .into_response(),
+        Ok(Some(value)) => {
+            tracing::info!(plugin_id = %plugin_id, key = %key, "credential retrieved");
+            (
+                StatusCode::OK,
+                [("cache-control", "no-store")],
+                Json(json!({
+                    "plugin_id": plugin_id,
+                    "key": key,
+                    "value": value
+                })),
+            )
+                .into_response()
+        }
         Ok(None) => (
             StatusCode::NOT_FOUND,
             Json(json!({

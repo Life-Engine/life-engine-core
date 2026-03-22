@@ -254,6 +254,17 @@ pub async fn update_member_role(
         }
     }
 
+    // Persist the role change.
+    if !state.store.update_member_role(&body.user_id, body.role).await {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(json!({
+                "error": { "code": "HOUSEHOLD_MEMBER_NOT_FOUND", "message": "member not found in any household" }
+            })),
+        )
+            .into_response();
+    }
+
     (
         StatusCode::OK,
         Json(json!({ "data": { "user_id": body.user_id, "role": body.role } })),

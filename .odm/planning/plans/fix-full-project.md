@@ -65,182 +65,182 @@ Progress: 0 / 4 work packages complete (76 tasks)
 > depends: 1.1
 > qa-report: .odm/qa/full-project/report.md
 
-- [ ] Replace fake HMAC with proper HMAC construction
+- [x] Replace fake HMAC with proper HMAC construction
   <!-- file: apps/core/src/crypto.rs -->
   <!-- purpose: Use hmac crate instead of SHA256(key || data) to prevent length-extension attacks -->
   <!-- findings: F-009 -->
   <!-- severity: high -->
   <!-- impact: Identity token signing vulnerable to forgery -->
 
-- [ ] Fix derive_key domain separation collisions
+- [x] Fix derive_key domain separation collisions
   <!-- file: apps/core/src/crypto.rs -->
   <!-- purpose: Use HKDF or add separator between secret and domain -->
   <!-- findings: F-010 -->
   <!-- severity: high -->
   <!-- impact: Key isolation between subsystems is broken -->
 
-- [ ] Fix SQL injection via filter field names
+- [x] Fix SQL injection via filter field names
   <!-- file: apps/core/src/sqlite_storage.rs, apps/core/src/pg_storage.rs -->
   <!-- purpose: Validate filter field names to [a-zA-Z0-9_.] characters -->
   <!-- findings: F-011 -->
   <!-- severity: high -->
   <!-- impact: Filter field names from HTTP API can inject arbitrary SQL -->
 
-- [ ] Fix LIKE meta-character injection in text search
+- [x] Fix LIKE meta-character injection in text search
   <!-- file: apps/core/src/pg_storage.rs, apps/core/src/sqlite_storage.rs -->
   <!-- purpose: Escape %, _, \ in text search contains values -->
   <!-- findings: F-012 -->
   <!-- severity: high -->
   <!-- impact: Unintended pattern matching through unescaped LIKE wildcards -->
 
-- [ ] Generate random Argon2 salt per database in rekey
+- [x] Generate random Argon2 salt per database in rekey
   <!-- file: apps/core/src/rekey.rs -->
   <!-- purpose: Replace hardcoded b"life-engine-salt" with random salt stored alongside DB -->
   <!-- findings: F-013 -->
   <!-- severity: high -->
   <!-- impact: Identical passphrases on different databases produce identical keys -->
 
-- [ ] Wire up file-backed storage instead of in-memory
+- [x] Wire up file-backed storage instead of in-memory
   <!-- file: apps/core/src/main.rs -->
   <!-- purpose: Use configured data_dir and storage.backend to open persistent storage -->
   <!-- findings: F-014 -->
   <!-- severity: high -->
   <!-- impact: All data is lost on every server restart -->
 
-- [ ] Fix storage init router auth ordering
+- [x] Fix storage init router auth ordering
   <!-- file: apps/core/src/main.rs -->
   <!-- purpose: Verify and fix auth middleware coverage for /api/storage/init -->
   <!-- findings: F-015 -->
   <!-- severity: high -->
   <!-- impact: Endpoint auth behavior contradicts documented design -->
 
-- [ ] Fix predictable WebAuthn session passphrase
+- [x] Fix predictable WebAuthn session passphrase
   <!-- file: apps/core/src/auth/webauthn_provider.rs -->
   <!-- purpose: Create dedicated internal token-minting bypassing passphrase verification -->
   <!-- findings: F-016 -->
   <!-- severity: high -->
   <!-- impact: Anyone knowing a user_id can mint arbitrary session tokens -->
 
-- [ ] Add /api/auth/register to middleware bypass list
+- [x] Add /api/auth/register to middleware bypass list
   <!-- file: apps/core/src/auth/middleware.rs -->
   <!-- purpose: Add register endpoint to skip list or update documentation -->
   <!-- findings: F-017 -->
   <!-- severity: high -->
   <!-- impact: Registration endpoint returns 401 before reaching handler -->
 
-- [ ] Fix conflict resolver KeepLocal placeholder
+- [x] Fix conflict resolver KeepLocal placeholder
   <!-- file: apps/core/src/conflict.rs -->
   <!-- purpose: Return RequiresManual variant or Err when auto-merge fails -->
   <!-- findings: F-018 -->
   <!-- severity: high -->
   <!-- impact: Remote changes silently discarded on merge failure -->
 
-- [ ] Replace std::sync::RwLock with tokio::sync in federation
+- [x] Replace std::sync::RwLock with tokio::sync in federation
   <!-- file: apps/core/src/federation.rs -->
   <!-- purpose: Use async-safe locks to prevent deadlocks in tokio runtime -->
   <!-- findings: F-019 -->
   <!-- severity: high -->
   <!-- impact: Potential runtime deadlock under concurrent federation sync -->
 
-- [ ] URL-encode federation sync parameters
+- [x] URL-encode federation sync parameters
   <!-- file: apps/core/src/federation.rs -->
   <!-- purpose: Use urlencoding::encode() for collection and cursor in URLs -->
   <!-- findings: F-020 -->
   <!-- severity: high -->
   <!-- impact: Malicious peer cursor values can alter sync request URLs -->
 
-- [ ] Fix rate limiter 0.0.0.0 fallback
+- [x] Fix rate limiter 0.0.0.0 fallback
   <!-- file: apps/core/src/rate_limit.rs -->
   <!-- purpose: Fail closed or extract IP from X-Forwarded-For when ConnectInfo absent -->
   <!-- findings: F-021 -->
   <!-- severity: high -->
   <!-- impact: All requests behind a proxy share one rate-limit bucket -->
 
-- [ ] Apply WASM HTTP request headers and body
+- [x] Apply WASM HTTP request headers and body
   <!-- file: apps/core/src/wasm_runtime.rs -->
   <!-- purpose: Stop ignoring _headers and _body parameters in handle_http_request -->
   <!-- findings: F-022 -->
   <!-- severity: high -->
   <!-- impact: Plugin HTTP POST/PUT requests are sent without payload -->
 
-- [ ] Fix HTTP domain allowlist suffix bypass
+- [x] Fix HTTP domain allowlist suffix bypass
   <!-- file: apps/core/src/wasm_runtime.rs -->
   <!-- purpose: Require exact or dot-prefixed match instead of ends_with -->
   <!-- findings: F-023 -->
   <!-- severity: high -->
   <!-- impact: evilexample.com passes when example.com is allowed -->
 
-- [ ] Fix XML injection in dav-utils responses
+- [x] Fix XML injection in dav-utils responses
   <!-- file: packages/dav-utils/src/dav_xml.rs -->
   <!-- purpose: XML-escape all interpolated values in write_response_entry and open_multistatus -->
   <!-- findings: F-024 -->
   <!-- severity: high -->
   <!-- impact: Malformed XML or injection via user-controlled calendar/contact data -->
 
-- [ ] Fix iCal timezone handling for TZID datetimes
+- [x] Fix iCal timezone handling for TZID datetimes
   <!-- file: packages/dav-utils/src/ical.rs -->
   <!-- purpose: Integrate chrono-tz for correct TZID-to-UTC conversion -->
   <!-- findings: F-025 -->
   <!-- severity: high -->
   <!-- impact: All non-UTC events stored at wrong time -->
 
-- [ ] Add auth/rate-limiting to storage init endpoint
+- [x] Add auth/rate-limiting to storage init endpoint
   <!-- file: apps/core/src/routes/storage.rs -->
   <!-- purpose: Prevent unlimited passphrase brute-force retries -->
   <!-- findings: F-026 -->
   <!-- severity: high -->
   <!-- impact: Unlimited passphrase guessing on encryption init endpoint -->
 
-- [ ] Add pagination and filter pushdown to federation changes
+- [x] Add pagination and filter pushdown to federation changes
   <!-- file: apps/core/src/routes/federation.rs -->
   <!-- purpose: Push since filter into storage query, add cursor-based pagination -->
   <!-- findings: F-027 -->
   <!-- severity: high -->
   <!-- impact: Changes beyond 1000 records silently dropped -->
 
-- [ ] Fix N+1 query in GraphQL attendee resolver
+- [x] Fix N+1 query in GraphQL attendee resolver
   <!-- file: apps/core/src/routes/graphql.rs -->
   <!-- purpose: Batch attendee email lookups into single query -->
   <!-- findings: F-028 -->
   <!-- severity: high -->
   <!-- impact: Sequential DB round-trips per attendee in calendar events -->
 
-- [ ] Secure credential retrieval endpoint
+- [x] Secure credential retrieval endpoint
   <!-- file: apps/core/src/routes/credentials.rs -->
   <!-- purpose: Add Cache-Control: no-store, audit logging middleware, ensure HTTPS -->
   <!-- findings: F-029 -->
   <!-- severity: high -->
   <!-- impact: Plaintext secrets (API keys, passwords) returned in API response body -->
 
-- [ ] Persist household role changes
+- [x] Persist household role changes
   <!-- file: apps/core/src/routes/household.rs -->
   <!-- purpose: Call store.update_member_role() before returning success -->
   <!-- findings: F-030 -->
   <!-- severity: high -->
   <!-- impact: Role changes return success but are never saved -->
 
-- [ ] Fix XML injection in CalDAV/CardDAV protocol responses
+- [x] Fix XML injection in CalDAV/CardDAV protocol responses
   <!-- file: plugins/engine/api-caldav/src/protocol.rs, plugins/engine/api-carddav/src/protocol.rs -->
   <!-- purpose: XML-escape all interpolated values in build_propfind_xml and build_report_xml -->
   <!-- findings: F-032 -->
   <!-- severity: high -->
   <!-- impact: User-controlled data injected into XML responses -->
 
-- [ ] Fix path traversal in local backup backend
+- [x] Fix path traversal in local backup backend
   <!-- file: plugins/engine/backup/src/backend/local.rs -->
   <!-- purpose: Validate resolved path stays within base_dir; reject keys with .. -->
   <!-- findings: F-033 -->
   <!-- severity: high -->
   <!-- impact: Attacker can read/write files outside backup directory -->
 
-- [ ] Fix scaffold plugin template dependency path
+- [x] Fix scaffold plugin template dependency path
   <!-- file: tools/templates/engine-plugin/Cargo.toml -->
   <!-- purpose: Change to ../../../packages/plugin-sdk-rs -->
   <!-- findings: F-034 -->
   <!-- severity: high -->
   <!-- impact: Every scaffolded plugin fails cargo check -->
 
-- [ ] Update build verification test workspace members
+- [x] Update build verification test workspace members
   <!-- file: apps/core/tests/build_verification_test.rs -->
   <!-- purpose: Add 7 missing workspace members to expected set -->
   <!-- findings: F-035 -->

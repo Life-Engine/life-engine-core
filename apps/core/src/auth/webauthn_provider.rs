@@ -359,8 +359,11 @@ impl WebAuthnProvider {
         }
 
         // Generate a session token via the local token provider.
+        // Use a cryptographically random passphrase to prevent token minting
+        // by anyone who knows a user_id.
+        let random_passphrase = uuid::Uuid::new_v4().to_string();
         let token_request = TokenRequest {
-            passphrase: format!("webauthn:{user_id}"),
+            passphrase: random_passphrase,
             expires_in_days: Some(30),
         };
 

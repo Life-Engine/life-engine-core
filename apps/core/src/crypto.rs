@@ -7,17 +7,20 @@
 
 use aes_gcm::aead::{Aead, KeyInit, OsRng};
 use aes_gcm::{AeadCore, Aes256Gcm, Nonce};
-use sha2::{Digest, Sha256};
+use hkdf::Hkdf;
+use sha2::Sha256;
 
-/// Derive a 32-byte key from a secret and domain separator using SHA-256.
+/// Derive a 32-byte key from a secret and domain separator using HKDF-SHA256.
 ///
 /// Different domain separators produce independent keys from the same
-/// secret, providing key isolation between subsystems.
+/// secret, providing key isolation between subsystems. Uses HKDF (RFC 5869)
+/// which provides proper domain separation via the `info` parameter.
 pub fn derive_key(secret: &str, domain: &str) -> Vec<u8> {
-    let mut hasher = Sha256::new();
-    hasher.update(secret.as_bytes());
-    hasher.update(domain.as_bytes());
-    hasher.finalize().to_vec()
+    let hk = Hkdf::<Sha256>::new(None, secret.as_bytes());
+    let mut okm = vec![0u8; 32];
+    hk.expand(domain.as_bytes(), &mut okm)
+        .expect("32 bytes is a valid HKDF-SHA256 output length");
+    okm
 }
 
 /// Encrypt data using AES-256-GCM with a random nonce.
@@ -51,12 +54,16 @@ pub fn decrypt(data: &[u8], key: &[u8]) -> Result<Vec<u8>, aes_gcm::Error> {
 
 /// Compute HMAC-SHA256 of data with a signing key.
 ///
-/// Returns the hex-encoded hash.
+/// Returns the hex-encoded MAC. Uses the `hmac` crate for a proper
+/// HMAC construction that is resistant to length-extension attacks.
 pub fn hmac_sha256(key: &[u8], data: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(key);
-    hasher.update(data);
-    hex::encode(hasher.finalize())
+    use hmac::{Hmac, Mac};
+    type HmacSha256 = Hmac<Sha256>;
+
+    let mut mac =
+        <HmacSha256 as Mac>::new_from_slice(key).expect("HMAC-SHA256 accepts any key length");
+    mac.update(data);
+    hex::encode(mac.finalize().into_bytes())
 }
 
 /// Domain separator for the plugin credential store.

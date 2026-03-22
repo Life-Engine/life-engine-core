@@ -2,6 +2,8 @@
 
 ## 2026-03-23
 
+- WP 2.5 App Layout & Routing: add react-router-dom, create Layout shell with Sidebar navigation (Dashboard, Configuration, Plugins, System) with active route highlighting, create placeholder page components (DashboardPage, ConfigPage, PluginsPage, SystemPage), wire up BrowserRouter and Routes in App.tsx/main.tsx
+
 - WP 2.4 Shared Config Types & API Client: add TypeScript interfaces in apps/admin/src/types/config.ts mirroring all CoreConfig Rust structs (CoreSettings, AuthSettings, OidcSettings, WebAuthnSettings, StorageSettings, PostgresSettings, Argon2Settings, PluginSettings, NetworkSettings, TlsSettings, CorsSettings, RateLimitSettings) plus SystemInfo, PluginInfo, and HealthStatus types; add fetch-based API client in apps/admin/src/api/client.ts with getConfig(), updateConfig(), getSystemInfo(), getPlugins(), and healthCheck() methods with ApiError class for error handling
 
 - WP 2.3 Admin App Scaffolding: scaffold React 19 + Vite 6 + TypeScript admin app at apps/admin with Tailwind CSS, PostCSS, dev server proxy to Core on port 3750, Nx project.json with dev/build/preview/lint targets, ESLint config, and .gitignore for build artifacts

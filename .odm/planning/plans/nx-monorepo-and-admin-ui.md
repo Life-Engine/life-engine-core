@@ -205,13 +205,13 @@ Progress: 0 / 14 work packages complete
 ## 2.5 — App Layout & Routing
 > depends: 2.3
 
-- [ ] Create admin layout with sidebar navigation
+- [x] Create admin layout with sidebar navigation
   <!-- file: apps/admin/src/components/Layout.tsx, apps/admin/src/components/Sidebar.tsx -->
   <!-- purpose: Create app shell with sidebar listing pages: Dashboard, Configuration, Plugins, System; highlight active route -->
   <!-- requirements: navigable admin interface -->
   <!-- leverage: Tailwind CSS -->
 
-- [ ] Set up React Router with page routes
+- [x] Set up React Router with page routes
   <!-- file: apps/admin/src/App.tsx, apps/admin/src/main.tsx -->
   <!-- purpose: Configure react-router-dom with routes for / (dashboard), /config (config editor), /plugins (plugin list), /system (system status) -->
   <!-- requirements: client-side routing -->

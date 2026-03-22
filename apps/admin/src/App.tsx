@@ -1,11 +1,19 @@
-function App() {
+import { Route, Routes } from "react-router-dom";
+import Layout from "./components/Layout";
+import DashboardPage from "./pages/DashboardPage";
+import ConfigPage from "./pages/ConfigPage";
+import PluginsPage from "./pages/PluginsPage";
+import SystemPage from "./pages/SystemPage";
+
+export default function App() {
   return (
-    <div className="min-h-screen bg-gray-50">
-      <h1 className="p-8 text-2xl font-bold text-gray-900">
-        Life Engine Admin
-      </h1>
-    </div>
+    <Routes>
+      <Route element={<Layout />}>
+        <Route index element={<DashboardPage />} />
+        <Route path="config" element={<ConfigPage />} />
+        <Route path="plugins" element={<PluginsPage />} />
+        <Route path="system" element={<SystemPage />} />
+      </Route>
+    </Routes>
   );
 }
-
-export default App;

@@ -142,19 +142,19 @@ Progress: 0 / 14 work packages complete
 ## 2.2 — Config Reload & API Tests
 > depends: 2.1
 
-- [ ] Add runtime config reload capability
+- [x] Add runtime config reload capability
   <!-- file: apps/core/src/config.rs -->
   <!-- purpose: Add reload method that re-reads config.yaml and applies hot-reloadable settings (log_level, rate_limit, cors) without server restart -->
   <!-- requirements: config changes take effect without downtime -->
   <!-- leverage: CoreConfig::load, tracing EnvFilter reload -->
 
-- [ ] Wire config reload into PUT endpoint and add route registration
+- [x] Wire config reload into PUT endpoint and add route registration
   <!-- file: apps/core/src/routes/system.rs, apps/core/src/main.rs -->
   <!-- purpose: Call config reload after PUT writes config.yaml; register GET/PUT /api/system/config routes in the router -->
   <!-- requirements: end-to-end config update flow -->
   <!-- leverage: system routes, main.rs router setup -->
 
-- [ ] Add tests for config API endpoints
+- [x] Add tests for config API endpoints
   <!-- file: apps/core/src/routes/system.rs -->
   <!-- purpose: Add tests for GET config (redaction, auth required), PUT config (validation, write, reload), and error cases -->
   <!-- requirements: endpoint correctness -->

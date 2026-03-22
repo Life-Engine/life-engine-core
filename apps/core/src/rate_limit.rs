@@ -17,7 +17,7 @@ use governor::{Quota, RateLimiter};
 use serde_json::json;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::num::NonZeroU32;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 /// Type alias for the governor keyed rate limiter with default clock.
 type KeyedLimiter = RateLimiter<IpAddr, DashMapStateStore<IpAddr>, DefaultClock>;
@@ -25,11 +25,13 @@ type KeyedLimiter = RateLimiter<IpAddr, DashMapStateStore<IpAddr>, DefaultClock>
 /// Shared state for the general rate limiter middleware.
 ///
 /// Wraps a `governor` keyed rate limiter that tracks request budgets
-/// per client IP address using the GCRA algorithm.
+/// per client IP address using the GCRA algorithm. The inner limiter
+/// can be swapped at runtime via [`reconfigure`](Self::reconfigure) to
+/// apply updated rate-limit settings without restarting the server.
 #[derive(Debug, Clone)]
 pub struct GeneralRateLimiter {
-    /// The governor keyed rate limiter instance.
-    limiter: Arc<KeyedLimiter>,
+    /// The governor keyed rate limiter instance, behind a RwLock for hot-reload.
+    limiter: Arc<RwLock<Arc<KeyedLimiter>>>,
     /// Cached clock for computing retry-after durations.
     clock: DefaultClock,
 }
@@ -45,11 +47,26 @@ impl GeneralRateLimiter {
         let rpm = NonZeroU32::new(max_requests_per_minute)
             .expect("max_requests_per_minute must be > 0 (validated by config)");
         let quota = Quota::per_minute(rpm);
-        let limiter = Arc::new(RateLimiter::dashmap(quota));
+        let limiter = Arc::new(RwLock::new(Arc::new(RateLimiter::dashmap(quota))));
         Self {
             limiter,
             clock: DefaultClock::default(),
         }
+    }
+
+    /// Replace the internal limiter with a new one configured for the given RPM.
+    ///
+    /// Existing per-IP state is discarded; all clients start with a fresh budget.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `max_requests_per_minute` is zero.
+    pub fn reconfigure(&self, max_requests_per_minute: u32) {
+        let rpm = NonZeroU32::new(max_requests_per_minute)
+            .expect("max_requests_per_minute must be > 0 (validated by config)");
+        let quota = Quota::per_minute(rpm);
+        let new_limiter = Arc::new(RateLimiter::dashmap(quota));
+        *self.limiter.write().unwrap() = new_limiter;
     }
 
     /// Check whether the given IP is allowed to proceed.
@@ -57,7 +74,8 @@ impl GeneralRateLimiter {
     /// Returns `Ok(())` if under the limit, or `Err(retry_after_secs)`
     /// with the number of seconds the client should wait before retrying.
     pub fn check(&self, ip: IpAddr) -> Result<(), u64> {
-        match self.limiter.check_key(&ip) {
+        let limiter = self.limiter.read().unwrap();
+        match limiter.check_key(&ip) {
             Ok(_) => Ok(()),
             Err(not_until) => {
                 let wait = not_until.wait_time_from(self.clock.now());

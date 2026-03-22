@@ -35,7 +35,7 @@ mod identity;
 
 use crate::auth::middleware::{auth_middleware, AuthMiddlewareState, RateLimiter};
 use crate::auth::routes::auth_router;
-use crate::config::{CliArgs, CoreConfig};
+use crate::config::{CliArgs, CoreConfig, LogReloadHandle};
 use crate::rate_limit::{rate_limit_middleware, GeneralRateLimiter};
 use crate::conflict::ConflictStore;
 use crate::message_bus::MessageBus;
@@ -72,7 +72,6 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::Mutex;
-use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::EnvFilter;
 
@@ -84,8 +83,8 @@ async fn main() -> anyhow::Result<()> {
     // 2. Load configuration (YAML < env < CLI).
     let config = CoreConfig::load(&cli)?;
 
-    // 3. Initialise structured logging.
-    init_logging(&config);
+    // 3. Initialise structured logging (returns a handle for hot-reloading log level).
+    let log_reload_handle = init_logging(&config);
 
     tracing::info!("Life Engine Core starting");
     tracing::info!(
@@ -223,6 +222,21 @@ async fn main() -> anyhow::Result<()> {
     };
     let shared_config = Arc::new(tokio::sync::RwLock::new(config.clone()));
 
+    let general_rate_limiter =
+        GeneralRateLimiter::new(config.network.rate_limit.requests_per_minute);
+    tracing::info!(
+        rpm = config.network.rate_limit.requests_per_minute,
+        "general rate limiter initialised"
+    );
+
+    tracing::info!(
+        origins = ?config.network.cors.allowed_origins,
+        "CORS origins configured (dynamic — changes apply on config reload)"
+    );
+    if config.network.cors.allowed_origins.iter().any(|o| o == "*") {
+        tracing::warn!("CORS configured with wildcard origin '*' — any domain can make cross-origin requests");
+    }
+
     let state = AppState {
         start_time,
         plugin_loader: Arc::clone(&plugin_loader),
@@ -235,53 +249,10 @@ async fn main() -> anyhow::Result<()> {
         household_store: Some(Arc::new(crate::household::HouseholdStore::new())),
         federation_store: Some(Arc::new(crate::federation::FederationStore::new())),
         identity_store: None,
-        config: shared_config,
+        config: Arc::clone(&shared_config),
         config_path,
-    };
-
-    let general_rate_limiter =
-        GeneralRateLimiter::new(config.network.rate_limit.requests_per_minute);
-    tracing::info!(
-        rpm = config.network.rate_limit.requests_per_minute,
-        "general rate limiter initialised"
-    );
-
-    let cors = {
-        use axum::http::{header, Method};
-
-        let origins = &config.network.cors.allowed_origins;
-        let allow_origin = if origins.iter().any(|o| o == "*") {
-            tracing::warn!("CORS configured with wildcard origin '*' — any domain can make cross-origin requests");
-            AllowOrigin::any()
-        } else {
-            let parsed: Vec<axum::http::HeaderValue> = origins
-                .iter()
-                .filter_map(|o| match o.parse() {
-                    Ok(v) => Some(v),
-                    Err(e) => {
-                        tracing::warn!(origin = %o, error = %e, "failed to parse CORS origin, skipping");
-                        None
-                    }
-                })
-                .collect();
-            AllowOrigin::list(parsed)
-        };
-        tracing::info!(origins = ?origins, "CORS origins configured");
-
-        CorsLayer::new()
-            .allow_origin(allow_origin)
-            .allow_methods([
-                Method::GET,
-                Method::POST,
-                Method::PUT,
-                Method::DELETE,
-                Method::OPTIONS,
-            ])
-            .allow_headers([
-                header::CONTENT_TYPE,
-                header::AUTHORIZATION,
-                header::ACCEPT,
-            ])
+        log_reload_handle: Some(log_reload_handle),
+        rate_limiter: Some(general_rate_limiter.clone()),
     };
 
     // Storage init endpoint (no auth required, callable once).
@@ -423,7 +394,10 @@ async fn main() -> anyhow::Result<()> {
         // Public routes (no auth required) merged after auth middleware.
         .merge(storage_init_router)
         .layer(TraceLayer::new_for_http())
-        .layer(cors);
+        .layer(axum::middleware::from_fn_with_state(
+            shared_config,
+            dynamic_cors_middleware,
+        ));
 
     // 9. Bind and serve.
     let bind_addr = config.bind_address();
@@ -528,25 +502,85 @@ async fn serve_tls(
     Ok(())
 }
 
+/// Dynamic CORS middleware that reads allowed origins from the shared config.
+///
+/// Unlike a static `CorsLayer`, this re-checks the config on every request,
+/// so CORS origin changes applied via PUT `/api/system/config` take effect
+/// immediately without a server restart.
+async fn dynamic_cors_middleware(
+    axum::extract::State(config): axum::extract::State<Arc<tokio::sync::RwLock<CoreConfig>>>,
+    request: axum::http::Request<axum::body::Body>,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    use axum::http::{header, Method};
+    use axum::response::IntoResponse;
+
+    let origin = request.headers().get(header::ORIGIN).cloned();
+    let is_preflight = request.method() == Method::OPTIONS;
+
+    let mut response = if is_preflight {
+        axum::http::StatusCode::NO_CONTENT.into_response()
+    } else {
+        next.run(request).await
+    };
+
+    if let Some(origin_val) = origin {
+        let config = config.read().await;
+        let allowed = &config.network.cors.allowed_origins;
+        let origin_str = origin_val.to_str().unwrap_or("");
+        let is_wildcard = allowed.iter().any(|o| o == "*");
+        let is_listed = allowed.iter().any(|o| o == origin_str);
+
+        if is_wildcard || is_listed {
+            let allow_origin_val = if is_wildcard {
+                header::HeaderValue::from_static("*")
+            } else {
+                origin_val
+            };
+            let headers = response.headers_mut();
+            headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, allow_origin_val);
+            headers.insert(
+                header::ACCESS_CONTROL_ALLOW_METHODS,
+                "GET, POST, PUT, DELETE, OPTIONS".parse().unwrap(),
+            );
+            headers.insert(
+                header::ACCESS_CONTROL_ALLOW_HEADERS,
+                "Content-Type, Authorization, Accept".parse().unwrap(),
+            );
+        }
+    }
+
+    response
+}
+
 /// Initialise the tracing subscriber based on config.
-fn init_logging(config: &CoreConfig) {
+///
+/// Returns a [`LogReloadHandle`] that can be used to hot-reload the
+/// EnvFilter (log level) at runtime without restarting the server.
+fn init_logging(config: &CoreConfig) -> LogReloadHandle {
+    use tracing_subscriber::prelude::*;
+
     let env_filter = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| EnvFilter::new(&config.core.log_level));
 
+    let (filter_layer, reload_handle) = tracing_subscriber::reload::Layer::new(env_filter);
+
     match config.core.log_format.as_str() {
         "pretty" => {
-            tracing_subscriber::fmt()
-                .with_env_filter(env_filter)
-                .pretty()
+            tracing_subscriber::registry()
+                .with(filter_layer)
+                .with(tracing_subscriber::fmt::layer().pretty())
                 .init();
         }
         _ => {
-            tracing_subscriber::fmt()
-                .with_env_filter(env_filter)
-                .json()
+            tracing_subscriber::registry()
+                .with(filter_layer)
+                .with(tracing_subscriber::fmt::layer().json())
                 .init();
         }
     }
+
+    reload_handle
 }
 
 #[cfg(test)]

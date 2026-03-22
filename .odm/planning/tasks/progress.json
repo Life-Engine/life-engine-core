@@ -1,13 +1,17 @@
 {
   "version": 1,
   "last_updated": "2026-03-23T00:00:00Z",
-  "completed_wps": ["1.1", "1.2", "1.3", "1.4", "nx:1.1", "nx:1.2", "nx:1.3", "nx:1.4", "nx:1.5", "nx:1.6"],
-  "current_wp": null,
+  "completed_wps": ["1.1", "1.2", "1.3", "1.4", "nx:1.1", "nx:1.2", "nx:1.3", "nx:1.4", "nx:1.5", "nx:1.6", "2.1"],
+  "current_wp": "2.2",
   "current_wp_tasks": {
-    "total": 0,
+    "total": 3,
     "completed": [],
     "deferred": [],
-    "remaining": [],
+    "remaining": [
+      "Add runtime config reload capability",
+      "Wire config reload into PUT endpoint and add route registration",
+      "Add tests for config API endpoints"
+    ],
     "failed": []
   },
   "history": [
@@ -87,7 +91,15 @@
       "wp": "nx:1.6",
       "title": "Gitignore & Verification",
       "completed_at": "2026-03-23T00:00:00Z",
-      "commit": "pending",
+      "commit": "28160f4",
+      "tasks_completed": 2,
+      "tasks_deferred": 0
+    },
+    {
+      "wp": "2.1",
+      "title": "Config API Endpoints",
+      "completed_at": "2026-03-23T00:00:00Z",
+      "commit": "fa9533b",
       "tasks_completed": 2,
       "tasks_deferred": 0
     }

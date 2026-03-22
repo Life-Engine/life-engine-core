@@ -1,6 +1,6 @@
 //! Health check endpoint returning system status, uptime, and plugin info.
 
-use crate::config::CoreConfig;
+use crate::config::{CoreConfig, LogReloadHandle};
 use crate::conflict::ConflictStore;
 use crate::credential_store::SqliteCredentialStore;
 use crate::federation::FederationStore;
@@ -8,6 +8,7 @@ use crate::household::HouseholdStore;
 use crate::identity::IdentityStore;
 use crate::message_bus::MessageBus;
 use crate::plugin_loader::{PluginLoader, PluginStatus};
+use crate::rate_limit::GeneralRateLimiter;
 use crate::schema_registry::ValidatedStorage;
 use crate::search::SearchEngine;
 use crate::sqlite_storage::SqliteStorage;
@@ -48,6 +49,10 @@ pub struct AppState {
     pub config: Arc<RwLock<CoreConfig>>,
     /// Path to the config YAML file for persisting changes.
     pub config_path: Option<PathBuf>,
+    /// Handle for hot-reloading the tracing EnvFilter (log level).
+    pub log_reload_handle: Option<LogReloadHandle>,
+    /// Shared rate limiter for runtime reconfiguration.
+    pub rate_limiter: Option<GeneralRateLimiter>,
 }
 
 /// Health response body.

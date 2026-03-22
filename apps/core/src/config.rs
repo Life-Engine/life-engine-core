@@ -13,6 +13,12 @@ use clap::Parser;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::path::{Path, PathBuf};
+use tracing_subscriber::EnvFilter;
+
+/// Type alias for the tracing EnvFilter reload handle.
+///
+/// Used to hot-reload the log level at runtime without restarting the server.
+pub type LogReloadHandle = tracing_subscriber::reload::Handle<EnvFilter, tracing_subscriber::Registry>;
 
 /// Placeholder shown in Debug/Display output for sensitive fields.
 const REDACTED: &str = "[REDACTED]";

@@ -86,6 +86,8 @@ pub fn default_app_state() -> AppState {
         identity_store: None,
         config: Arc::new(RwLock::new(CoreConfig::default())),
         config_path: None,
+        log_reload_handle: None,
+        rate_limiter: None,
     }
 }
 

@@ -79,7 +79,46 @@ pub async fn put_config(
     // Update in-memory config.
     *config = merged;
 
+    // Apply hot-reloadable settings.
+    reload_runtime_settings(&state, &config);
+
     Ok(Json(json!({ "data": config.to_redacted_json() })))
+}
+
+/// Apply hot-reloadable settings from the current config.
+///
+/// Updates the tracing log level and the general rate limiter without
+/// requiring a server restart. CORS changes are applied automatically
+/// by the dynamic CORS middleware which reads from the shared config.
+fn reload_runtime_settings(state: &AppState, config: &crate::config::CoreConfig) {
+    // Reload log level via the tracing EnvFilter handle.
+    if let Some(ref handle) = state.log_reload_handle {
+        match tracing_subscriber::EnvFilter::try_new(&config.core.log_level) {
+            Ok(new_filter) => {
+                if let Err(e) = handle.reload(new_filter) {
+                    tracing::warn!(error = %e, "failed to reload log filter");
+                } else {
+                    tracing::info!(level = %config.core.log_level, "log level reloaded");
+                }
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, level = %config.core.log_level, "invalid log level, skipping reload");
+            }
+        }
+    }
+
+    // Reconfigure the general rate limiter.
+    if let Some(ref limiter) = state.rate_limiter {
+        limiter.reconfigure(config.network.rate_limit.requests_per_minute);
+        tracing::info!(
+            rpm = config.network.rate_limit.requests_per_minute,
+            "rate limiter reconfigured"
+        );
+    }
+
+    // CORS: no explicit reload needed — the dynamic CORS middleware reads
+    // from the shared config on every request, so changes take effect
+    // immediately once the in-memory config is updated.
 }
 
 /// GET /api/system/plugins — List all loaded plugins.
@@ -343,5 +382,114 @@ mod tests {
             .unwrap();
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), axum::http::StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn put_config_reloads_log_level() {
+        let (auth_state, provider) = create_auth_state();
+        let mut state = default_app_state();
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        state.config_path = Some(tmp.path().to_path_buf());
+
+        // Set up a real log reload handle so the reload path executes.
+        let filter = tracing_subscriber::EnvFilter::new("info");
+        let (_layer, handle) = tracing_subscriber::reload::Layer::<
+            tracing_subscriber::EnvFilter,
+            tracing_subscriber::Registry,
+        >::new(filter);
+        state.log_reload_handle = Some(handle);
+
+        let app = Router::new()
+            .route(
+                "/api/system/config",
+                get(get_config).put(put_config),
+            )
+            .with_state(state)
+            .layer(axum::middleware::from_fn_with_state(
+                auth_state,
+                auth_middleware,
+            ));
+
+        let token = generate_test_token(&provider).await;
+        let body = serde_json::json!({ "core": { "log_level": "debug" } }).to_string();
+        let req = auth_request("PUT", "/api/system/config", &token, Some(body));
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), axum::http::StatusCode::OK);
+
+        let json = body_json(resp).await;
+        assert_eq!(json["data"]["core"]["log_level"], "debug");
+    }
+
+    #[tokio::test]
+    async fn put_config_reconfigures_rate_limiter() {
+        let (auth_state, provider) = create_auth_state();
+        let mut state = default_app_state();
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        state.config_path = Some(tmp.path().to_path_buf());
+
+        // Set up a real rate limiter so the reconfigure path executes.
+        let limiter = crate::rate_limit::GeneralRateLimiter::new(60);
+        state.rate_limiter = Some(limiter.clone());
+
+        let shared_config = Arc::clone(&state.config);
+
+        let app = Router::new()
+            .route(
+                "/api/system/config",
+                get(get_config).put(put_config),
+            )
+            .with_state(state)
+            .layer(axum::middleware::from_fn_with_state(
+                auth_state,
+                auth_middleware,
+            ));
+
+        let token = generate_test_token(&provider).await;
+        let body =
+            serde_json::json!({ "network": { "rate_limit": { "requests_per_minute": 120 } } })
+                .to_string();
+        let req = auth_request("PUT", "/api/system/config", &token, Some(body));
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), axum::http::StatusCode::OK);
+
+        let json = body_json(resp).await;
+        assert_eq!(
+            json["data"]["network"]["rate_limit"]["requests_per_minute"],
+            120
+        );
+
+        // Verify in-memory config was updated.
+        let config = shared_config.read().await;
+        assert_eq!(config.network.rate_limit.requests_per_minute, 120);
+    }
+
+    #[tokio::test]
+    async fn put_config_without_config_path_returns_error() {
+        let (auth_state, provider) = create_auth_state();
+        let state = default_app_state();
+        // config_path is None by default.
+
+        let app = Router::new()
+            .route("/api/system/config", put(put_config))
+            .with_state(state)
+            .layer(axum::middleware::from_fn_with_state(
+                auth_state,
+                auth_middleware,
+            ));
+
+        let token = generate_test_token(&provider).await;
+        let body = serde_json::json!({ "core": { "port": 9090 } }).to_string();
+        let req = auth_request("PUT", "/api/system/config", &token, Some(body));
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(
+            resp.status(),
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR
+        );
+
+        let json = body_json(resp).await;
+        assert!(json["error"]
+            .as_str()
+            .unwrap()
+            .contains("no config file path"));
     }
 }

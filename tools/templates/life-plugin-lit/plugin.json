@@ -1,0 +1,18 @@
+{
+  "id": "com.example.my-lit-plugin",
+  "name": "My Lit Plugin",
+  "version": "0.1.0",
+  "entry": "src/index.js",
+  "element": "my-lit-plugin",
+  "minShellVersion": "0.1.0",
+  "sidebar": {
+    "label": "My Lit Plugin",
+    "icon": "puzzle"
+  },
+  "capabilities": [
+    "storage:local"
+  ],
+  "dependencies": {
+    "sharedModules": ["lit"]
+  }
+}

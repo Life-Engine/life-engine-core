@@ -1,0 +1,39 @@
+[package]
+name = "connector-calendar"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "CalDAV and Google Calendar connector plugin for Life Engine Core"
+
+[lib]
+name = "connector_calendar"
+path = "src/lib.rs"
+
+[features]
+integration = ["reqwest"]
+
+[dependencies]
+life-engine-plugin-sdk = { path = "../../../packages/plugin-sdk-rs" }
+life-engine-types = { path = "../../../packages/types" }
+dav-utils = { path = "../../../packages/dav-utils" }
+async-trait = { workspace = true }
+anyhow = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+sha2 = { workspace = true }
+rand = { workspace = true }
+ical = "0.11"
+reqwest = { version = "0.12", features = ["json"], optional = true }
+base64 = "0.22"
+url = "2"
+
+[dev-dependencies]
+life-engine-test-utils = { path = "../../../packages/test-utils" }
+reqwest = { workspace = true }
+tokio = { workspace = true }
+uuid = { workspace = true }

@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "updated": "2026-03-22T00:00:00Z",
+  "plugins": [
+    {
+      "id": "com.life-engine.plugin-email-viewer",
+      "name": "Email Viewer",
+      "version": "0.1.0",
+      "description": "View and manage email from connected IMAP accounts",
+      "author": { "name": "Life Engine Team" },
+      "license": "Apache-2.0",
+      "entry": "index.js",
+      "element": "email-viewer",
+      "minShellVersion": "0.1.0",
+      "capabilities": ["data:read:emails", "data:write:emails", "ui:toast", "ui:navigate"],
+      "category": "communication",
+      "repository": "https://github.com/life-engine-org/life-engine",
+      "installCount": 0,
+      "official": true,
+      "verificationTier": "official"
+    },
+    {
+      "id": "com.life-engine.plugin-calendar",
+      "name": "Calendar",
+      "version": "0.1.0",
+      "description": "View and manage calendar events from connected CalDAV and Google Calendar accounts",
+      "author": { "name": "Life Engine Team" },
+      "license": "Apache-2.0",
+      "entry": "index.js",
+      "element": "calendar-plugin",
+      "minShellVersion": "0.1.0",
+      "capabilities": ["data:read:events", "data:write:events", "ui:toast", "ui:navigate"],
+      "category": "productivity",
+      "repository": "https://github.com/life-engine-org/life-engine",
+      "installCount": 0,
+      "official": true,
+      "verificationTier": "official"
+    }
+  ]
+}

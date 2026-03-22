@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://life-engine.org/schemas/migration.schema.json",
+  "title": "Life Engine Migration Entry",
+  "description": "Schema for a single migration entry in a plugin manifest's migrations array.",
+  "type": "object",
+  "required": ["from", "to", "transform"],
+  "properties": {
+    "from": {
+      "type": "string",
+      "description": "Semver range matching the source schema version. Supports x wildcards (e.g., 1.x, 1.0.x).",
+      "pattern": "^\\d+\\.(\\d+|x)\\.(\\d+|x)$|^\\d+\\.(\\d+|x)$",
+      "examples": ["1.x", "1.0.x", "1.0.0"]
+    },
+    "to": {
+      "type": "string",
+      "description": "Exact semver version records will have after migration.",
+      "pattern": "^\\d+\\.\\d+\\.\\d+(-[a-zA-Z0-9.]+)?(\\+[a-zA-Z0-9.]+)?$",
+      "examples": ["2.0.0"]
+    },
+    "transform": {
+      "type": "string",
+      "description": "Relative path from plugin root to the migration script.",
+      "minLength": 1,
+      "examples": ["./migrations/v2.js"]
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable summary of what the migration does."
+    }
+  },
+  "additionalProperties": false
+}

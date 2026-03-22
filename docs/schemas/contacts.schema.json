@@ -1,0 +1,148 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Contact",
+  "description": "A contact in the Life Engine canonical data model.",
+  "type": "object",
+  "required": [
+    "id",
+    "name",
+    "source",
+    "source_id",
+    "created_at",
+    "updated_at"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique identifier assigned by Core"
+    },
+    "name": {
+      "type": "object",
+      "description": "Structured name",
+      "required": [
+        "given",
+        "family",
+        "display"
+      ],
+      "properties": {
+        "given": {
+          "type": "string",
+          "description": "Given/first name"
+        },
+        "family": {
+          "type": "string",
+          "description": "Family/last name"
+        },
+        "display": {
+          "type": "string",
+          "description": "Full display name as the user prefers it"
+        }
+      },
+      "additionalProperties": false
+    },
+    "emails": {
+      "type": "array",
+      "description": "List of email addresses",
+      "items": {
+        "type": "object",
+        "required": [
+          "address"
+        ],
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Email address"
+          },
+          "type": {
+            "type": "string",
+            "description": "Label such as work, personal, other"
+          },
+          "primary": {
+            "type": "boolean",
+            "description": "Whether this is the primary email"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "phones": {
+      "type": "array",
+      "description": "List of phone numbers",
+      "items": {
+        "type": "object",
+        "required": [
+          "number"
+        ],
+        "properties": {
+          "number": {
+            "type": "string",
+            "description": "Phone number (E.164 format recommended)"
+          },
+          "type": {
+            "type": "string",
+            "description": "Label such as mobile, work, home"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "addresses": {
+      "type": "array",
+      "description": "List of postal addresses",
+      "items": {
+        "type": "object",
+        "properties": {
+          "street": {
+            "type": "string"
+          },
+          "city": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "postcode": {
+            "type": "string"
+          },
+          "country": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "organisation": {
+      "type": "string",
+      "description": "Company or organisation name"
+    },
+    "source": {
+      "type": "string",
+      "description": "Identifier of the connector or plugin that produced this record"
+    },
+    "source_id": {
+      "type": "string",
+      "description": "The record's original ID in the source system"
+    },
+    "extensions": {
+      "type": "object",
+      "description": "Plugin-specific fields, namespaced by plugin ID. See ADR-014.",
+      "patternProperties": {
+        "^[a-z][a-z0-9]*(-[a-z0-9]+)*(\\.[a-z][a-z0-9]*(-[a-z0-9]+)*)+$": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Record creation timestamp"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Record last-updated timestamp"
+    }
+  },
+  "additionalProperties": false
+}

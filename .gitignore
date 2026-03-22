@@ -1,0 +1,94 @@
+# Rust
+target/
+**/*.rs.bk
+*.pdb
+**/mutants.out*/
+
+# Node / JS / TS
+node_modules/
+dist/
+.turbo/
+*.tsbuildinfo
+.npm
+.yarn/
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+.pnp.*
+package-lock.json.bak
+
+# Tauri v2
+apps/app/src-tauri/target/
+apps/app/src-tauri/gen/
+apps/app/src-tauri/Cargo.lock
+*.app
+*.dmg
+*.msi
+*.deb
+*.AppImage
+*.snap
+
+# HTML / CSS / Build artifacts
+*.css.map
+*.js.map
+.sass-cache/
+.cache/
+.parcel-cache/
+
+# Bundler output
+out/
+build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.sublime-workspace
+*.sublime-project
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+ehthumbs.db
+ehthumbs_vista.db
+
+# Environment
+.env
+.env.local
+.env.*.local
+.env.production
+.env.staging
+
+# Test / Coverage
+coverage/
+test-results/
+.playwright*
+playwright-report/
+.nyc_output/
+*.lcov
+
+# Nx
+.nx/
+
+# Astro
+.astro/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Claude
+.claude/
+.notes/
+
+# Stitch generated assets
+.stitch/designs/
+

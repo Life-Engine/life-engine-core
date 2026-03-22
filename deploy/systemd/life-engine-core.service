@@ -1,0 +1,19 @@
+[Unit]
+Description=Life Engine Core
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=life-engine
+Group=life-engine
+ExecStart=/usr/local/bin/life-engine-core
+Environment=LIFE_ENGINE_CORE_HOST=127.0.0.1
+Environment=LIFE_ENGINE_CORE_PORT=3750
+Environment=LIFE_ENGINE_CORE_LOG_LEVEL=info
+Environment=LIFE_ENGINE_CORE_DATA_DIR=/var/lib/life-engine
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,103 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Email",
+  "description": "An email message in the Life Engine canonical data model.",
+  "type": "object",
+  "required": ["id", "from", "to", "subject", "body_text", "source", "source_id", "created_at", "updated_at"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique identifier assigned by Core"
+    },
+    "from": {
+      "type": "string",
+      "description": "Sender email address"
+    },
+    "to": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Recipient email addresses"
+    },
+    "cc": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "CC recipient email addresses"
+    },
+    "bcc": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "BCC recipient email addresses"
+    },
+    "subject": {
+      "type": "string",
+      "description": "Email subject line"
+    },
+    "body_text": {
+      "type": "string",
+      "description": "Plain text body"
+    },
+    "body_html": {
+      "type": "string",
+      "description": "HTML body for rich rendering"
+    },
+    "thread_id": {
+      "type": "string",
+      "description": "Thread identifier for conversation grouping"
+    },
+    "labels": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Labels or folder assignments"
+    },
+    "attachments": {
+      "type": "array",
+      "description": "List of file references",
+      "items": {
+        "type": "object",
+        "required": ["file_id", "filename", "mime_type", "size"],
+        "properties": {
+          "file_id": {
+            "type": "string",
+            "description": "Reference to a record in the files collection"
+          },
+          "filename": {
+            "type": "string",
+            "description": "Original filename"
+          },
+          "mime_type": {
+            "type": "string",
+            "description": "MIME type of the attachment"
+          },
+          "size": {
+            "type": "integer",
+            "description": "Size in bytes"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "source": {
+      "type": "string",
+      "description": "Identifier of the connector or plugin that produced this record"
+    },
+    "source_id": {
+      "type": "string",
+      "description": "The record's original ID in the source system"
+    },
+    "extensions": {
+      "type": "object",
+      "description": "Namespaced object for plugin-specific fields"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Record creation timestamp"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Record last-updated timestamp"
+    }
+  },
+  "additionalProperties": false
+}

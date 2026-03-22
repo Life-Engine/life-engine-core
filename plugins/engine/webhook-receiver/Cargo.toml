@@ -1,0 +1,29 @@
+[package]
+name = "webhook-receiver"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Webhook receiver plugin for Life Engine Core — accepts and maps incoming webhook payloads"
+
+[lib]
+name = "webhook_receiver"
+path = "src/lib.rs"
+
+[dependencies]
+life-engine-plugin-sdk = { path = "../../../packages/plugin-sdk-rs" }
+life-engine-types = { path = "../../../packages/types" }
+async-trait = { workspace = true }
+anyhow = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+tracing = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
+hmac = "0.12"
+
+[dev-dependencies]
+life-engine-test-utils = { path = "../../../packages/test-utils" }
+tokio = { workspace = true }

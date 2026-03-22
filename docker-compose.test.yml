@@ -1,0 +1,23 @@
+services:
+  greenmail:
+    image: greenmail/standalone:2.0.1
+    ports:
+      - "4025:3025"
+      - "4143:3143"
+    environment:
+      - GREENMAIL_OPTS=-Dgreenmail.setup.test.all -Dgreenmail.users=test:test@life-engine.local
+
+  radicale:
+    image: tomsquest/docker-radicale:latest
+    ports:
+      - "6232:5232"
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9101"
+    ports:
+      - "9100:9000"
+      - "9101:9001"
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin

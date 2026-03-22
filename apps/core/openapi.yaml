@@ -1,0 +1,1029 @@
+openapi: 3.1.0
+info:
+  title: Life Engine Core API
+  description: >
+    JSON REST API for Life Engine Core. Provides data storage (CRUD), full-text
+    search, authentication (local-token and OIDC), system health/plugin management,
+    quarantine management, Server-Sent Events streaming, and sync conflict resolution.
+  version: 0.1.0
+  license:
+    name: AGPL-3.0-or-later
+    url: https://www.gnu.org/licenses/agpl-3.0.html
+
+servers:
+  - url: http://127.0.0.1:3750
+    description: Default local development server
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Data
+    description: CRUD operations on records across any collection.
+  - name: Search
+    description: Full-text search across indexed records.
+  - name: Auth
+    description: Token management and OIDC authentication.
+  - name: System
+    description: Health, info, plugins, and quarantine management.
+  - name: Events
+    description: Server-Sent Events stream for real-time notifications.
+  - name: Conflicts
+    description: Sync conflict inspection and resolution.
+
+paths:
+  # ---------------------------------------------------------------------------
+  # Data API
+  # ---------------------------------------------------------------------------
+  /api/data/{collection}:
+    get:
+      operationId: listRecords
+      summary: List records
+      description: Returns a paginated list of records from the named collection.
+      tags: [Data]
+      parameters:
+        - $ref: '#/components/parameters/collection'
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0 }
+          description: Number of records to skip.
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50 }
+          description: Maximum number of records to return.
+        - name: sort_by
+          in: query
+          schema: { type: string }
+          description: Field name to sort by (e.g. `created_at`).
+        - name: sort_dir
+          in: query
+          schema: { type: string, enum: [asc, desc], default: asc }
+          description: Sort direction.
+        - name: filter
+          in: query
+          schema: { type: string }
+          description: URL-encoded JSON filter object. See Data API docs for format.
+      responses:
+        '200':
+          description: Paginated list of records.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordListResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    post:
+      operationId: createRecord
+      summary: Create a record
+      description: Creates a new record. Core assigns an ID, sets version to 1, and timestamps the record.
+      tags: [Data]
+      parameters:
+        - $ref: '#/components/parameters/collection'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Arbitrary JSON data payload.
+      responses:
+        '201':
+          description: Record created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/data/{collection}/{id}:
+    get:
+      operationId: getRecord
+      summary: Get a record
+      description: Returns a single record by its ID.
+      tags: [Data]
+      parameters:
+        - $ref: '#/components/parameters/collection'
+        - $ref: '#/components/parameters/recordId'
+      responses:
+        '200':
+          description: The requested record.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    put:
+      operationId: updateRecord
+      summary: Update a record
+      description: >
+        Replaces the data payload of an existing record. Uses optimistic
+        concurrency — supply the current version number.
+      tags: [Data]
+      parameters:
+        - $ref: '#/components/parameters/collection'
+        - $ref: '#/components/parameters/recordId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRecordBody'
+      responses:
+        '200':
+          description: Record updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Version conflict.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    delete:
+      operationId: deleteRecord
+      summary: Delete a record
+      description: Permanently deletes a record.
+      tags: [Data]
+      parameters:
+        - $ref: '#/components/parameters/collection'
+        - $ref: '#/components/parameters/recordId'
+      responses:
+        '204':
+          description: Record deleted.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ---------------------------------------------------------------------------
+  # Search API
+  # ---------------------------------------------------------------------------
+  /api/search:
+    get:
+      operationId: searchRecords
+      summary: Search records
+      description: Full-text search across all indexed records with optional collection scoping.
+      tags: [Search]
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string }
+          description: Search query string.
+        - name: collection
+          in: query
+          schema: { type: string }
+          description: Restrict results to a single collection.
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20, maximum: 100 }
+          description: Maximum number of results.
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0 }
+          description: Number of results to skip.
+      responses:
+        '200':
+          description: Search results.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          description: Search engine not initialised.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ---------------------------------------------------------------------------
+  # Auth API — Local Token
+  # ---------------------------------------------------------------------------
+  /api/auth/token:
+    post:
+      operationId: generateToken
+      summary: Generate a token
+      description: >
+        Generates a new auth token using the master passphrase. The first call
+        sets the passphrase. The raw token is returned once and cannot be
+        retrieved again.
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateTokenBody'
+      responses:
+        '201':
+          description: Token created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenCreatedResponse'
+        '401':
+          description: Invalid passphrase.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/auth/token/{id}:
+    delete:
+      operationId: revokeToken
+      summary: Revoke a token
+      description: Revokes a token by its ID.
+      tags: [Auth]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+          description: The token ID.
+      responses:
+        '200':
+          description: Token revoked.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: revoked }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/auth/tokens:
+    get:
+      operationId: listTokens
+      summary: List active tokens
+      description: Returns all active (non-expired, non-revoked) tokens. Does not include raw token values.
+      tags: [Auth]
+      responses:
+        '200':
+          description: Active tokens.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ---------------------------------------------------------------------------
+  # Auth API — OIDC
+  # ---------------------------------------------------------------------------
+  /api/auth/login:
+    post:
+      operationId: oidcLogin
+      summary: OIDC Login
+      description: Authenticates via OIDC Resource Owner Password Credentials grant.
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OidcLoginBody'
+      responses:
+        '200':
+          description: Token response from identity provider.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OidcTokenResponse'
+        '401':
+          description: Login failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: OIDC not configured.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/auth/refresh:
+    post:
+      operationId: oidcRefresh
+      summary: Refresh OIDC token
+      description: Exchanges a refresh token for a new access token.
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string }
+      responses:
+        '200':
+          description: Refreshed token response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OidcTokenResponse'
+        '401':
+          description: Refresh failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: OIDC not configured.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/auth/userinfo:
+    get:
+      operationId: getUserInfo
+      summary: Get user info
+      description: Proxies the caller's Bearer token to the OIDC provider's userinfo endpoint.
+      tags: [Auth]
+      responses:
+        '200':
+          description: User profile claims from identity provider.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserInfoResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: OIDC not configured.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/auth/.well-known/openid-configuration:
+    get:
+      operationId: oidcDiscovery
+      summary: OIDC discovery document
+      description: Proxies the OIDC provider's discovery document.
+      tags: [Auth]
+      security: []
+      responses:
+        '200':
+          description: Standard OIDC discovery document.
+          content:
+            application/json:
+              schema:
+                type: object
+        '404':
+          description: OIDC not configured.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ---------------------------------------------------------------------------
+  # System API
+  # ---------------------------------------------------------------------------
+  /api/system/health:
+    get:
+      operationId: healthCheck
+      summary: Health check
+      description: Returns server health, version, uptime, and plugin info. Unauthenticated.
+      tags: [System]
+      security: []
+      responses:
+        '200':
+          description: Server is healthy.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /api/system/info:
+    get:
+      operationId: systemInfo
+      summary: System info
+      description: Returns version, uptime, storage backend, and loaded plugin count.
+      tags: [System]
+      responses:
+        '200':
+          description: System information.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/SystemInfo'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/system/plugins:
+    get:
+      operationId: listPlugins
+      summary: List plugins
+      description: Returns a detailed list of all registered plugins and their status.
+      tags: [System]
+      responses:
+        '200':
+          description: Plugin list.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PluginDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ---------------------------------------------------------------------------
+  # Quarantine endpoints
+  # ---------------------------------------------------------------------------
+  /api/system/quarantine:
+    get:
+      operationId: listQuarantine
+      summary: List quarantined records
+      description: Returns paginated quarantine records.
+      tags: [System]
+      parameters:
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0 }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50 }
+      responses:
+        '200':
+          description: Quarantined records.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/system/quarantine/{id}/reprocess:
+    post:
+      operationId: reprocessQuarantine
+      summary: Reprocess a quarantined record
+      description: >
+        Re-validates a quarantined record against its original schema. Restores
+        it to the correct collection if validation passes.
+      tags: [System]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+          description: The quarantine record UUID.
+      responses:
+        '200':
+          description: Record restored.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: Record still fails validation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/system/quarantine/{id}:
+    delete:
+      operationId: deleteQuarantine
+      summary: Delete a quarantined record
+      description: Permanently removes a record from quarantine.
+      tags: [System]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+          description: The quarantine record UUID.
+      responses:
+        '204':
+          description: Record deleted.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---------------------------------------------------------------------------
+  # Events API (SSE)
+  # ---------------------------------------------------------------------------
+  /api/events/stream:
+    get:
+      operationId: eventStream
+      summary: SSE event stream
+      description: >
+        Opens a Server-Sent Events connection. Receives real-time events from
+        the internal message bus. Keep-alive pings every 15 seconds.
+      tags: [Events]
+      parameters:
+        - name: collection
+          in: query
+          schema: { type: string }
+          description: Only receive `new_records` events for this collection.
+        - name: event_type
+          in: query
+          schema:
+            type: string
+            enum: [new_records, sync_complete, plugin_loaded, plugin_error]
+          description: Only receive events of this type.
+      responses:
+        '200':
+          description: SSE stream opened.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: >
+                  Standard SSE wire format. Event types: new_records,
+                  sync_complete, plugin_loaded, plugin_error.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ---------------------------------------------------------------------------
+  # Conflicts API
+  # ---------------------------------------------------------------------------
+  /api/conflicts:
+    get:
+      operationId: listConflicts
+      summary: List conflicts
+      description: Returns all unresolved sync conflicts with pagination.
+      tags: [Conflicts]
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50, maximum: 1000 }
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0 }
+      responses:
+        '200':
+          description: Conflict list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConflictListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/conflicts/{id}:
+    get:
+      operationId: getConflict
+      summary: Get a conflict
+      description: Returns a single conflict with both versions of the record.
+      tags: [Conflicts]
+      parameters:
+        - $ref: '#/components/parameters/conflictId'
+      responses:
+        '200':
+          description: Conflict details.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Conflict'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      operationId: dismissConflict
+      summary: Dismiss a conflict
+      description: Removes a conflict without applying any resolution.
+      tags: [Conflicts]
+      parameters:
+        - $ref: '#/components/parameters/conflictId'
+      responses:
+        '204':
+          description: Conflict dismissed.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/conflicts/{id}/resolve:
+    post:
+      operationId: resolveConflict
+      summary: Resolve a conflict
+      description: Applies a resolution strategy to a conflict.
+      tags: [Conflicts]
+      parameters:
+        - $ref: '#/components/parameters/conflictId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResolveConflictBody'
+      responses:
+        '200':
+          description: Conflict resolved.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Conflict'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+# =============================================================================
+# Components
+# =============================================================================
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: >
+        Bearer token from `POST /api/auth/token` (local-token mode) or
+        `POST /api/auth/login` (OIDC mode).
+
+  parameters:
+    collection:
+      name: collection
+      in: path
+      required: true
+      schema: { type: string }
+      description: The collection name (e.g. `tasks`, `contacts`, `emails`).
+    recordId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+      description: The record UUID.
+    conflictId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+      description: The conflict UUID.
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid authentication token.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Resource not found.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ValidationError:
+      description: Invalid request parameters or body.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    InternalError:
+      description: Unexpected server failure.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    # -- Core data types -----------------------------------------------------
+    Record:
+      type: object
+      required: [id, plugin_id, collection, data, version, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique record ID assigned by Core.
+        plugin_id:
+          type: string
+          description: Plugin that owns this record (`"core"` for direct API access).
+        collection:
+          type: string
+          description: Collection name.
+        data:
+          type: object
+          description: Arbitrary JSON data payload.
+        version:
+          type: integer
+          description: Monotonically increasing version for optimistic concurrency.
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    RecordResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/Record'
+
+    RecordListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Record'
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+
+    UpdateRecordBody:
+      type: object
+      required: [data, version]
+      properties:
+        data:
+          type: object
+          description: The new JSON data payload (replaces existing payload entirely).
+        version:
+          type: integer
+          description: Must match the current stored version.
+
+    # -- Search types --------------------------------------------------------
+    SearchHit:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        collection:
+          type: string
+        score:
+          type: number
+          format: float
+
+    SearchResponse:
+      type: object
+      properties:
+        hits:
+          type: array
+          items:
+            $ref: '#/components/schemas/SearchHit'
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+
+    # -- Auth types ----------------------------------------------------------
+    GenerateTokenBody:
+      type: object
+      required: [passphrase]
+      properties:
+        passphrase:
+          type: string
+          description: Master passphrase.
+        expires_in_days:
+          type: integer
+          default: 30
+          description: Days until the token expires.
+
+    TokenCreatedResponse:
+      type: object
+      properties:
+        token_id:
+          type: string
+          format: uuid
+        token:
+          type: string
+          description: Raw token value (returned once, not retrievable again).
+        expires_at:
+          type: string
+          format: date-time
+
+    TokenInfo:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        is_expired:
+          type: boolean
+
+    TokenListResponse:
+      type: object
+      properties:
+        tokens:
+          type: array
+          items:
+            $ref: '#/components/schemas/TokenInfo'
+
+    OidcLoginBody:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+
+    OidcTokenResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        token_type:
+          type: string
+        expires_in:
+          type: integer
+
+    UserInfoResponse:
+      type: object
+      properties:
+        sub:
+          type: string
+        email:
+          type: string
+        name:
+          type: string
+        email_verified:
+          type: boolean
+
+    # -- System types --------------------------------------------------------
+    PluginStatus:
+      type: object
+      properties:
+        id:
+          type: string
+        version:
+          type: string
+        status:
+          type: string
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+        version:
+          type: string
+        uptime_seconds:
+          type: integer
+        loaded_plugins:
+          type: integer
+        plugins:
+          type: array
+          items:
+            $ref: '#/components/schemas/PluginStatus'
+
+    SystemInfo:
+      type: object
+      properties:
+        version:
+          type: string
+        plugins_loaded:
+          type: integer
+        storage:
+          type: string
+        uptime_seconds:
+          type: integer
+
+    PluginDetail:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        version:
+          type: string
+        status:
+          type: string
+
+    # -- Conflict types ------------------------------------------------------
+    Conflict:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        collection:
+          type: string
+        record_id:
+          type: string
+          format: uuid
+        local_version:
+          $ref: '#/components/schemas/Record'
+        remote_version:
+          $ref: '#/components/schemas/Record'
+        strategy:
+          type: string
+        resolved:
+          type: boolean
+        resolution:
+          type: string
+          nullable: true
+        detected_at:
+          type: string
+          format: date-time
+
+    ConflictListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Conflict'
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+
+    ResolveConflictBody:
+      type: object
+      required: [resolution]
+      properties:
+        resolution:
+          type: string
+          enum: [keep_local, keep_remote, merge]
+        merged_data:
+          type: object
+          description: Required when resolution is `merge`.
+
+    # -- Error types ---------------------------------------------------------
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              type: array
+              items:
+                type: string

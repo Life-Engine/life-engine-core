@@ -1,0 +1,19 @@
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "title": "Architecture review session",
+  "start": "2026-01-20T14:00:00Z",
+  "end": "2026-01-20T15:30:00Z",
+  "recurrence": "FREQ=MONTHLY;BYDAY=3MO",
+  "attendees": ["eng-lead@company.com", "architect@company.com"],
+  "location": "Building 4, Room 301",
+  "description": "Monthly review of system architecture decisions and plugin API changes",
+  "source": "caldav",
+  "source_id": "fixture-event-001",
+  "extensions": {
+    "com.life-engine.example": {
+      "calendar_color": "#2196F3"
+    }
+  },
+  "created_at": "2026-01-15T10:30:00Z",
+  "updated_at": "2026-01-15T10:30:00Z"
+}

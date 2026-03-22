@@ -1,0 +1,70 @@
+//! Rust SDK for building Life Engine Core plugins.
+//!
+//! This crate provides the traits and types that Core plugin authors
+//! implement to extend Life Engine's functionality.
+//!
+//! # Quick Start
+//!
+//! ```rust,ignore
+//! use life_engine_plugin_sdk::prelude::*;
+//!
+//! struct MyPlugin;
+//!
+//! #[async_trait]
+//! impl CorePlugin for MyPlugin {
+//!     fn id(&self) -> &str { "com.example.my-plugin" }
+//!     fn display_name(&self) -> &str { "My Plugin" }
+//!     fn version(&self) -> &str { "0.1.0" }
+//!     fn capabilities(&self) -> Vec<Capability> { vec![Capability::StorageRead] }
+//!     async fn on_load(&mut self, _ctx: &PluginContext) -> Result<()> { Ok(()) }
+//!     async fn on_unload(&mut self) -> Result<()> { Ok(()) }
+//!     fn routes(&self) -> Vec<PluginRoute> { vec![] }
+//!     async fn handle_event(&self, _event: &CoreEvent) -> Result<()> { Ok(()) }
+//! }
+//! ```
+
+pub mod credential_store;
+pub mod retry;
+pub mod traits;
+pub mod types;
+pub mod wasm_guest;
+
+// Re-export core SDK types at crate root.
+pub use credential_store::{CredentialStore, StoredCredential};
+pub use traits::CorePlugin;
+pub use types::{
+    Capability, CollectionSchema, CoreEvent, CredentialAccess, HttpMethod, PluginContext,
+    PluginRoute,
+};
+
+// Re-export async_trait so plugin authors don't need an extra dependency.
+pub use async_trait::async_trait;
+
+// Re-export anyhow::Result so plugin authors can use it directly.
+pub use anyhow::Result;
+
+// Re-export all canonical data model types from the types crate
+// so plugin authors only need one dependency.
+pub use life_engine_types;
+pub use life_engine_types::{
+    CalendarEvent, Contact, ContactName, Credential, CredentialType, Email, EmailAddress,
+    EmailAttachment, FileMetadata, Note, PhoneNumber, PostalAddress, Task, TaskPriority,
+    TaskStatus,
+};
+
+/// Convenience prelude for plugin authors.
+///
+/// Import everything needed to implement a `CorePlugin`:
+/// ```rust,ignore
+/// use life_engine_plugin_sdk::prelude::*;
+/// ```
+pub mod prelude {
+    pub use crate::credential_store::{CredentialStore, StoredCredential};
+    pub use crate::traits::CorePlugin;
+    pub use crate::types::{
+        Capability, CollectionSchema, CoreEvent, CredentialAccess, HttpMethod, PluginContext,
+        PluginRoute,
+    };
+    pub use anyhow::Result;
+    pub use async_trait::async_trait;
+}

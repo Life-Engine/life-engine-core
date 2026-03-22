@@ -1,0 +1,72 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "FileMetadata",
+  "description": "File metadata in the Life Engine canonical data model.",
+  "type": "object",
+  "required": [
+    "id",
+    "name",
+    "mime_type",
+    "size",
+    "path",
+    "source",
+    "source_id",
+    "created_at",
+    "updated_at"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique identifier assigned by Core"
+    },
+    "name": {
+      "type": "string",
+      "description": "Filename including extension"
+    },
+    "mime_type": {
+      "type": "string",
+      "description": "MIME type (e.g. application/pdf, image/png)"
+    },
+    "size": {
+      "type": "integer",
+      "description": "File size in bytes"
+    },
+    "path": {
+      "type": "string",
+      "description": "Storage path relative to the Core data directory"
+    },
+    "checksum": {
+      "type": "string",
+      "description": "SHA-256 hash of the file contents for integrity verification"
+    },
+    "source": {
+      "type": "string",
+      "description": "Identifier of the connector or plugin that produced this record"
+    },
+    "source_id": {
+      "type": "string",
+      "description": "The record's original ID in the source system"
+    },
+    "extensions": {
+      "type": "object",
+      "description": "Plugin-specific fields, namespaced by plugin ID. See ADR-014.",
+      "patternProperties": {
+        "^[a-z][a-z0-9]*(-[a-z0-9]+)*(\\.[a-z][a-z0-9]*(-[a-z0-9]+)*)+$": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Record creation timestamp"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Record last-updated timestamp"
+    }
+  },
+  "additionalProperties": false
+}

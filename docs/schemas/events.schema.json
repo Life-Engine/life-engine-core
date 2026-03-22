@@ -1,0 +1,84 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CalendarEvent",
+  "description": "A calendar event in the Life Engine canonical data model.",
+  "type": "object",
+  "required": [
+    "id",
+    "title",
+    "start",
+    "end",
+    "source",
+    "source_id",
+    "created_at",
+    "updated_at"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique identifier assigned by Core"
+    },
+    "title": {
+      "type": "string",
+      "description": "Event title"
+    },
+    "start": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Start datetime in ISO 8601 format with timezone"
+    },
+    "end": {
+      "type": "string",
+      "format": "date-time",
+      "description": "End datetime in ISO 8601 format with timezone"
+    },
+    "recurrence": {
+      "type": "string",
+      "description": "Recurrence rule in RRULE format (RFC 5545)"
+    },
+    "attendees": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "List of attendee email addresses or identifiers"
+    },
+    "location": {
+      "type": "string",
+      "description": "Free-text location or structured address"
+    },
+    "description": {
+      "type": "string",
+      "description": "Event description or notes"
+    },
+    "source": {
+      "type": "string",
+      "description": "Identifier of the connector or plugin that produced this record"
+    },
+    "source_id": {
+      "type": "string",
+      "description": "The record's original ID in the source system"
+    },
+    "extensions": {
+      "type": "object",
+      "description": "Plugin-specific fields, namespaced by plugin ID. See ADR-014.",
+      "patternProperties": {
+        "^[a-z][a-z0-9]*(-[a-z0-9]+)*(\\.[a-z][a-z0-9]*(-[a-z0-9]+)*)+$": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Record creation timestamp"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Record last-updated timestamp"
+    }
+  },
+  "additionalProperties": false
+}

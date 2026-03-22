@@ -1,0 +1,42 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://life-engine.org/schemas/plugin-data.schema.json",
+  "title": "Plugin Data Record",
+  "description": "Universal document envelope for all plugin data stored in Life Engine Core. Each record belongs to a plugin and collection, with an opaque JSON data payload validated at the application layer.",
+  "type": "object",
+  "required": ["id", "plugin_id", "collection", "data", "version", "created_at", "updated_at"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique record identifier (UUID v4)."
+    },
+    "plugin_id": {
+      "type": "string",
+      "description": "The plugin that owns this record (reverse-domain notation)."
+    },
+    "collection": {
+      "type": "string",
+      "description": "The collection this record belongs to (e.g., 'tasks', 'contacts')."
+    },
+    "data": {
+      "type": "object",
+      "description": "Opaque JSON payload. Schema validation is performed at the application layer against the collection's registered schema."
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Optimistic concurrency version. Incremented on every update."
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Record creation timestamp in RFC 3339 format."
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Last modification timestamp in RFC 3339 format."
+    }
+  },
+  "additionalProperties": false
+}

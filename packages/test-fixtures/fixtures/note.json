@@ -1,0 +1,11 @@
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "title": "Sprint retrospective — January 2026",
+  "body": "Went well: Plugin isolation design is solid. Improve: Need better integration test coverage for connector sync paths.",
+  "tags": ["retrospective", "sprint-3", "process"],
+  "source": "manual",
+  "source_id": "fixture-note-001",
+  "extensions": {},
+  "created_at": "2026-01-15T10:30:00Z",
+  "updated_at": "2026-01-15T10:30:00Z"
+}

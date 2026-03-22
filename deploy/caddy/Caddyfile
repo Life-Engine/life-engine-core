@@ -1,0 +1,3 @@
+life-engine.example.com {
+    reverse_proxy localhost:3750
+}

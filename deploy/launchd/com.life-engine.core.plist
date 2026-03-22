@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.life-engine.core</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/bin/life-engine-core</string>
+    </array>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>LIFE_ENGINE_CORE_HOST</key>
+        <string>127.0.0.1</string>
+        <key>LIFE_ENGINE_CORE_PORT</key>
+        <string>3750</string>
+        <key>LIFE_ENGINE_CORE_LOG_LEVEL</key>
+        <string>info</string>
+        <key>LIFE_ENGINE_CORE_DATA_DIR</key>
+        <string>~/Library/Application Support/Life Engine</string>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>~/Library/Logs/life-engine/core.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>~/Library/Logs/life-engine/core.error.log</string>
+</dict>
+</plist>

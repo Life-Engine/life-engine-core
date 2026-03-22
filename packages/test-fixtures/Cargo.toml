@@ -1,0 +1,13 @@
+[package]
+name = "life-engine-test-fixtures"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Canonical test fixture data for all Life Engine CDM collections"
+
+[dependencies]
+life-engine-types = { path = "../types" }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+jsonschema = { workspace = true }

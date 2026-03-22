@@ -141,7 +141,7 @@ Progress: 0 / 11 work packages complete
 ## 1.8 — Plugin Scaffold Template
 > spec: .odm/spec/monorepo-and-tooling/brief.md
 
-- [ ] Create plugin scaffold template for WASM plugins
+- [x] Create plugin scaffold template for WASM plugins
   <!-- file: tools/templates/plugin/Cargo.toml -->
   <!-- file: tools/templates/plugin/src/lib.rs -->
   <!-- file: tools/templates/plugin/manifest.toml -->

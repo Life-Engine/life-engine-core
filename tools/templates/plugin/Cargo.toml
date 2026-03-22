@@ -1,0 +1,24 @@
+[package]
+name = "__NAME__"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Life Engine plugin: __NAME__"
+
+[lib]
+path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+life-engine-plugin-sdk = { path = "../../../packages/plugin-sdk-rs" }
+async-trait = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+life-engine-test-utils = { path = "../../../packages/test-utils" }
+tokio = { workspace = true }

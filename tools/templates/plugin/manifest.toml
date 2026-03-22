@@ -1,0 +1,28 @@
+[plugin]
+id = "com.life-engine.__ID__"
+name = "__NAME__"
+version = "0.1.0"
+description = "TODO: Describe your plugin"
+
+[actions.example]
+description = "Example action — replace with your own"
+method = "POST"
+path = "/example"
+
+[capabilities]
+# Uncomment the capabilities your plugin requires:
+# storage_read = true
+# storage_write = true
+# http_outbound = true
+# credentials_read = true
+# credentials_write = true
+
+# [config]
+# schema = """
+# {
+#   "type": "object",
+#   "properties": {
+#     "example_setting": { "type": "string", "default": "value" }
+#   }
+# }
+# """

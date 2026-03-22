@@ -42,7 +42,7 @@ new-plugin name:
     fi
     cp -r "$template" "$dest"
     # Replace placeholders in all files
-    find "$dest" -type f -exec sed -i '' "s/{{{{name}}}}/$id/g; s/{{{{id}}}}/$id/g" {} +
+    find "$dest" -type f -exec sed -i '' "s/__NAME__/$id/g; s/__ID__/$id/g" {} +
     # Add to Cargo.toml workspace members
     sed -i '' "/^]$/i\\
     \"$dest\",

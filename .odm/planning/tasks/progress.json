@@ -1,17 +1,13 @@
 {
   "version": 1,
   "last_updated": "2026-03-23T00:00:00Z",
-  "completed_wps": ["1.1", "1.2", "1.3", "1.4", "nx:1.1", "nx:1.2", "nx:1.3", "nx:1.4", "nx:1.5", "nx:1.6", "2.1"],
-  "current_wp": "2.2",
+  "completed_wps": ["1.1", "1.2", "1.3", "1.4", "nx:1.1", "nx:1.2", "nx:1.3", "nx:1.4", "nx:1.5", "nx:1.6", "2.1", "2.2"],
+  "current_wp": null,
   "current_wp_tasks": {
-    "total": 3,
+    "total": 0,
     "completed": [],
     "deferred": [],
-    "remaining": [
-      "Add runtime config reload capability",
-      "Wire config reload into PUT endpoint and add route registration",
-      "Add tests for config API endpoints"
-    ],
+    "remaining": [],
     "failed": []
   },
   "history": [
@@ -101,6 +97,14 @@
       "completed_at": "2026-03-23T00:00:00Z",
       "commit": "fa9533b",
       "tasks_completed": 2,
+      "tasks_deferred": 0
+    },
+    {
+      "wp": "2.2",
+      "title": "Config Reload & API Tests",
+      "completed_at": "2026-03-23T00:00:00Z",
+      "commit": "a4f45fd",
+      "tasks_completed": 3,
       "tasks_deferred": 0
     }
   ]

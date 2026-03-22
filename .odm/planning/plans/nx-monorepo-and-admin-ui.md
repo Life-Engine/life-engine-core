@@ -165,19 +165,19 @@ Progress: 0 / 14 work packages complete
 ## 2.3 — Admin App Scaffolding
 > depends: 1.2
 
-- [ ] Create React + Vite + TypeScript app at `apps/admin`
+- [x] Create React + Vite + TypeScript app at `apps/admin`
   <!-- file: apps/admin/package.json, apps/admin/vite.config.ts, apps/admin/tsconfig.json, apps/admin/tsconfig.node.json, apps/admin/index.html -->
   <!-- purpose: Scaffold a new Vite + React + TypeScript application with dev server proxy to Core on port 3750 -->
   <!-- requirements: admin UI foundation -->
   <!-- leverage: none -->
 
-- [ ] Set up Tailwind CSS in admin app
+- [x] Set up Tailwind CSS in admin app
   <!-- file: apps/admin/src/index.css, apps/admin/postcss.config.js, apps/admin/tailwind.config.ts -->
   <!-- purpose: Install and configure Tailwind CSS for utility-first styling with sensible defaults -->
   <!-- requirements: consistent styling -->
   <!-- leverage: none -->
 
-- [ ] Create Nx `project.json` for admin app
+- [x] Create Nx `project.json` for admin app
   <!-- file: apps/admin/project.json -->
   <!-- purpose: Define dev (vite dev), build (vite build), preview (vite preview), and lint (eslint) targets -->
   <!-- requirements: admin app participates in Nx orchestration -->

@@ -1,0 +1,48 @@
+{
+  "name": "admin",
+  "sourceRoot": "apps/admin/src",
+  "projectType": "application",
+  "tags": ["lang:typescript", "type:app"],
+  "namedInputs": {
+    "typescript": [
+      "{projectRoot}/src/**/*.ts",
+      "{projectRoot}/src/**/*.tsx",
+      "{projectRoot}/tsconfig.json",
+      "{projectRoot}/package.json",
+      "{projectRoot}/index.html"
+    ]
+  },
+  "targets": {
+    "dev": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "pnpm --filter @life-engine/admin run dev",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "inputs": ["typescript"],
+      "outputs": ["{projectRoot}/dist"],
+      "options": {
+        "command": "pnpm --filter @life-engine/admin run build",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "preview": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "pnpm --filter @life-engine/admin run preview",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "inputs": ["typescript"],
+      "options": {
+        "command": "pnpm --filter @life-engine/admin run lint",
+        "cwd": "{workspaceRoot}"
+      }
+    }
+  }
+}

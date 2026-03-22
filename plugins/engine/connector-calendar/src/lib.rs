@@ -12,8 +12,13 @@
 //! - `normalizer` — iCal VEVENT to CDM `CalendarEvent` type conversion
 
 pub mod caldav;
+pub mod config;
+pub mod error;
 pub mod google;
 pub mod normalizer;
+pub mod steps;
+pub mod transform;
+pub mod types;
 
 use std::time::Duration;
 

@@ -8,6 +8,7 @@ description = "CalDAV and Google Calendar connector plugin for Life Engine Core"
 [lib]
 name = "connector_calendar"
 path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]
 
 [features]
 integration = ["reqwest"]

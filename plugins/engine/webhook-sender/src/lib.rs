@@ -10,8 +10,13 @@
 //! - `retry` — Exponential backoff retry state tracker
 //! - `delivery` — Delivery log for tracking send attempts
 
+pub mod config;
 pub mod delivery;
+pub mod error;
 pub mod models;
+pub mod steps;
+pub mod transform;
+pub mod types;
 
 /// Re-export the shared retry module from the plugin SDK.
 pub use life_engine_plugin_sdk::retry;

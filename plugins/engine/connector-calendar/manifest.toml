@@ -1,0 +1,51 @@
+[plugin]
+id = "com.life-engine.connector-calendar"
+name = "Calendar Connector"
+version = "0.1.0"
+description = "CalDAV and Google Calendar connector — syncs calendar events"
+
+[actions.sync]
+description = "Sync calendar events from configured providers"
+method = "POST"
+path = "/sync"
+
+[actions.status]
+description = "Get the current sync status"
+method = "GET"
+path = "/status"
+
+[actions.calendars]
+description = "List available calendars"
+method = "GET"
+path = "/calendars"
+
+[actions.google_auth]
+description = "Initiate Google OAuth2 authorization flow"
+method = "GET"
+path = "/google/auth"
+
+[actions.google_callback]
+description = "Handle Google OAuth2 callback"
+method = "GET"
+path = "/google/callback"
+
+[capabilities]
+storage_read = true
+storage_write = true
+http_outbound = true
+credentials_read = true
+credentials_write = true
+
+[config]
+schema = """
+{
+  "type": "object",
+  "properties": {
+    "caldav_server_url": { "type": "string" },
+    "caldav_username": { "type": "string" },
+    "caldav_calendar_path": { "type": "string" },
+    "google_client_id": { "type": "string" },
+    "sync_interval_secs": { "type": "integer", "default": 300 }
+  }
+}
+"""

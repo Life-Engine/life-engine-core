@@ -1616,6 +1616,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "thiserror 2.0.18",
  "tokio",
  "tracing",
  "url",
@@ -1640,6 +1641,7 @@ dependencies = [
  "mail-parser",
  "serde",
  "serde_json",
+ "thiserror 2.0.18",
  "tokio",
  "tracing",
  "uuid",
@@ -1665,6 +1667,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "tempfile",
+ "thiserror 2.0.18",
  "tokio",
  "tracing",
  "uuid",
@@ -5742,6 +5745,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "search-indexer"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "life-engine-plugin-sdk",
+ "life-engine-test-utils",
+ "life-engine-types",
+ "serde",
+ "serde_json",
+ "tantivy",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "sec1"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7776,6 +7798,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "thiserror 2.0.18",
  "tokio",
  "tracing",
  "uuid",

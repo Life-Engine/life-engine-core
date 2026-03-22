@@ -1,0 +1,41 @@
+[plugin]
+id = "com.life-engine.connector-email"
+name = "Email Connector"
+version = "0.1.0"
+description = "IMAP/SMTP email connector — fetches and sends email via IMAP and SMTP"
+
+[actions.sync]
+description = "Sync emails from the configured IMAP server"
+method = "POST"
+path = "/sync"
+
+[actions.send]
+description = "Send an email via the configured SMTP server"
+method = "POST"
+path = "/send"
+
+[actions.status]
+description = "Get the current sync status"
+method = "GET"
+path = "/status"
+
+[capabilities]
+storage_read = true
+storage_write = true
+http_outbound = true
+credentials_read = true
+credentials_write = true
+
+[config]
+schema = """
+{
+  "type": "object",
+  "properties": {
+    "imap_host": { "type": "string" },
+    "imap_port": { "type": "integer", "default": 993 },
+    "smtp_host": { "type": "string" },
+    "smtp_port": { "type": "integer", "default": 587 },
+    "sync_interval_secs": { "type": "integer", "default": 300 }
+  }
+}
+"""

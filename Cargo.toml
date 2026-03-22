@@ -16,6 +16,7 @@ members = [
     "plugins/engine/webhook-receiver",
     "plugins/engine/webhook-sender",
     "plugins/engine/backup",
+    "plugins/engine/search-indexer",
 ]
 exclude = [
     "apps/app/src-tauri",

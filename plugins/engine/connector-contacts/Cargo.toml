@@ -8,6 +8,7 @@ description = "CardDAV and Google Contacts connector plugin for Life Engine Core
 [lib]
 name = "connector_contacts"
 path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 life-engine-plugin-sdk = { path = "../../../packages/plugin-sdk-rs" }
@@ -15,6 +16,7 @@ life-engine-types = { path = "../../../packages/types" }
 dav-utils = { path = "../../../packages/dav-utils" }
 async-trait = { workspace = true }
 anyhow = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

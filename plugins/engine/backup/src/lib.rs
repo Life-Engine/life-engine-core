@@ -6,10 +6,14 @@
 //! SQLCipher) and support configurable scheduling and retention.
 
 pub mod backend;
+pub mod config;
 pub mod crypto;
 pub mod engine;
+pub mod error;
 pub mod retention;
 pub mod schedule;
+pub mod steps;
+pub mod transform;
 pub mod types;
 
 use anyhow::Result;

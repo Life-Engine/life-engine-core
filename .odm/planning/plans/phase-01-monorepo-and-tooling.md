@@ -104,7 +104,7 @@ Progress: 0 / 11 work packages complete
 > depends: 1.1
 > spec: .odm/spec/monorepo-and-tooling/brief.md
 
-- [ ] Scaffold all first-party plugin crates with WASM-compatible layout
+- [x] Scaffold all first-party plugin crates with WASM-compatible layout
   <!-- file: plugins/connector-email/Cargo.toml -->
   <!-- file: plugins/connector-email/src/lib.rs -->
   <!-- file: plugins/connector-email/manifest.toml -->

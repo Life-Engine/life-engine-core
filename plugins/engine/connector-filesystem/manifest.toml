@@ -1,0 +1,38 @@
+[plugin]
+id = "com.life-engine.connector-filesystem"
+name = "Filesystem Connector"
+version = "0.1.0"
+description = "Local filesystem and S3-compatible cloud storage connector"
+
+[actions.scan]
+description = "Trigger a filesystem scan"
+method = "POST"
+path = "/scan"
+
+[actions.status]
+description = "Get the current scan status"
+method = "GET"
+path = "/status"
+
+[actions.changes]
+description = "List detected file changes since last scan"
+method = "GET"
+path = "/changes"
+
+[capabilities]
+storage_read = true
+storage_write = true
+
+[config]
+schema = """
+{
+  "type": "object",
+  "properties": {
+    "watch_paths": { "type": "array", "items": { "type": "string" } },
+    "include_patterns": { "type": "array", "items": { "type": "string" } },
+    "exclude_patterns": { "type": "array", "items": { "type": "string" } },
+    "compute_checksums": { "type": "boolean", "default": true },
+    "scan_interval_secs": { "type": "integer", "default": 300 }
+  }
+}
+"""

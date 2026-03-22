@@ -8,6 +8,7 @@ description = "Local filesystem and S3-compatible cloud storage connector for Li
 [lib]
 name = "connector_filesystem"
 path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]
 
 [features]
 integration = ["aws-sdk-s3", "aws-config"]
@@ -17,6 +18,7 @@ life-engine-plugin-sdk = { path = "../../../packages/plugin-sdk-rs" }
 life-engine-types = { path = "../../../packages/types" }
 async-trait = { workspace = true }
 anyhow = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

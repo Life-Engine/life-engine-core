@@ -16,9 +16,14 @@
 //! - `s3` — S3/MinIO client with sync state tracking
 //! - `normalizer` — File metadata to CDM conversion with MIME detection
 
+pub mod config;
+pub mod error;
 pub mod local;
 pub mod normalizer;
 pub mod s3;
+pub mod steps;
+pub mod transform;
+pub mod types;
 
 use std::time::Duration;
 

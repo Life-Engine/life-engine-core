@@ -1,0 +1,36 @@
+[plugin]
+id = "com.life-engine.search-indexer"
+name = "Search Indexer"
+version = "0.1.0"
+description = "Full-text search indexing powered by Tantivy"
+
+[actions.search]
+description = "Search across all indexed collections"
+method = "GET"
+path = "/search"
+
+[actions.reindex]
+description = "Trigger a full reindex of all collections"
+method = "POST"
+path = "/reindex"
+
+[actions.status]
+description = "Get indexer status and statistics"
+method = "GET"
+path = "/status"
+
+[capabilities]
+storage_read = true
+events_subscribe = true
+logging = true
+
+[config]
+schema = """
+{
+  "type": "object",
+  "properties": {
+    "index_path": { "type": "string", "default": "data/search-index" },
+    "commit_threshold": { "type": "integer", "default": 1000 }
+  }
+}
+"""

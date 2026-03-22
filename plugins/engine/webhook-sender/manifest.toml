@@ -1,0 +1,32 @@
+[plugin]
+id = "com.life-engine.webhook-sender"
+name = "Webhook Sender"
+version = "0.1.0"
+description = "Outbound webhook dispatcher — sends events to external URLs"
+
+[actions.subscribe]
+description = "Create a new webhook subscription"
+method = "POST"
+path = "/subscribe"
+
+[actions.unsubscribe]
+description = "Remove a webhook subscription"
+method = "DELETE"
+path = "/subscribe/{id}"
+
+[actions.subscriptions]
+description = "List active webhook subscriptions"
+method = "GET"
+path = "/subscriptions"
+
+[actions.deliveries]
+description = "List webhook delivery history"
+method = "GET"
+path = "/deliveries"
+
+[capabilities]
+storage_read = true
+storage_write = true
+http_outbound = true
+events_subscribe = true
+logging = true

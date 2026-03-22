@@ -11,8 +11,13 @@
 //! - `google` — Google People API client with OAuth2 token management and incremental sync
 
 pub mod carddav;
+pub mod config;
+pub mod error;
 pub mod google;
 pub mod normalizer;
+pub mod steps;
+pub mod transform;
+pub mod types;
 
 use std::time::Duration;
 

@@ -1,0 +1,36 @@
+[plugin]
+id = "com.life-engine.connector-contacts"
+name = "Contacts Connector"
+version = "0.1.0"
+description = "CardDAV and Google Contacts connector — syncs contacts"
+
+[actions.sync]
+description = "Sync contacts from configured providers"
+method = "POST"
+path = "/sync"
+
+[actions.status]
+description = "Get the current sync status"
+method = "GET"
+path = "/status"
+
+[capabilities]
+storage_read = true
+storage_write = true
+http_outbound = true
+credentials_read = true
+credentials_write = true
+
+[config]
+schema = """
+{
+  "type": "object",
+  "properties": {
+    "carddav_server_url": { "type": "string" },
+    "carddav_username": { "type": "string" },
+    "carddav_addressbook_path": { "type": "string" },
+    "google_client_id": { "type": "string" },
+    "sync_interval_secs": { "type": "integer", "default": 300 }
+  }
+}
+"""

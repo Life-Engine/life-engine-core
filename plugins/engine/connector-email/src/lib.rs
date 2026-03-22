@@ -11,9 +11,14 @@
 //! - `smtp` — SMTP sending via `lettre`
 //! - `normalizer` — Raw RFC 5322 messages to CDM `Email` type conversion
 
+pub mod config;
+pub mod error;
 pub mod imap;
 pub mod normalizer;
 pub mod smtp;
+pub mod steps;
+pub mod transform;
+pub mod types;
 
 use std::time::Duration;
 

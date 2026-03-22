@@ -267,13 +267,13 @@ Progress: 0 / 14 work packages complete
 ## 2.9 — Plugins & System Pages
 > depends: 2.4, 2.5
 
-- [ ] Create Plugins page showing loaded plugins and plugin settings
+- [x] Create Plugins page showing loaded plugins and plugin settings
   <!-- file: apps/admin/src/pages/PluginsPage.tsx -->
   <!-- purpose: Display plugin list with id, name, version, status badges; include plugin settings form (paths list editor, auto_enable toggle) -->
   <!-- requirements: admin manages plugins -->
   <!-- leverage: API client getPlugins(), config types PluginSettings -->
 
-- [ ] Create System status page with health and info
+- [x] Create System status page with health and info
   <!-- file: apps/admin/src/pages/SystemPage.tsx -->
   <!-- purpose: Display system version, uptime (formatted), storage backend, plugins loaded count, health check status with auto-refresh -->
   <!-- requirements: admin monitors system health -->

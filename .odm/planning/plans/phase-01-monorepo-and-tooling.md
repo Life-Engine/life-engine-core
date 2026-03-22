@@ -166,7 +166,7 @@ Progress: 0 / 11 work packages complete
 > depends: 1.2
 > spec: .odm/spec/monorepo-and-tooling/brief.md
 
-- [ ] Verify Nx affected detection and task caching work correctly
+- [x] Verify Nx affected detection and task caching work correctly
   <!-- file: nx.json -->
   <!-- purpose: Make a trivial change to packages/types/src/lib.rs (e.g., add a doc comment), run nx affected:test, confirm that only packages/types and its downstream dependents (packages/traits, packages/crypto, packages/plugin-sdk, packages/storage-sqlite, packages/auth, packages/workflow-engine, transport crates, apps/core) are tested — not unrelated crates. Run the same command again and confirm caching prevents re-execution. Revert the trivial change after verification. -->
   <!-- requirements: 2.1, 2.2 -->

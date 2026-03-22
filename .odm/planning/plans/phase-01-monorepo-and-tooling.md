@@ -130,7 +130,7 @@ Progress: 0 / 11 work packages complete
 > depends: 1.6
 > spec: .odm/spec/monorepo-and-tooling/brief.md
 
-- [ ] Add test, lint, and new-plugin recipes to the justfile
+- [x] Add test, lint, and new-plugin recipes to the justfile
   <!-- file: justfile -->
   <!-- purpose: Add test recipe that runs cargo test across the entire workspace with --workspace flag. Add lint recipe that runs cargo clippy across all crates with -D warnings to treat warnings as errors. Add new-plugin recipe that takes a plugin name argument, copies the plugin scaffold template from tools/templates/plugin/, replaces {{name}} and {{id}} placeholders with the provided name, adds the new crate to the Cargo.toml workspace members list, and prints success message with next steps. -->
   <!-- requirements: 4.4, 4.5, 4.6 -->

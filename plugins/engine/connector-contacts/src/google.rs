@@ -6,7 +6,7 @@
 
 use anyhow::Context;
 use chrono::{DateTime, Duration, Utc};
-use life_engine_types::{Contact, ContactName, EmailAddress, PhoneNumber, PostalAddress};
+use life_engine_types::{Contact, ContactAddress, ContactEmail, ContactInfoType, ContactName, ContactPhone, PhoneType};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -649,45 +649,61 @@ pub struct GoogleAddress {
     pub address_type: Option<String>,
 }
 
+fn parse_contact_info_type(s: &str) -> ContactInfoType {
+    match s {
+        "home" => ContactInfoType::Home,
+        "work" => ContactInfoType::Work,
+        _ => ContactInfoType::Other,
+    }
+}
+
+fn parse_phone_type(s: &str) -> PhoneType {
+    match s {
+        "mobile" | "cell" => PhoneType::Mobile,
+        "home" => PhoneType::Home,
+        "work" => PhoneType::Work,
+        "fax" => PhoneType::Fax,
+        _ => PhoneType::Other,
+    }
+}
+
 /// Map a Google People API person to the Life Engine CDM `Contact`.
 pub fn map_google_person(person: &GooglePerson) -> Contact {
     let now = Utc::now();
 
     let given = person.given_name.clone().unwrap_or_default();
     let family = person.family_name.clone().unwrap_or_default();
-    let display = person
-        .display_name
-        .clone()
-        .unwrap_or_else(|| format!("{given} {family}").trim().to_string());
 
-    let emails: Vec<EmailAddress> = person
+    let emails: Vec<ContactEmail> = person
         .email_addresses
         .iter()
-        .map(|e| EmailAddress {
+        .map(|e| ContactEmail {
             address: e.value.clone(),
-            email_type: e.email_type.clone(),
+            email_type: e.email_type.as_deref().map(parse_contact_info_type),
             primary: None,
         })
         .collect();
 
-    let phones: Vec<PhoneNumber> = person
+    let phones: Vec<ContactPhone> = person
         .phone_numbers
         .iter()
-        .map(|p| PhoneNumber {
+        .map(|p| ContactPhone {
             number: p.value.clone(),
-            phone_type: p.phone_type.clone(),
+            phone_type: p.phone_type.as_deref().map(parse_phone_type),
+            primary: None,
         })
         .collect();
 
-    let addresses: Vec<PostalAddress> = person
+    let addresses: Vec<ContactAddress> = person
         .addresses
         .iter()
-        .map(|a| PostalAddress {
+        .map(|a| ContactAddress {
             street: a.street_address.clone(),
             city: a.city.clone(),
-            state: a.region.clone(),
-            postcode: a.postal_code.clone(),
+            region: a.region.clone(),
+            postal_code: a.postal_code.clone(),
             country: a.country.clone(),
+            address_type: None,
         })
         .collect();
 
@@ -696,15 +712,22 @@ pub fn map_google_person(person: &GooglePerson) -> Contact {
         name: ContactName {
             given,
             family,
-            display,
+            prefix: None,
+            suffix: None,
+            middle: None,
         },
         emails,
         phones,
         addresses,
-        organisation: person.organisation.clone(),
+        organization: person.organisation.clone(),
         source: "google".into(),
         source_id: person.resource_name.clone(),
         extensions: None,
+        title: None,
+        birthday: None,
+        photo_url: None,
+        notes: None,
+        groups: vec![],
         created_at: now,
         updated_at: now,
     }
@@ -800,7 +823,6 @@ mod tests {
     fn map_google_person_full() {
         let person = test_person();
         let contact = map_google_person(&person);
-        assert_eq!(contact.name.display, "Jane Doe");
         assert_eq!(contact.name.given, "Jane");
         assert_eq!(contact.name.family, "Doe");
         assert_eq!(contact.source, "google");
@@ -814,7 +836,7 @@ mod tests {
             contact.addresses[0].street.as_deref(),
             Some("123 Main St")
         );
-        assert_eq!(contact.organisation.as_deref(), Some("Acme Corp"));
+        assert_eq!(contact.organization.as_deref(), Some("Acme Corp"));
     }
 
     #[test]
@@ -832,7 +854,6 @@ mod tests {
         };
 
         let contact = map_google_person(&person);
-        assert_eq!(contact.name.display, "Solo");
         assert_eq!(contact.name.given, "Solo");
         assert!(contact.emails.is_empty());
         assert!(contact.phones.is_empty());
@@ -864,9 +885,9 @@ mod tests {
         let contact = map_google_person(&person);
         assert_eq!(contact.emails.len(), 3);
         assert_eq!(contact.emails[0].address, "work@example.com");
-        assert_eq!(contact.emails[0].email_type.as_deref(), Some("work"));
+        assert_eq!(contact.emails[0].email_type, Some(ContactInfoType::Work));
         assert_eq!(contact.emails[1].address, "home@example.com");
-        assert_eq!(contact.emails[1].email_type.as_deref(), Some("home"));
+        assert_eq!(contact.emails[1].email_type, Some(ContactInfoType::Home));
         assert_eq!(contact.emails[2].address, "other@example.com");
         assert!(contact.emails[2].email_type.is_none());
     }
@@ -896,11 +917,11 @@ mod tests {
         let contact = map_google_person(&person);
         assert_eq!(contact.phones.len(), 4);
         assert_eq!(contact.phones[0].number, "+1-555-0001");
-        assert_eq!(contact.phones[0].phone_type.as_deref(), Some("mobile"));
+        assert_eq!(contact.phones[0].phone_type, Some(PhoneType::Mobile));
         assert_eq!(contact.phones[1].number, "+1-555-0002");
-        assert_eq!(contact.phones[1].phone_type.as_deref(), Some("work"));
+        assert_eq!(contact.phones[1].phone_type, Some(PhoneType::Work));
         assert_eq!(contact.phones[2].number, "+1-555-0003");
-        assert_eq!(contact.phones[2].phone_type.as_deref(), Some("home"));
+        assert_eq!(contact.phones[2].phone_type, Some(PhoneType::Home));
         assert_eq!(contact.phones[3].number, "+1-555-0004");
         assert!(contact.phones[3].phone_type.is_none());
     }
@@ -932,8 +953,8 @@ mod tests {
 
         assert_eq!(contact.addresses[0].street.as_deref(), Some("123 Main St"));
         assert_eq!(contact.addresses[0].city.as_deref(), Some("Springfield"));
-        assert_eq!(contact.addresses[0].state.as_deref(), Some("IL"));
-        assert_eq!(contact.addresses[0].postcode.as_deref(), Some("62701"));
+        assert_eq!(contact.addresses[0].region.as_deref(), Some("IL"));
+        assert_eq!(contact.addresses[0].postal_code.as_deref(), Some("62701"));
         assert_eq!(contact.addresses[0].country.as_deref(), Some("US"));
 
         assert_eq!(
@@ -941,8 +962,8 @@ mod tests {
             Some("456 Corporate Blvd")
         );
         assert_eq!(contact.addresses[1].city.as_deref(), Some("Chicago"));
-        assert_eq!(contact.addresses[1].state.as_deref(), Some("IL"));
-        assert_eq!(contact.addresses[1].postcode.as_deref(), Some("60601"));
+        assert_eq!(contact.addresses[1].region.as_deref(), Some("IL"));
+        assert_eq!(contact.addresses[1].postal_code.as_deref(), Some("60601"));
         assert_eq!(contact.addresses[1].country.as_deref(), Some("US"));
     }
 
@@ -970,7 +991,6 @@ mod tests {
         };
 
         let contact = map_google_person(&person);
-        assert_eq!(contact.name.display, "Prince");
         assert_eq!(contact.name.given, "");
         assert_eq!(contact.name.family, "");
     }
@@ -990,7 +1010,6 @@ mod tests {
         };
 
         let contact = map_google_person(&person);
-        assert_eq!(contact.name.display, "");
         assert_eq!(contact.name.given, "");
         assert_eq!(contact.name.family, "");
     }
@@ -1001,7 +1020,7 @@ mod tests {
         person.organisation = None;
 
         let contact = map_google_person(&person);
-        assert!(contact.organisation.is_none());
+        assert!(contact.organization.is_none());
     }
 
     #[test]
@@ -1398,10 +1417,10 @@ mod tests {
 
         let contacts = client.process_list_response(response);
         assert_eq!(contacts.len(), 2);
-        assert_eq!(contacts[0].name.display, "Alice");
+        assert_eq!(contacts[0].name.given, "Alice");
         assert_eq!(contacts[0].source, "google");
         assert_eq!(contacts[0].source_id, "people/c100");
-        assert_eq!(contacts[1].name.display, "Bob");
+        assert_eq!(contacts[1].name.given, "Bob");
 
         // Sync token should be updated
         assert_eq!(
@@ -2168,7 +2187,7 @@ mod tests {
             .expect("should succeed");
 
         assert_eq!(contacts.len(), 1);
-        assert_eq!(contacts[0].name.display, "Sync Test");
+        assert_eq!(contacts[0].name.given, "Sync");
         assert_eq!(contacts[0].source, "google");
         assert_eq!(contacts[0].emails.len(), 1);
         assert_eq!(
@@ -2253,7 +2272,7 @@ mod tests {
 
         let contacts = client.process_list_response(response);
         assert_eq!(contacts.len(), 1);
-        assert_eq!(contacts[0].name.display, "Sync Test");
+        assert_eq!(contacts[0].name.given, "Sync");
         assert_eq!(contacts[0].source, "google");
         assert_eq!(contacts[0].emails.len(), 1);
         assert_eq!(

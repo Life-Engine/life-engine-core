@@ -148,12 +148,19 @@ mod tests {
             name: ContactName {
                 given: "Test".into(),
                 family: "Contact".into(),
-                display: "Test Contact".into(),
+                prefix: None,
+                suffix: None,
+                middle: None,
             },
             emails: vec![],
             phones: vec![],
             addresses: vec![],
-            organisation: None,
+            organization: None,
+            title: None,
+            birthday: None,
+            photo_url: None,
+            notes: None,
+            groups: vec![],
             source: "local".into(),
             source_id: "ct-001".into(),
             extensions: None,
@@ -284,7 +291,8 @@ EMAIL:new@example.com\r\n\
 END:VCARD\r\n";
 
         let contact = crate::serializer::vcard_to_contact(vcard).expect("should parse");
-        assert_eq!(contact.name.display, "New Contact");
+        assert_eq!(contact.name.given, "New");
+        assert_eq!(contact.name.family, "Contact");
         assert_eq!(contact.source_id, "new-ct-001");
     }
 

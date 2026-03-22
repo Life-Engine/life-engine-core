@@ -5,8 +5,28 @@
 
 use chrono::Utc;
 use dav_utils::text::{decode_escaped_value as decode_value, non_empty, unfold_lines};
-use life_engine_types::{Contact, ContactName, EmailAddress, PhoneNumber, PostalAddress};
+use life_engine_types::{Contact, ContactAddress, ContactEmail, ContactInfoType, ContactName, ContactPhone, PhoneType};
 use uuid::Uuid;
+
+/// Parse a vCard type string into a `ContactInfoType`.
+fn parse_contact_info_type(s: &str) -> ContactInfoType {
+    match s {
+        "home" => ContactInfoType::Home,
+        "work" => ContactInfoType::Work,
+        _ => ContactInfoType::Other,
+    }
+}
+
+/// Parse a vCard type string into a `PhoneType`.
+fn parse_phone_type(s: &str) -> PhoneType {
+    match s {
+        "mobile" | "cell" => PhoneType::Mobile,
+        "home" => PhoneType::Home,
+        "work" => PhoneType::Work,
+        "fax" => PhoneType::Fax,
+        _ => PhoneType::Other,
+    }
+}
 
 /// Normalize a raw vCard string into the Life Engine CDM `Contact` type.
 ///
@@ -24,11 +44,11 @@ pub fn normalize_vcard(raw: &str, source: &str) -> anyhow::Result<Contact> {
 
     let mut given = String::new();
     let mut family = String::new();
-    let mut display = String::new();
+    let mut fn_value = String::new();
     let mut emails = Vec::new();
     let mut phones = Vec::new();
     let mut addresses = Vec::new();
-    let mut organisation = None;
+    let mut organization = None;
     let mut source_id = String::new();
     let mut has_photo = false;
 
@@ -47,7 +67,7 @@ pub fn normalize_vcard(raw: &str, source: &str) -> anyhow::Result<Contact> {
 
         match prop_name.to_uppercase().as_str() {
             "FN" => {
-                display = decode_value(value);
+                fn_value = decode_value(value);
             }
             "N" => {
                 // N:Family;Given;Additional;Prefix;Suffix
@@ -56,7 +76,7 @@ pub fn normalize_vcard(raw: &str, source: &str) -> anyhow::Result<Contact> {
                 given = decode_value(parts.get(1).unwrap_or(&""));
             }
             "EMAIL" => {
-                let email_type = extract_type_param(&params);
+                let email_type = extract_type_param(&params).map(|s| parse_contact_info_type(&s));
                 // Check for PREF in three forms:
                 //   vCard 3.0: TYPE=pref  or  TYPE=home,pref  (comma-separated)
                 //   vCard 4.0: PREF=1
@@ -69,17 +89,18 @@ pub fn normalize_vcard(raw: &str, source: &str) -> anyhow::Result<Contact> {
                             || k.eq_ignore_ascii_case("PREF")
                     })
                     .then_some(true);
-                emails.push(EmailAddress {
+                emails.push(ContactEmail {
                     address: value.to_string(),
                     email_type,
                     primary,
                 });
             }
             "TEL" => {
-                let phone_type = extract_type_param(&params);
-                phones.push(PhoneNumber {
+                let phone_type = extract_type_param(&params).map(|s| parse_phone_type(&s));
+                phones.push(ContactPhone {
                     number: value.to_string(),
                     phone_type,
+                    primary: None,
                 });
             }
             "ADR" => {
@@ -87,23 +108,24 @@ pub fn normalize_vcard(raw: &str, source: &str) -> anyhow::Result<Contact> {
                 let parts: Vec<&str> = value.split(';').collect();
                 let street = non_empty(parts.get(2).unwrap_or(&""));
                 let city = non_empty(parts.get(3).unwrap_or(&""));
-                let state = non_empty(parts.get(4).unwrap_or(&""));
-                let postcode = non_empty(parts.get(5).unwrap_or(&""));
+                let region = non_empty(parts.get(4).unwrap_or(&""));
+                let postal_code = non_empty(parts.get(5).unwrap_or(&""));
                 let country = non_empty(parts.get(6).unwrap_or(&""));
 
                 // Only add if at least one field is populated
                 if street.is_some()
                     || city.is_some()
-                    || state.is_some()
-                    || postcode.is_some()
+                    || region.is_some()
+                    || postal_code.is_some()
                     || country.is_some()
                 {
-                    addresses.push(PostalAddress {
+                    addresses.push(ContactAddress {
                         street,
                         city,
-                        state,
-                        postcode,
+                        region,
+                        postal_code,
                         country,
+                        address_type: None,
                     });
                 }
             }
@@ -111,7 +133,7 @@ pub fn normalize_vcard(raw: &str, source: &str) -> anyhow::Result<Contact> {
                 let org_value = value.split(';').next().unwrap_or("");
                 let decoded = decode_value(org_value);
                 if !decoded.is_empty() {
-                    organisation = Some(decoded);
+                    organization = Some(decoded);
                 }
             }
             "UID" => {
@@ -124,14 +146,16 @@ pub fn normalize_vcard(raw: &str, source: &str) -> anyhow::Result<Contact> {
         }
     }
 
-    // If no display name from FN, construct from N parts
-    if display.is_empty() {
-        display = format!("{given} {family}").trim().to_string();
+    // If no N property, try to parse from FN
+    if given.is_empty() && family.is_empty() && !fn_value.is_empty() {
+        let parts: Vec<&str> = fn_value.splitn(2, ' ').collect();
+        given = parts.first().unwrap_or(&"").to_string();
+        family = parts.get(1).unwrap_or(&"").to_string();
     }
 
     // If still empty, use a fallback
-    if display.is_empty() {
-        display = "(unnamed)".into();
+    if given.is_empty() && family.is_empty() {
+        given = "(unnamed)".into();
     }
 
     // Generate source_id if not provided by UID
@@ -152,12 +176,19 @@ pub fn normalize_vcard(raw: &str, source: &str) -> anyhow::Result<Contact> {
         name: ContactName {
             given,
             family,
-            display,
+            prefix: None,
+            suffix: None,
+            middle: None,
         },
         emails,
         phones,
         addresses,
-        organisation,
+        organization,
+        title: None,
+        birthday: None,
+        photo_url: None,
+        notes: None,
+        groups: vec![],
         source: source.into(),
         source_id,
         extensions,
@@ -243,7 +274,6 @@ UID:contact-001
 END:VCARD";
 
         let contact = normalize_vcard(vcard, "carddav").expect("should parse");
-        assert_eq!(contact.name.display, "Jane Doe");
         assert_eq!(contact.name.given, "Jane");
         assert_eq!(contact.name.family, "Doe");
         assert_eq!(contact.emails.len(), 1);
@@ -268,11 +298,11 @@ END:VCARD";
         let contact = normalize_vcard(vcard, "carddav").expect("should parse");
         assert_eq!(contact.phones.len(), 3);
         assert_eq!(contact.phones[0].number, "+1-555-0100");
-        assert_eq!(contact.phones[0].phone_type.as_deref(), Some("work"));
+        assert_eq!(contact.phones[0].phone_type, Some(PhoneType::Work));
         assert_eq!(contact.phones[1].number, "+1-555-0200");
-        assert_eq!(contact.phones[1].phone_type.as_deref(), Some("home"));
+        assert_eq!(contact.phones[1].phone_type, Some(PhoneType::Home));
         assert_eq!(contact.phones[2].number, "+1-555-0300");
-        assert_eq!(contact.phones[2].phone_type.as_deref(), Some("cell"));
+        assert_eq!(contact.phones[2].phone_type, Some(PhoneType::Mobile));
     }
 
     #[test]
@@ -293,8 +323,8 @@ END:VCARD";
         let work = &contact.addresses[0];
         assert_eq!(work.street.as_deref(), Some("123 Business Ave"));
         assert_eq!(work.city.as_deref(), Some("Metropolis"));
-        assert_eq!(work.state.as_deref(), Some("NY"));
-        assert_eq!(work.postcode.as_deref(), Some("10001"));
+        assert_eq!(work.region.as_deref(), Some("NY"));
+        assert_eq!(work.postal_code.as_deref(), Some("10001"));
         assert_eq!(work.country.as_deref(), Some("US"));
 
         let home = &contact.addresses[1];
@@ -314,7 +344,7 @@ UID:contact-004
 END:VCARD";
 
         let contact = normalize_vcard(vcard, "carddav").expect("should parse");
-        assert_eq!(contact.organisation.as_deref(), Some("Acme Corp"));
+        assert_eq!(contact.organization.as_deref(), Some("Acme Corp"));
     }
 
     #[test]
@@ -333,9 +363,9 @@ END:VCARD";
         let contact = normalize_vcard(vcard, "carddav").expect("should parse");
         assert_eq!(contact.emails.len(), 3);
         assert_eq!(contact.emails[0].address, "work@example.com");
-        assert_eq!(contact.emails[0].email_type.as_deref(), Some("work"));
+        assert_eq!(contact.emails[0].email_type, Some(ContactInfoType::Work));
         assert_eq!(contact.emails[1].address, "home@example.com");
-        assert_eq!(contact.emails[1].email_type.as_deref(), Some("home"));
+        assert_eq!(contact.emails[1].email_type, Some(ContactInfoType::Home));
         assert_eq!(contact.emails[2].address, "primary@example.com");
     }
 
@@ -352,11 +382,12 @@ UID:contact-v3
 END:VCARD";
 
         let contact = normalize_vcard(vcard, "carddav").expect("should parse");
-        assert_eq!(contact.name.display, "Version Three");
+        assert_eq!(contact.name.given, "Version");
+        assert_eq!(contact.name.family, "Three");
         assert_eq!(contact.emails.len(), 1);
-        assert_eq!(contact.emails[0].email_type.as_deref(), Some("internet"));
+        assert_eq!(contact.emails[0].email_type, Some(ContactInfoType::Other));
         assert_eq!(contact.phones.len(), 1);
-        assert_eq!(contact.phones[0].phone_type.as_deref(), Some("cell"));
+        assert_eq!(contact.phones[0].phone_type, Some(PhoneType::Mobile));
     }
 
     #[test]
@@ -372,7 +403,8 @@ UID:contact-v4
 END:VCARD";
 
         let contact = normalize_vcard(vcard, "carddav").expect("should parse");
-        assert_eq!(contact.name.display, "Version Four");
+        assert_eq!(contact.name.given, "Version");
+        assert_eq!(contact.name.family, "Four");
         assert_eq!(contact.emails.len(), 1);
         assert_eq!(contact.phones.len(), 1);
     }
@@ -390,10 +422,8 @@ UID:contact-folded
 END:VCARD";
 
         let contact = normalize_vcard(vcard, "carddav").expect("should parse");
-        assert_eq!(
-            contact.name.display,
-            "Long Name That Is Very Long Indeed And Needs To BeFolded Across Lines"
-        );
+        assert_eq!(contact.name.given, "Long");
+        assert_eq!(contact.name.family, "Folded");
     }
 
     #[test]
@@ -401,7 +431,8 @@ END:VCARD";
         let vcard = "BEGIN:VCARD\nVERSION:4.0\nFN:Tab\n\tFolded\nN:Folded;Tab;;;\nUID:tab-fold\nEND:VCARD";
 
         let contact = normalize_vcard(vcard, "carddav").expect("should parse");
-        assert_eq!(contact.name.display, "TabFolded");
+        assert_eq!(contact.name.given, "Tab");
+        assert_eq!(contact.name.family, "Folded");
     }
 
     #[test]
@@ -415,11 +446,12 @@ UID:contact-minimal
 END:VCARD";
 
         let contact = normalize_vcard(vcard, "carddav").expect("should parse");
-        assert_eq!(contact.name.display, "Minimal Contact");
+        assert_eq!(contact.name.given, "Minimal");
+        assert_eq!(contact.name.family, "Contact");
         assert!(contact.emails.is_empty());
         assert!(contact.phones.is_empty());
         assert!(contact.addresses.is_empty());
-        assert!(contact.organisation.is_none());
+        assert!(contact.organization.is_none());
         assert!(contact.extensions.is_none());
     }
 
@@ -435,8 +467,9 @@ UID:contact-utf8
 END:VCARD";
 
         let contact = normalize_vcard(vcard, "carddav").expect("should parse");
-        assert_eq!(contact.name.display, "Rene Muller");
-        assert_eq!(contact.organisation.as_deref(), Some("Cafe Zurich"));
+        assert_eq!(contact.name.given, "Rene");
+        assert_eq!(contact.name.family, "Muller");
+        assert_eq!(contact.organization.as_deref(), Some("Cafe Zurich"));
     }
 
     #[test]
@@ -450,7 +483,8 @@ UID:contact-escaped
 END:VCARD";
 
         let contact = normalize_vcard(vcard, "carddav").expect("should parse");
-        assert_eq!(contact.name.display, "Escaped, Name");
+        assert_eq!(contact.name.given, "Escaped,");
+        assert_eq!(contact.name.family, "Name");
     }
 
     #[test]
@@ -482,9 +516,12 @@ END:VCARD";
             .into_iter()
             .map(|r| r.expect("should parse"))
             .collect();
-        assert_eq!(contacts[0].name.display, "Contact One");
-        assert_eq!(contacts[1].name.display, "Contact Two");
-        assert_eq!(contacts[2].name.display, "Contact Three");
+        assert_eq!(contacts[0].name.given, "Contact");
+        assert_eq!(contacts[0].name.family, "One");
+        assert_eq!(contacts[1].name.given, "Contact");
+        assert_eq!(contacts[1].name.family, "Two");
+        assert_eq!(contacts[2].name.given, "Contact");
+        assert_eq!(contacts[2].name.family, "Three");
     }
 
     #[test]
@@ -526,7 +563,8 @@ UID:contact-no-fn
 END:VCARD";
 
         let contact = normalize_vcard(vcard, "carddav").expect("should parse");
-        assert_eq!(contact.name.display, "Jane Doe");
+        assert_eq!(contact.name.given, "Jane");
+        assert_eq!(contact.name.family, "Doe");
     }
 
     #[test]
@@ -570,7 +608,7 @@ END:VCARD";
         let contact = normalize_vcard(vcard, "carddav").expect("should parse");
         let json = serde_json::to_string(&contact).expect("should serialize");
         let restored: Contact = serde_json::from_str(&json).expect("should deserialize");
-        assert_eq!(restored.name.display, contact.name.display);
+        assert_eq!(restored.name.given, contact.name.given);
         assert_eq!(restored.emails[0].address, contact.emails[0].address);
     }
 
@@ -589,8 +627,8 @@ END:VCARD";
         assert_eq!(contact.addresses.len(), 1);
         assert!(contact.addresses[0].street.is_none());
         assert_eq!(contact.addresses[0].city.as_deref(), Some("Melbourne"));
-        assert!(contact.addresses[0].state.is_none());
-        assert_eq!(contact.addresses[0].postcode.as_deref(), Some("3000"));
+        assert!(contact.addresses[0].region.is_none());
+        assert_eq!(contact.addresses[0].postal_code.as_deref(), Some("3000"));
         assert_eq!(contact.addresses[0].country.as_deref(), Some("Australia"));
     }
 
@@ -626,6 +664,6 @@ END:VCARD";
         assert!(contact.emails[0].primary.is_none());
         // TYPE=home,pref — comma-separated values are split; "pref" is detected.
         assert_eq!(contact.emails[1].primary, Some(true));
-        assert_eq!(contact.emails[1].email_type.as_deref(), Some("home"));
+        assert_eq!(contact.emails[1].email_type, Some(ContactInfoType::Home));
     }
 }

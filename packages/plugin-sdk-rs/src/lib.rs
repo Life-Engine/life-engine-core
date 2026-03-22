@@ -50,10 +50,10 @@ pub use serde_json;
 // so plugin authors only need one dependency.
 pub use life_engine_types;
 pub use life_engine_types::{
-    Attendee, AttendeeStatus, CalendarEvent, Contact, ContactName, Credential, CredentialType,
-    Email, EmailAddress, EmailAttachment, EventStatus, FileMetadata, Note, PhoneNumber,
-    PostalAddress, Recurrence, RecurrenceFrequency, Reminder, ReminderMethod, Task, TaskPriority,
-    TaskStatus,
+    Attendee, AttendeeStatus, CalendarEvent, Contact, ContactAddress, ContactEmail,
+    ContactInfoType, ContactName, ContactPhone, Credential, CredentialType, Email, EmailAttachment,
+    EventStatus, FileMetadata, Note, PhoneType, Recurrence, RecurrenceFrequency, Reminder,
+    ReminderMethod, Task, TaskPriority, TaskStatus,
 };
 
 /// Convenience prelude for plugin authors.

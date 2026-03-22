@@ -5,8 +5,65 @@
 
 use chrono::Utc;
 use dav_utils::text::{decode_escaped_value, non_empty, unfold_lines};
-use life_engine_types::{Contact, ContactName, EmailAddress, PhoneNumber, PostalAddress};
+use life_engine_types::{Contact, ContactAddress, ContactEmail, ContactInfoType, ContactName, ContactPhone, PhoneType};
 use uuid::Uuid;
+
+/// Convert a `ContactInfoType` to a vCard TYPE parameter string.
+fn contact_info_type_to_vcard(t: &ContactInfoType) -> &str {
+    match t {
+        ContactInfoType::Home => "HOME",
+        ContactInfoType::Work => "WORK",
+        ContactInfoType::Other => "OTHER",
+    }
+}
+
+/// Convert a `PhoneType` to a vCard TYPE parameter string.
+fn phone_type_to_vcard(t: &PhoneType) -> &str {
+    match t {
+        PhoneType::Mobile => "CELL",
+        PhoneType::Home => "HOME",
+        PhoneType::Work => "WORK",
+        PhoneType::Fax => "FAX",
+        PhoneType::Other => "OTHER",
+    }
+}
+
+/// Parse a vCard type string into a `ContactInfoType`.
+fn parse_contact_info_type(s: &str) -> ContactInfoType {
+    match s {
+        "home" => ContactInfoType::Home,
+        "work" => ContactInfoType::Work,
+        _ => ContactInfoType::Other,
+    }
+}
+
+/// Parse a vCard type string into a `PhoneType`.
+fn parse_phone_type(s: &str) -> PhoneType {
+    match s {
+        "mobile" | "cell" => PhoneType::Mobile,
+        "home" => PhoneType::Home,
+        "work" => PhoneType::Work,
+        "fax" => PhoneType::Fax,
+        _ => PhoneType::Other,
+    }
+}
+
+/// Build a display name from ContactName parts.
+fn display_name(name: &ContactName) -> String {
+    let mut parts = Vec::new();
+    if let Some(ref p) = name.prefix {
+        parts.push(p.as_str());
+    }
+    parts.push(&name.given);
+    if let Some(ref m) = name.middle {
+        parts.push(m.as_str());
+    }
+    parts.push(&name.family);
+    if let Some(ref s) = name.suffix {
+        parts.push(s.as_str());
+    }
+    parts.join(" ")
+}
 
 /// Serialise a CDM `Contact` to vCard 4.0 format.
 ///
@@ -17,18 +74,21 @@ pub fn contact_to_vcard(contact: &Contact) -> String {
         "BEGIN:VCARD".to_string(),
         "VERSION:4.0".to_string(),
         format!("UID:{}", contact.source_id),
-        format!("FN:{}", escape_vcard_value(&contact.name.display)),
+        format!("FN:{}", escape_vcard_value(&display_name(&contact.name))),
         format!(
-            "N:{};{};;;",
+            "N:{};{};{};{};{}",
             escape_vcard_value(&contact.name.family),
-            escape_vcard_value(&contact.name.given)
+            escape_vcard_value(&contact.name.given),
+            escape_vcard_value(contact.name.middle.as_deref().unwrap_or("")),
+            escape_vcard_value(contact.name.prefix.as_deref().unwrap_or("")),
+            escape_vcard_value(contact.name.suffix.as_deref().unwrap_or("")),
         ),
     ];
 
     for email in &contact.emails {
         let mut prop = "EMAIL".to_string();
         if let Some(ref t) = email.email_type {
-            prop.push_str(&format!(";TYPE={}", t.to_uppercase()));
+            prop.push_str(&format!(";TYPE={}", contact_info_type_to_vcard(t)));
         }
         if email.primary == Some(true) {
             prop.push_str(";PREF=1");
@@ -39,7 +99,7 @@ pub fn contact_to_vcard(contact: &Contact) -> String {
     for phone in &contact.phones {
         let mut prop = "TEL".to_string();
         if let Some(ref t) = phone.phone_type {
-            prop.push_str(&format!(";TYPE={}", t.to_uppercase()));
+            prop.push_str(&format!(";TYPE={}", phone_type_to_vcard(t)));
         }
         lines.push(format!("{prop}:{}", phone.number));
     }
@@ -47,13 +107,13 @@ pub fn contact_to_vcard(contact: &Contact) -> String {
     for addr in &contact.addresses {
         let street = addr.street.as_deref().unwrap_or("");
         let city = addr.city.as_deref().unwrap_or("");
-        let state = addr.state.as_deref().unwrap_or("");
-        let postcode = addr.postcode.as_deref().unwrap_or("");
+        let region = addr.region.as_deref().unwrap_or("");
+        let postal_code = addr.postal_code.as_deref().unwrap_or("");
         let country = addr.country.as_deref().unwrap_or("");
-        lines.push(format!("ADR:;;{street};{city};{state};{postcode};{country}"));
+        lines.push(format!("ADR:;;{street};{city};{region};{postal_code};{country}"));
     }
 
-    if let Some(ref org) = contact.organisation {
+    if let Some(ref org) = contact.organization {
         lines.push(format!("ORG:{}", escape_vcard_value(org)));
     }
 
@@ -122,11 +182,13 @@ pub fn vcard_to_contact(vcard_data: &str) -> anyhow::Result<Contact> {
 
     let mut given = String::new();
     let mut family = String::new();
-    let mut display = String::new();
+    let mut middle = None;
+    let mut prefix = None;
+    let mut suffix = None;
     let mut emails = Vec::new();
     let mut phones = Vec::new();
     let mut addresses = Vec::new();
-    let mut organisation = None;
+    let mut organization = None;
     let mut source_id = String::new();
 
     for line in &lines {
@@ -144,15 +206,28 @@ pub fn vcard_to_contact(vcard_data: &str) -> anyhow::Result<Contact> {
 
         match prop_name.to_uppercase().as_str() {
             "FN" => {
-                display = decode_escaped_value(value);
+                // FN is used for display — we don't store it, but use it as
+                // fallback for given/family if N is absent.
             }
             "N" => {
                 let parts: Vec<&str> = value.split(';').collect();
                 family = decode_escaped_value(parts.first().unwrap_or(&""));
                 given = decode_escaped_value(parts.get(1).unwrap_or(&""));
+                let mid = decode_escaped_value(parts.get(2).unwrap_or(&""));
+                if !mid.is_empty() {
+                    middle = Some(mid);
+                }
+                let pfx = decode_escaped_value(parts.get(3).unwrap_or(&""));
+                if !pfx.is_empty() {
+                    prefix = Some(pfx);
+                }
+                let sfx = decode_escaped_value(parts.get(4).unwrap_or(&""));
+                if !sfx.is_empty() {
+                    suffix = Some(sfx);
+                }
             }
             "EMAIL" => {
-                let email_type = extract_type_param(&params);
+                let email_type = extract_type_param(&params).map(|s| parse_contact_info_type(&s));
                 // Handle preference in both vCard formats:
                 //   vCard 4.0: PREF=1
                 //   vCard 3.0: TYPE=PREF  or  TYPE=home,pref  (comma-separated)
@@ -165,39 +240,41 @@ pub fn vcard_to_contact(vcard_data: &str) -> anyhow::Result<Contact> {
                                     .any(|part| part.trim().eq_ignore_ascii_case("pref")))
                     })
                     .then_some(true);
-                emails.push(EmailAddress {
+                emails.push(ContactEmail {
                     address: value.to_string(),
                     email_type,
                     primary,
                 });
             }
             "TEL" => {
-                let phone_type = extract_type_param(&params);
-                phones.push(PhoneNumber {
+                let phone_type = extract_type_param(&params).map(|s| parse_phone_type(&s));
+                phones.push(ContactPhone {
                     number: value.to_string(),
                     phone_type,
+                    primary: None,
                 });
             }
             "ADR" => {
                 let parts: Vec<&str> = value.split(';').collect();
                 let street = non_empty(parts.get(2).unwrap_or(&""));
                 let city = non_empty(parts.get(3).unwrap_or(&""));
-                let state = non_empty(parts.get(4).unwrap_or(&""));
-                let postcode = non_empty(parts.get(5).unwrap_or(&""));
+                let region = non_empty(parts.get(4).unwrap_or(&""));
+                let postal_code = non_empty(parts.get(5).unwrap_or(&""));
                 let country = non_empty(parts.get(6).unwrap_or(&""));
 
                 if street.is_some()
                     || city.is_some()
-                    || state.is_some()
-                    || postcode.is_some()
+                    || region.is_some()
+                    || postal_code.is_some()
                     || country.is_some()
                 {
-                    addresses.push(PostalAddress {
+                    addresses.push(ContactAddress {
                         street,
                         city,
-                        state,
-                        postcode,
+                        region,
+                        postal_code,
                         country,
+                        address_type: None,
                     });
                 }
             }
@@ -205,7 +282,7 @@ pub fn vcard_to_contact(vcard_data: &str) -> anyhow::Result<Contact> {
                 let org_value = value.split(';').next().unwrap_or("");
                 let decoded = decode_escaped_value(org_value);
                 if !decoded.is_empty() {
-                    organisation = Some(decoded);
+                    organization = Some(decoded);
                 }
             }
             "UID" => {
@@ -215,12 +292,29 @@ pub fn vcard_to_contact(vcard_data: &str) -> anyhow::Result<Contact> {
         }
     }
 
-    if display.is_empty() {
-        display = format!("{given} {family}").trim().to_string();
+    // If N was missing, try to parse given/family from FN
+    if given.is_empty() && family.is_empty() {
+        // Re-parse to get FN value
+        let unfolded = unfold_lines(vcard_data);
+        for line in unfolded.lines() {
+            let line = line.trim();
+            if let Some((prop, val)) = line.split_once(':') {
+                let (name, _) = parse_property_name(prop);
+                if name.eq_ignore_ascii_case("FN") {
+                    let decoded = decode_escaped_value(val);
+                    let parts: Vec<&str> = decoded.splitn(2, ' ').collect();
+                    given = parts.first().unwrap_or(&"").to_string();
+                    family = parts.get(1).unwrap_or(&"").to_string();
+                    break;
+                }
+            }
+        }
     }
-    if display.is_empty() {
-        display = "(unnamed)".into();
+
+    if given.is_empty() && family.is_empty() {
+        given = "(unnamed)".into();
     }
+
     if source_id.is_empty() {
         source_id = Uuid::new_v4().to_string();
     }
@@ -232,12 +326,19 @@ pub fn vcard_to_contact(vcard_data: &str) -> anyhow::Result<Contact> {
         name: ContactName {
             given,
             family,
-            display,
+            prefix,
+            suffix,
+            middle,
         },
         emails,
         phones,
         addresses,
-        organisation,
+        organization,
+        title: None,
+        birthday: None,
+        photo_url: None,
+        notes: None,
+        groups: vec![],
         source: "carddav-api".into(),
         source_id,
         extensions: None,
@@ -291,32 +392,41 @@ mod tests {
             name: ContactName {
                 given: "Jane".into(),
                 family: "Doe".into(),
-                display: "Jane Doe".into(),
+                prefix: None,
+                suffix: None,
+                middle: None,
             },
             emails: vec![
-                EmailAddress {
+                ContactEmail {
                     address: "jane@example.com".into(),
-                    email_type: Some("work".into()),
+                    email_type: Some(ContactInfoType::Work),
                     primary: Some(true),
                 },
-                EmailAddress {
+                ContactEmail {
                     address: "jane.personal@example.com".into(),
-                    email_type: Some("home".into()),
+                    email_type: Some(ContactInfoType::Home),
                     primary: None,
                 },
             ],
-            phones: vec![PhoneNumber {
+            phones: vec![ContactPhone {
                 number: "+1-555-0100".into(),
-                phone_type: Some("cell".into()),
+                phone_type: Some(PhoneType::Mobile),
+                primary: None,
             }],
-            addresses: vec![PostalAddress {
+            addresses: vec![ContactAddress {
                 street: Some("123 Main St".into()),
                 city: Some("Springfield".into()),
-                state: Some("IL".into()),
-                postcode: Some("62704".into()),
+                region: Some("IL".into()),
+                postal_code: Some("62704".into()),
                 country: Some("US".into()),
+                address_type: None,
             }],
-            organisation: Some("Acme Corp".into()),
+            organization: Some("Acme Corp".into()),
+            title: None,
+            birthday: None,
+            photo_url: None,
+            notes: None,
+            groups: vec![],
             source: "local".into(),
             source_id: "contact-rt-001".into(),
             extensions: None,
@@ -381,12 +491,19 @@ mod tests {
             name: ContactName {
                 given: "Min".into(),
                 family: "Contact".into(),
-                display: "Min Contact".into(),
+                prefix: None,
+                suffix: None,
+                middle: None,
             },
             emails: vec![],
             phones: vec![],
             addresses: vec![],
-            organisation: None,
+            organization: None,
+            title: None,
+            birthday: None,
+            photo_url: None,
+            notes: None,
+            groups: vec![],
             source: "local".into(),
             source_id: "min-001".into(),
             extensions: None,
@@ -414,12 +531,19 @@ mod tests {
             name: ContactName {
                 given: "Test".into(),
                 family: "User".into(),
-                display: "Test, User; Jr.".into(),
+                prefix: None,
+                suffix: Some("Jr.".into()),
+                middle: None,
             },
             emails: vec![],
             phones: vec![],
             addresses: vec![],
-            organisation: Some("Org; Inc.".into()),
+            organization: Some("Org; Inc.".into()),
+            title: None,
+            birthday: None,
+            photo_url: None,
+            notes: None,
+            groups: vec![],
             source: "local".into(),
             source_id: "escape-001".into(),
             extensions: None,
@@ -427,7 +551,7 @@ mod tests {
             updated_at: Utc::now(),
         };
         let vcard = contact_to_vcard(&contact);
-        assert!(vcard.contains("FN:Test\\, User\\; Jr."));
+        assert!(vcard.contains("FN:Test User Jr."));
         assert!(vcard.contains("ORG:Org\\; Inc."));
     }
 
@@ -445,7 +569,6 @@ EMAIL:parsed@example.com\r\n\
 END:VCARD\r\n";
 
         let contact = vcard_to_contact(vcard).expect("should parse");
-        assert_eq!(contact.name.display, "Parsed Contact");
         assert_eq!(contact.name.given, "Parsed");
         assert_eq!(contact.name.family, "Contact");
         assert_eq!(contact.source_id, "parse-001");
@@ -469,11 +592,12 @@ ORG:Acme Corp\r\n\
 END:VCARD\r\n";
 
         let contact = vcard_to_contact(vcard).expect("should parse");
-        assert_eq!(contact.name.display, "Full Contact");
+        assert_eq!(contact.name.given, "Full");
+        assert_eq!(contact.name.family, "Contact");
         assert_eq!(contact.emails.len(), 2);
         assert_eq!(contact.phones.len(), 1);
         assert_eq!(contact.addresses.len(), 1);
-        assert_eq!(contact.organisation.as_deref(), Some("Acme Corp"));
+        assert_eq!(contact.organization.as_deref(), Some("Acme Corp"));
     }
 
     #[test]
@@ -496,7 +620,6 @@ END:VCARD\r\n";
         let vcard = contact_to_vcard(&original);
         let restored = vcard_to_contact(&vcard).expect("should round-trip");
 
-        assert_eq!(restored.name.display, original.name.display);
         assert_eq!(restored.name.given, original.name.given);
         assert_eq!(restored.name.family, original.name.family);
         assert_eq!(restored.source_id, original.source_id);
@@ -507,7 +630,7 @@ END:VCARD\r\n";
         assert_eq!(restored.addresses.len(), original.addresses.len());
         assert_eq!(restored.addresses[0].street, original.addresses[0].street);
         assert_eq!(restored.addresses[0].city, original.addresses[0].city);
-        assert_eq!(restored.organisation, original.organisation);
+        assert_eq!(restored.organization, original.organization);
     }
 
     #[test]
@@ -517,12 +640,19 @@ END:VCARD\r\n";
             name: ContactName {
                 given: "Solo".into(),
                 family: "Person".into(),
-                display: "Solo Person".into(),
+                prefix: None,
+                suffix: None,
+                middle: None,
             },
             emails: vec![],
             phones: vec![],
             addresses: vec![],
-            organisation: None,
+            organization: None,
+            title: None,
+            birthday: None,
+            photo_url: None,
+            notes: None,
+            groups: vec![],
             source: "local".into(),
             source_id: "solo-001".into(),
             extensions: None,
@@ -532,11 +662,12 @@ END:VCARD\r\n";
         let vcard = contact_to_vcard(&contact);
         let restored = vcard_to_contact(&vcard).expect("should round-trip");
 
-        assert_eq!(restored.name.display, "Solo Person");
+        assert_eq!(restored.name.given, "Solo");
+        assert_eq!(restored.name.family, "Person");
         assert_eq!(restored.source_id, "solo-001");
         assert!(restored.emails.is_empty());
         assert!(restored.phones.is_empty());
         assert!(restored.addresses.is_empty());
-        assert!(restored.organisation.is_none());
+        assert!(restored.organization.is_none());
     }
 }

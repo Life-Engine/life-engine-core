@@ -76,7 +76,7 @@ Progress: 0 / 11 work packages complete
 ## 2.4 — Contacts Rust Struct with Nested Types
 > spec: .odm/spec/canonical-data-models/brief.md
 
-- [ ] Define Contacts Rust struct with ContactName, ContactEmail, ContactPhone, ContactAddress
+- [x] Define Contacts Rust struct with ContactName, ContactEmail, ContactPhone, ContactAddress
   <!-- file: packages/types/src/contacts.rs -->
   <!-- purpose: Define Contact struct with required fields: id (Uuid), name (ContactName), source (String), source_id (String), created_at (DateTime<Utc>), updated_at (DateTime<Utc>). ContactName struct: given (String), family (String), prefix/suffix/middle as Option<String>. Optional fields on Contact: emails (Vec<ContactEmail>), phones (Vec<ContactPhone>), addresses (Vec<ContactAddress>), organization, title, birthday (NaiveDate), photo_url, notes, groups (Vec<String>), extensions. ContactEmail: address (String), email_type (ContactInfoType enum: Home/Work/Other), primary (bool). ContactPhone: number (String), phone_type (ContactInfoType), primary (bool). ContactAddress: street, city, region, postal_code, country (all Option<String>), address_type (ContactInfoType). Use serde rename for snake_case JSON serialization. Ensure existing tests pass. -->
   <!-- requirements: 1.1, 1.4 -->

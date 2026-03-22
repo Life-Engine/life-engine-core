@@ -14,7 +14,9 @@ pub mod notes;
 pub mod tasks;
 
 // Re-export all canonical types at crate root for convenience.
-pub use contacts::{Contact, ContactName, EmailAddress, PhoneNumber, PostalAddress};
+pub use contacts::{
+    Contact, ContactAddress, ContactEmail, ContactInfoType, ContactName, ContactPhone, PhoneType,
+};
 pub use credentials::{Credential, CredentialType};
 pub use emails::{Email, EmailAttachment};
 pub use events::{
@@ -91,16 +93,23 @@ mod tests {
             name: ContactName {
                 given: "Jane".into(),
                 family: "Doe".into(),
-                display: "Jane Doe".into(),
+                prefix: None,
+                suffix: None,
+                middle: None,
             },
-            emails: vec![EmailAddress {
+            emails: vec![ContactEmail {
                 address: "jane@example.com".into(),
-                email_type: Some("work".into()),
+                email_type: Some(ContactInfoType::Work),
                 primary: Some(true),
             }],
             phones: vec![],
             addresses: vec![],
-            organisation: None,
+            organization: None,
+            title: None,
+            birthday: None,
+            photo_url: None,
+            notes: None,
+            groups: vec![],
             source: "test".into(),
             source_id: "contact-001".into(),
             extensions: None,

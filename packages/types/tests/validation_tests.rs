@@ -318,15 +318,14 @@ mod event_validation {
 // ---------------------------------------------------------------------------
 mod contact_validation {
     use super::*;
-    use life_engine_types::{Contact, EmailAddress, PhoneNumber};
+    use life_engine_types::{Contact, ContactEmail, ContactInfoType, ContactPhone, PhoneType};
 
     fn sample_contact() -> serde_json::Value {
         json!({
             "id": TEST_UUID,
             "name": {
                 "given": "Jane",
-                "family": "Doe",
-                "display": "Jane Doe"
+                "family": "Doe"
             },
             "source": "test",
             "source_id": "contact-001",
@@ -369,7 +368,7 @@ mod contact_validation {
         assert!(contact.emails.is_empty());
         assert!(contact.phones.is_empty());
         assert!(contact.addresses.is_empty());
-        assert_eq!(contact.organisation, None);
+        assert_eq!(contact.organization, None);
         assert_eq!(contact.extensions, None);
     }
 
@@ -397,13 +396,13 @@ mod contact_validation {
     }
 
     #[test]
-    fn contact_omits_none_organisation_in_json() {
+    fn contact_omits_none_organization_in_json() {
         let contact: Contact = serde_json::from_value(sample_contact()).unwrap();
         let serialized = serde_json::to_value(&contact).unwrap();
         assert!(!serialized
             .as_object()
             .unwrap()
-            .contains_key("organisation"));
+            .contains_key("organization"));
     }
 
     #[test]
@@ -425,40 +424,41 @@ mod contact_validation {
     // --- (f) serde rename ---
 
     #[test]
-    fn email_address_type_uses_json_key_type() {
-        let ea = EmailAddress {
+    fn contact_email_type_uses_json_key_type() {
+        let ce = ContactEmail {
             address: "jane@example.com".into(),
-            email_type: Some("work".into()),
+            email_type: Some(ContactInfoType::Work),
             primary: None,
         };
-        let serialized = serde_json::to_value(&ea).unwrap();
+        let serialized = serde_json::to_value(&ce).unwrap();
         assert_eq!(serialized["type"], "work");
         assert!(!serialized.as_object().unwrap().contains_key("email_type"));
     }
 
     #[test]
-    fn email_address_deserializes_from_type_key() {
+    fn contact_email_deserializes_from_type_key() {
         let v = json!({"address": "a@b.com", "type": "home"});
-        let ea: EmailAddress = serde_json::from_value(v).unwrap();
-        assert_eq!(ea.email_type, Some("home".into()));
+        let ce: ContactEmail = serde_json::from_value(v).unwrap();
+        assert_eq!(ce.email_type, Some(ContactInfoType::Home));
     }
 
     #[test]
-    fn phone_number_type_uses_json_key_type() {
-        let pn = PhoneNumber {
+    fn contact_phone_type_uses_json_key_type() {
+        let cp = ContactPhone {
             number: "+1234567890".into(),
-            phone_type: Some("mobile".into()),
+            phone_type: Some(PhoneType::Mobile),
+            primary: None,
         };
-        let serialized = serde_json::to_value(&pn).unwrap();
+        let serialized = serde_json::to_value(&cp).unwrap();
         assert_eq!(serialized["type"], "mobile");
         assert!(!serialized.as_object().unwrap().contains_key("phone_type"));
     }
 
     #[test]
-    fn phone_number_deserializes_from_type_key() {
+    fn contact_phone_deserializes_from_type_key() {
         let v = json!({"number": "+1234567890", "type": "work"});
-        let pn: PhoneNumber = serde_json::from_value(v).unwrap();
-        assert_eq!(pn.phone_type, Some("work".into()));
+        let cp: ContactPhone = serde_json::from_value(v).unwrap();
+        assert_eq!(cp.phone_type, Some(PhoneType::Work));
     }
 
     // --- (g) Unknown field acceptance ---

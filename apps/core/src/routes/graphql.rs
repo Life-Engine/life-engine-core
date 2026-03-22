@@ -82,7 +82,9 @@ pub struct GqlTask {
 pub struct GqlContactName {
     pub given: String,
     pub family: String,
-    pub display: String,
+    pub prefix: Option<String>,
+    pub suffix: Option<String>,
+    pub middle: Option<String>,
 }
 
 /// An email address entry for a contact.
@@ -98,6 +100,7 @@ pub struct GqlEmailAddress {
 pub struct GqlPhoneNumber {
     pub number: String,
     pub phone_type: Option<String>,
+    pub primary: Option<bool>,
 }
 
 /// A postal address for a contact.
@@ -105,9 +108,10 @@ pub struct GqlPhoneNumber {
 pub struct GqlPostalAddress {
     pub street: Option<String>,
     pub city: Option<String>,
-    pub state: Option<String>,
-    pub postcode: Option<String>,
+    pub region: Option<String>,
+    pub postal_code: Option<String>,
     pub country: Option<String>,
+    pub address_type: Option<String>,
 }
 
 /// A contact record (mirrors CDM Contact).
@@ -118,7 +122,12 @@ pub struct GqlContact {
     pub emails: Vec<GqlEmailAddress>,
     pub phones: Vec<GqlPhoneNumber>,
     pub addresses: Vec<GqlPostalAddress>,
-    pub organisation: Option<String>,
+    pub organization: Option<String>,
+    pub title: Option<String>,
+    pub birthday: Option<String>,
+    pub photo_url: Option<String>,
+    pub notes: Option<String>,
+    pub groups: Vec<String>,
     pub source: String,
     pub source_id: String,
     pub extensions: Option<async_graphql::Json<JsonValue>>,
@@ -597,7 +606,9 @@ fn record_to_contact(data: &JsonValue) -> GqlContact {
         name: GqlContactName {
             given: name["given"].as_str().unwrap_or_default().into(),
             family: name["family"].as_str().unwrap_or_default().into(),
-            display: name["display"].as_str().unwrap_or_default().into(),
+            prefix: name["prefix"].as_str().map(Into::into),
+            suffix: name["suffix"].as_str().map(Into::into),
+            middle: name["middle"].as_str().map(Into::into),
         },
         emails: data["emails"]
             .as_array()
@@ -618,6 +629,7 @@ fn record_to_contact(data: &JsonValue) -> GqlContact {
                     .map(|p| GqlPhoneNumber {
                         number: p["number"].as_str().unwrap_or_default().into(),
                         phone_type: p["type"].as_str().map(Into::into),
+                        primary: p["primary"].as_bool(),
                     })
                     .collect()
             })
@@ -629,14 +641,23 @@ fn record_to_contact(data: &JsonValue) -> GqlContact {
                     .map(|addr| GqlPostalAddress {
                         street: addr["street"].as_str().map(Into::into),
                         city: addr["city"].as_str().map(Into::into),
-                        state: addr["state"].as_str().map(Into::into),
-                        postcode: addr["postcode"].as_str().map(Into::into),
+                        region: addr["region"].as_str().map(Into::into),
+                        postal_code: addr["postal_code"].as_str().map(Into::into),
                         country: addr["country"].as_str().map(Into::into),
+                        address_type: addr["type"].as_str().map(Into::into),
                     })
                     .collect()
             })
             .unwrap_or_default(),
-        organisation: data["organisation"].as_str().map(Into::into),
+        organization: data["organization"].as_str().map(Into::into),
+        title: data["title"].as_str().map(Into::into),
+        birthday: data["birthday"].as_str().map(Into::into),
+        photo_url: data["photo_url"].as_str().map(Into::into),
+        notes: data["notes"].as_str().map(Into::into),
+        groups: data["groups"]
+            .as_array()
+            .map(|a| a.iter().filter_map(|v| v.as_str().map(Into::into)).collect())
+            .unwrap_or_default(),
         source: data["source"].as_str().unwrap_or_default().into(),
         source_id: data["source_id"].as_str().unwrap_or_default().into(),
         extensions: data.get("extensions").and_then(|v| {
@@ -1408,10 +1429,10 @@ mod tests {
                 "contacts",
                 json!({
                     "id": "contact-001",
-                    "name": {"given": "Jane", "family": "Doe", "display": "Jane Doe"},
+                    "name": {"given": "Jane", "family": "Doe"},
                     "emails": [{"address": "jane@example.com", "type": "work", "primary": true}],
                     "phones": [{"number": "+1234567890", "type": "mobile"}],
-                    "organisation": "Acme",
+                    "organization": "Acme",
                     "source": "test",
                     "source_id": "c1",
                     "created_at": "2026-03-22T00:00:00Z",
@@ -1423,14 +1444,14 @@ mod tests {
 
         let result = schema
             .execute(
-                r#"{ contacts { data { id name { given family display } emails { address emailType primary } phones { number phoneType } organisation source } total } }"#,
+                r#"{ contacts { data { id name { given family } emails { address emailType primary } phones { number phoneType } organization source } total } }"#,
             )
             .await;
 
         assert!(result.errors.is_empty(), "errors: {:?}", result.errors);
         let data = result.data.into_json().unwrap();
         let contact = &data["contacts"]["data"][0];
-        assert_eq!(contact["name"]["display"], "Jane Doe");
+        assert_eq!(contact["name"]["given"], "Jane");
         assert_eq!(contact["emails"][0]["address"], "jane@example.com");
     }
 
@@ -1741,7 +1762,7 @@ mod tests {
                 CORE_PLUGIN_ID,
                 "contacts",
                 json!({
-                    "name": {"given": "Alice", "family": "Smith", "display": "Alice Smith"},
+                    "name": {"given": "Alice", "family": "Smith"},
                     "emails": [{"address": "alice@example.com"}],
                     "source": "test",
                     "source_id": "c1"
@@ -1769,14 +1790,14 @@ mod tests {
 
         let result = schema
             .execute(
-                r#"{ events { data { title attendeeContacts { name { display } emails { address } } } } }"#,
+                r#"{ events { data { title attendeeContacts { name { given family } emails { address } } } } }"#,
             )
             .await;
 
         assert!(result.errors.is_empty(), "{:?}", result.errors);
         let data = result.data.into_json().unwrap();
         let contacts = &data["events"]["data"][0]["attendeeContacts"];
-        assert_eq!(contacts[0]["name"]["display"], "Alice Smith");
+        assert_eq!(contacts[0]["name"]["given"], "Alice");
     }
 
     // -----------------------------------------------------------------------

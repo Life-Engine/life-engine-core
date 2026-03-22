@@ -13,8 +13,9 @@ pub use life_engine_types;
 
 use chrono::Utc;
 use life_engine_types::{
-    Attendee, CalendarEvent, Contact, ContactName, Credential, CredentialType, Email, EmailAddress,
-    FileMetadata, Note, PhoneNumber, PostalAddress, Recurrence, Task, TaskPriority, TaskStatus,
+    Attendee, CalendarEvent, Contact, ContactAddress, ContactEmail, ContactInfoType, ContactName,
+    ContactPhone, Credential, CredentialType, Email, FileMetadata, Note, PhoneType, Recurrence,
+    Task, TaskPriority, TaskStatus,
 };
 use uuid::Uuid;
 
@@ -75,25 +76,34 @@ pub fn create_test_contact() -> Contact {
         name: ContactName {
             given: "Alice".into(),
             family: "Johnson".into(),
-            display: "Alice Johnson".into(),
+            prefix: None,
+            suffix: None,
+            middle: None,
         },
-        emails: vec![EmailAddress {
+        emails: vec![ContactEmail {
             address: "alice@example.com".into(),
-            email_type: Some("work".into()),
+            email_type: Some(ContactInfoType::Work),
             primary: Some(true),
         }],
-        phones: vec![PhoneNumber {
+        phones: vec![ContactPhone {
             number: "+61 400 123 456".into(),
-            phone_type: Some("mobile".into()),
+            phone_type: Some(PhoneType::Mobile),
+            primary: None,
         }],
-        addresses: vec![PostalAddress {
+        addresses: vec![ContactAddress {
             street: Some("123 Main St".into()),
             city: Some("Sydney".into()),
-            state: Some("NSW".into()),
-            postcode: Some("2000".into()),
+            region: Some("NSW".into()),
+            postal_code: Some("2000".into()),
             country: Some("Australia".into()),
+            address_type: None,
         }],
-        organisation: Some("Acme Corp".into()),
+        organization: Some("Acme Corp".into()),
+        title: None,
+        birthday: None,
+        photo_url: None,
+        notes: None,
+        groups: vec![],
         source: "test".into(),
         source_id: "test-contact-001".into(),
         extensions: None,

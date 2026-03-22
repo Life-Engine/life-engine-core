@@ -21,11 +21,26 @@
       "dependsOn": ["^build"],
       "cache": true
     },
+    "build-ts": {
+      "dependsOn": ["^build-ts"],
+      "cache": true
+    },
     "test": {
+      "cache": true
+    },
+    "test-ts": {
+      "dependsOn": ["build-ts"],
       "cache": true
     },
     "lint": {
       "cache": true
+    },
+    "type-check": {
+      "dependsOn": ["build-ts"],
+      "cache": true
+    },
+    "dev": {
+      "cache": false
     }
   },
   "defaultBase": "main"

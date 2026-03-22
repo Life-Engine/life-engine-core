@@ -42,6 +42,13 @@
         "command": "cargo clippy -p life-engine-core -- -D warnings",
         "cwd": "{workspaceRoot}"
       }
+    },
+    "dev": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "cargo run -p life-engine-core",
+        "cwd": "{workspaceRoot}"
+      }
     }
   }
 }

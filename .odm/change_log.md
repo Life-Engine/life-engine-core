@@ -2,6 +2,8 @@
 
 ## 2026-03-23
 
+- WP nx:1.5 Task Pipelines & Developer Scripts: configure composite targetDefaults in nx.json for build-ts, test-ts, type-check, and dev targets with correct dependency ordering; add root package.json scripts (dev, build, build:ts, test, test:ts, lint, type-check, affected:test, affected:build) delegating to nx run-many and nx affected; add dev target to core project.json for cargo run workflow
+
 - WP nx:1.3 Rust Project Configurations: add Nx project.json for apps/core (build/test/lint cargo targets), 4 library packages (plugin-sdk-rs, test-utils, test-fixtures, dav-utils), and 9 engine plugins (connector-email, connector-calendar, connector-contacts, connector-filesystem, api-caldav, api-carddav, webhook-receiver, webhook-sender, backup) with wasm32-wasip1 build targets for plugins. All 15 projects visible in Nx graph.
 
 - WP nx:1.2 Nx Installation & Base Config: install Nx and plugins, generate pnpm lockfile, create nx.json with targetDefaults, cache inputs, and named inputs for Rust and TypeScript

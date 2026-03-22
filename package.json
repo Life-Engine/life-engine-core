@@ -5,7 +5,17 @@
   "description": "Life Engine Core — personal data engine with polyglot monorepo",
   "license": "Apache-2.0",
   "packageManager": "pnpm@9.15.4",
-  "scripts": {},
+  "scripts": {
+    "dev": "npx nx run core:dev",
+    "build": "npx nx run-many -t build",
+    "build:ts": "npx nx run-many -t build-ts",
+    "test": "npx nx run-many -t test",
+    "test:ts": "npx nx run-many -t test-ts",
+    "lint": "npx nx run-many -t lint",
+    "type-check": "npx nx run-many -t type-check",
+    "affected:test": "npx nx affected -t test",
+    "affected:build": "npx nx affected -t build"
+  },
   "devDependencies": {
     "nx": "^20.4.0",
     "@nx/js": "^20.4.0",

@@ -91,13 +91,13 @@ Progress: 0 / 14 work packages complete
 ## 1.5 — Task Pipelines & Developer Scripts
 > depends: 1.3, 1.4
 
-- [ ] Configure composite task pipelines in `nx.json`
+- [x] Configure composite task pipelines in `nx.json`
   <!-- file: nx.json -->
   <!-- purpose: Add pipeline tasks for dev, build-all, test-all, lint-all that orchestrate across Rust and TypeScript projects with correct dependency ordering -->
   <!-- requirements: unified developer commands -->
   <!-- leverage: nx.json from WP 1.2 -->
 
-- [ ] Add root `package.json` scripts for common workflows
+- [x] Add root `package.json` scripts for common workflows
   <!-- file: package.json -->
   <!-- purpose: Add scripts: dev, build, test, lint, affected:test, affected:build that delegate to npx nx run-many / nx affected -->
   <!-- requirements: one-command operations -->

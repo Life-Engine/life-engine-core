@@ -3,8 +3,10 @@ import { getConfig } from "../api/client";
 import type { CoreConfig } from "../types/config";
 import CoreSettingsForm from "../components/config/CoreSettingsForm";
 import NetworkSettingsForm from "../components/config/NetworkSettingsForm";
+import AuthSettingsForm from "../components/config/AuthSettingsForm";
+import StorageSettingsForm from "../components/config/StorageSettingsForm";
 
-type EditingSection = "core" | "network" | null;
+type EditingSection = "core" | "auth" | "storage" | "network" | null;
 
 function Section({
   title,
@@ -227,12 +229,28 @@ export default function ConfigPage() {
           )}
         </Section>
 
-        <Section title="Authentication">
-          <AuthSection config={config} />
+        <Section title="Authentication" onEdit={editing ? undefined : () => setEditing("auth")}>
+          {editing === "auth" ? (
+            <AuthSettingsForm
+              settings={config.auth}
+              onSaved={() => { setEditing(null); reload(); }}
+              onCancel={() => setEditing(null)}
+            />
+          ) : (
+            <AuthSection config={config} />
+          )}
         </Section>
 
-        <Section title="Storage">
-          <StorageSection config={config} />
+        <Section title="Storage" onEdit={editing ? undefined : () => setEditing("storage")}>
+          {editing === "storage" ? (
+            <StorageSettingsForm
+              settings={config.storage}
+              onSaved={() => { setEditing(null); reload(); }}
+              onCancel={() => setEditing(null)}
+            />
+          ) : (
+            <StorageSection config={config} />
+          )}
         </Section>
 
         <Section title="Plugins">

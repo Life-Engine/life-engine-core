@@ -2,6 +2,8 @@
 
 ## 2026-03-23
 
+- WP 2.8 Config Editor — Auth & Storage: add AuthSettingsForm with provider radio selector (local-token/oidc/webauthn), conditional OIDC fields (issuer_url, client_id, client_secret, jwks_uri, audience) and conditional WebAuthn fields (rp_name, rp_id, rp_origin, challenge_ttl_secs). Add StorageSettingsForm with backend radio (sqlite/postgres), encryption toggle, Argon2 inputs (memory_mb, iterations, parallelism), conditional PostgreSQL fields (host, port, dbname, user, password, pool_size, ssl_mode). Wire both forms into ConfigPage with edit buttons on Authentication and Storage sections.
+
 - WP 2.7 Config Editor — Core & Network: add CoreSettingsForm (host, port, log_level, log_format, data_dir inputs with validation) and NetworkSettingsForm (TLS toggle with cert/key path inputs, CORS allowed_origins list editor with add/remove, rate_limit number input). Wire both forms into ConfigPage with per-section edit/view mode toggling. Section component extended with optional Edit button.
 
 - WP 2.5 App Layout & Routing: add react-router-dom, create Layout shell with Sidebar navigation (Dashboard, Configuration, Plugins, System) with active route highlighting, create placeholder page components (DashboardPage, ConfigPage, PluginsPage, SystemPage), wire up BrowserRouter and Routes in App.tsx/main.tsx

@@ -1,7 +1,7 @@
 {
   "version": 1,
   "last_updated": "2026-03-23T00:00:00Z",
-  "completed_wps": ["1.1", "1.2", "1.3", "1.4", "nx:1.1", "nx:1.2", "nx:1.3", "nx:1.4", "nx:1.5", "nx:1.6", "2.1", "2.2", "2.3", "2.4", "2.5", "2.6", "2.7"],
+  "completed_wps": ["1.1", "1.2", "1.3", "1.4", "nx:1.1", "nx:1.2", "nx:1.3", "nx:1.4", "nx:1.5", "nx:1.6", "2.1", "2.2", "2.3", "2.4", "2.5", "2.6", "2.7", "2.8"],
   "current_wp": null,
   "current_wp_tasks": {
     "total": 0,
@@ -143,7 +143,7 @@
       "wp": "2.7",
       "title": "Config Editor — Core & Network",
       "completed_at": "2026-03-23T00:00:00Z",
-      "commit": "pending",
+      "commit": "2a290a6",
       "tasks_completed": 2,
       "tasks_deferred": 0
     }

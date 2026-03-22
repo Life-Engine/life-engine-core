@@ -250,13 +250,13 @@ Progress: 0 / 14 work packages complete
 ## 2.8 — Config Editor — Auth & Storage
 > depends: 2.6
 
-- [ ] Create Auth settings editor form
+- [x] Create Auth settings editor form
   <!-- file: apps/admin/src/components/config/AuthSettingsForm.tsx -->
   <!-- purpose: Form with provider radio selector (local-token/oidc/webauthn), conditional OIDC fields (issuer_url, client_id, client_secret), conditional WebAuthn fields (rp_name, rp_id, rp_origin), with save/cancel buttons -->
   <!-- requirements: edit authentication settings -->
   <!-- leverage: config types, API client updateConfig() -->
 
-- [ ] Create Storage settings editor form
+- [x] Create Storage settings editor form
   <!-- file: apps/admin/src/components/config/StorageSettingsForm.tsx -->
   <!-- purpose: Form with backend radio (sqlite/postgres), encryption toggle, Argon2 number inputs, conditional PostgreSQL fields (host, port, dbname, user, password, pool_size, ssl_mode), with save/cancel buttons -->
   <!-- requirements: edit storage settings -->

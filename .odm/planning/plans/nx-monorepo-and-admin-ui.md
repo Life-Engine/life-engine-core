@@ -233,13 +233,13 @@ Progress: 0 / 14 work packages complete
 ## 2.7 — Config Editor — Core & Network
 > depends: 2.6
 
-- [ ] Create Core settings editor form
+- [x] Create Core settings editor form
   <!-- file: apps/admin/src/components/config/CoreSettingsForm.tsx -->
   <!-- purpose: Form with text inputs for host and data_dir, number input for port, select dropdowns for log_level and log_format, with save/cancel buttons and validation -->
   <!-- requirements: edit core server settings -->
   <!-- leverage: config types, API client updateConfig() -->
 
-- [ ] Create Network settings editor form
+- [x] Create Network settings editor form
   <!-- file: apps/admin/src/components/config/NetworkSettingsForm.tsx -->
   <!-- purpose: Form with TLS enabled toggle and file path inputs, CORS allowed_origins list editor (add/remove), rate_limit number input, with save/cancel buttons -->
   <!-- requirements: edit network/TLS/CORS/rate-limit settings -->

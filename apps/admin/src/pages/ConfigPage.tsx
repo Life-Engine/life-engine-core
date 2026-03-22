@@ -1,36 +1,53 @@
 import { useEffect, useState } from "react";
 import { getConfig } from "../api/client";
 import type { CoreConfig } from "../types/config";
+import CoreSettingsForm from "../components/config/CoreSettingsForm";
+import NetworkSettingsForm from "../components/config/NetworkSettingsForm";
+
+type EditingSection = "core" | "network" | null;
 
 function Section({
   title,
   defaultOpen = false,
+  onEdit,
   children,
 }: {
   title: string;
   defaultOpen?: boolean;
+  onEdit?: () => void;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
 
   return (
     <div className="rounded-lg border border-gray-200 bg-white">
-      <button
-        type="button"
-        className="flex w-full items-center justify-between px-6 py-4 text-left"
-        onClick={() => setOpen(!open)}
-      >
-        <h2 className="text-lg font-medium text-gray-900">{title}</h2>
-        <svg
-          className={`h-5 w-5 text-gray-500 transition-transform ${open ? "rotate-180" : ""}`}
-          fill="none"
-          viewBox="0 0 24 24"
-          strokeWidth={1.5}
-          stroke="currentColor"
+      <div className="flex items-center justify-between px-6 py-4">
+        <button
+          type="button"
+          className="flex flex-1 items-center justify-between text-left"
+          onClick={() => setOpen(!open)}
         >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-        </svg>
-      </button>
+          <h2 className="text-lg font-medium text-gray-900">{title}</h2>
+          <svg
+            className={`h-5 w-5 text-gray-500 transition-transform ${open ? "rotate-180" : ""}`}
+            fill="none"
+            viewBox="0 0 24 24"
+            strokeWidth={1.5}
+            stroke="currentColor"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+          </svg>
+        </button>
+        {onEdit && (
+          <button
+            type="button"
+            onClick={onEdit}
+            className="ml-4 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+          >
+            Edit
+          </button>
+        )}
+      </div>
       {open && <div className="border-t border-gray-200 px-6 py-4">{children}</div>}
     </div>
   );
@@ -151,12 +168,19 @@ export default function ConfigPage() {
   const [config, setConfig] = useState<CoreConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState<EditingSection>(null);
 
-  useEffect(() => {
+  function reload() {
+    setLoading(true);
+    setError(null);
     getConfig()
       .then(setConfig)
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
+  }
+
+  useEffect(() => {
+    reload();
   }, []);
 
   if (loading) {
@@ -191,8 +215,16 @@ export default function ConfigPage() {
       </div>
 
       <div className="space-y-4">
-        <Section title="Core" defaultOpen>
-          <CoreSection config={config} />
+        <Section title="Core" defaultOpen onEdit={editing ? undefined : () => setEditing("core")}>
+          {editing === "core" ? (
+            <CoreSettingsForm
+              settings={config.core}
+              onSaved={() => { setEditing(null); reload(); }}
+              onCancel={() => setEditing(null)}
+            />
+          ) : (
+            <CoreSection config={config} />
+          )}
         </Section>
 
         <Section title="Authentication">
@@ -207,8 +239,16 @@ export default function ConfigPage() {
           <PluginsSection config={config} />
         </Section>
 
-        <Section title="Network">
-          <NetworkSection config={config} />
+        <Section title="Network" onEdit={editing ? undefined : () => setEditing("network")}>
+          {editing === "network" ? (
+            <NetworkSettingsForm
+              settings={config.network}
+              onSaved={() => { setEditing(null); reload(); }}
+              onCancel={() => setEditing(null)}
+            />
+          ) : (
+            <NetworkSection config={config} />
+          )}
         </Section>
       </div>
     </div>

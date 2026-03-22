@@ -2,6 +2,8 @@
 
 ## 2026-03-23
 
+- WP 2.7 Config Editor — Core & Network: add CoreSettingsForm (host, port, log_level, log_format, data_dir inputs with validation) and NetworkSettingsForm (TLS toggle with cert/key path inputs, CORS allowed_origins list editor with add/remove, rate_limit number input). Wire both forms into ConfigPage with per-section edit/view mode toggling. Section component extended with optional Edit button.
+
 - WP 2.5 App Layout & Routing: add react-router-dom, create Layout shell with Sidebar navigation (Dashboard, Configuration, Plugins, System) with active route highlighting, create placeholder page components (DashboardPage, ConfigPage, PluginsPage, SystemPage), wire up BrowserRouter and Routes in App.tsx/main.tsx
 
 - WP 2.4 Shared Config Types & API Client: add TypeScript interfaces in apps/admin/src/types/config.ts mirroring all CoreConfig Rust structs (CoreSettings, AuthSettings, OidcSettings, WebAuthnSettings, StorageSettings, PostgresSettings, Argon2Settings, PluginSettings, NetworkSettings, TlsSettings, CorsSettings, RateLimitSettings) plus SystemInfo, PluginInfo, and HealthStatus types; add fetch-based API client in apps/admin/src/api/client.ts with getConfig(), updateConfig(), getSystemInfo(), getPlugins(), and healthCheck() methods with ApiError class for error handling

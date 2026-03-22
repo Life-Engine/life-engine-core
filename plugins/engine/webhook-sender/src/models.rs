@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 /// A webhook subscription that defines where to send events.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct WebhookSubscription {
     /// Unique identifier for this subscription.
     pub id: String,
@@ -13,9 +13,25 @@ pub struct WebhookSubscription {
     /// Event types this subscription listens for (e.g., "record.created").
     pub event_types: Vec<String>,
     /// Optional secret for HMAC-SHA256 signing of outgoing payloads.
+    #[serde(skip_serializing)]
     pub secret: Option<String>,
     /// Whether this subscription is active.
     pub active: bool,
+}
+
+impl std::fmt::Debug for WebhookSubscription {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WebhookSubscription")
+            .field("id", &self.id)
+            .field("url", &self.url)
+            .field("event_types", &self.event_types)
+            .field(
+                "secret",
+                &self.secret.as_ref().map(|_| "[REDACTED]"),
+            )
+            .field("active", &self.active)
+            .finish()
+    }
 }
 
 /// A record of a single webhook delivery attempt.
@@ -104,7 +120,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn subscription_serialization_roundtrip() {
+    fn subscription_serialization_skips_secret() {
         let sub = WebhookSubscription {
             id: "sub-1".to_string(),
             url: "https://example.com/webhook".to_string(),
@@ -113,10 +129,28 @@ mod tests {
             active: true,
         };
         let json = serde_json::to_string(&sub).expect("serialize");
-        let restored: WebhookSubscription = serde_json::from_str(&json).expect("deserialize");
+        assert!(!json.contains("shared-secret"), "secret must not appear in serialized output");
+        // Deserialize with secret provided externally.
+        let json_with_secret = r#"{"id":"sub-1","url":"https://example.com/webhook","event_types":["record.created","sync.complete"],"secret":"shared-secret","active":true}"#;
+        let restored: WebhookSubscription = serde_json::from_str(json_with_secret).expect("deserialize");
         assert_eq!(restored.id, "sub-1");
         assert_eq!(restored.event_types.len(), 2);
+        assert_eq!(restored.secret.as_deref(), Some("shared-secret"));
         assert!(restored.active);
+    }
+
+    #[test]
+    fn subscription_debug_redacts_secret() {
+        let sub = WebhookSubscription {
+            id: "sub-1".to_string(),
+            url: "https://example.com/webhook".to_string(),
+            event_types: vec!["record.created".to_string()],
+            secret: Some("super-secret-value".to_string()),
+            active: true,
+        };
+        let debug_output = format!("{:?}", sub);
+        assert!(!debug_output.contains("super-secret-value"));
+        assert!(debug_output.contains("[REDACTED]"));
     }
 
     #[test]

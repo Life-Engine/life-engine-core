@@ -1,19 +1,32 @@
 //! WebDAV backup backend.
 
 use async_trait::async_trait;
+use quick_xml::events::Event;
+use quick_xml::Reader;
 use serde::{Deserialize, Serialize};
 
 use super::{BackupBackend, StoredBackup};
 
 /// Configuration for WebDAV backup storage.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct WebDavConfig {
     /// Base URL of the WebDAV server (e.g. `https://dav.example.com/backups/`).
     pub url: String,
     /// Username for HTTP Basic authentication.
     pub username: String,
     /// Password for HTTP Basic authentication.
+    #[serde(skip_serializing)]
     pub password: String,
+}
+
+impl std::fmt::Debug for WebDavConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WebDavConfig")
+            .field("url", &self.url)
+            .field("username", &self.username)
+            .field("password", &"[REDACTED]")
+            .finish()
+    }
 }
 
 /// WebDAV backup backend using HTTP PUT/GET/DELETE.
@@ -30,7 +43,8 @@ impl WebDavBackend {
 
     fn full_url(&self, key: &str) -> String {
         let base = self.config.url.trim_end_matches('/');
-        format!("{base}/{key}")
+        let encoded_key = urlencoding::encode(key);
+        format!("{base}/{encoded_key}")
     }
 }
 
@@ -138,42 +152,47 @@ impl BackupBackend for WebDavBackend {
     }
 }
 
-/// Parse a WebDAV PROPFIND multi-status response to extract file entries.
+/// Parse a WebDAV PROPFIND multi-status response using quick-xml to extract file entries.
 fn parse_propfind_response(xml: &str, prefix: &str) -> Vec<StoredBackup> {
     let mut results = Vec::new();
+    let mut reader = Reader::from_str(xml);
+    let mut in_href = false;
+    let mut buf = Vec::new();
 
-    // Simple XML extraction — find <d:href> elements.
-    for line in xml.lines() {
-        let trimmed = line.trim();
-        if let Some(href) = extract_tag_content(trimmed, "href")
-            .or_else(|| extract_tag_content(trimmed, "d:href"))
-            .or_else(|| extract_tag_content(trimmed, "D:href"))
-        {
-            let key = href.trim_start_matches('/').to_string();
-            if !key.is_empty() && !key.ends_with('/') && key.contains(prefix) {
-                results.push(StoredBackup {
-                    key,
-                    size: 0,
-                    last_modified: String::new(),
-                });
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref e)) | Ok(Event::Empty(ref e)) => {
+                let local_name = e.local_name();
+                if local_name.as_ref() == b"href" {
+                    in_href = true;
+                }
             }
+            Ok(Event::Text(ref e)) if in_href => {
+                if let Ok(text) = e.unescape() {
+                    let key = text.trim_start_matches('/').to_string();
+                    if !key.is_empty() && !key.ends_with('/') && key.contains(prefix) {
+                        results.push(StoredBackup {
+                            key,
+                            size: 0,
+                            last_modified: String::new(),
+                        });
+                    }
+                }
+                in_href = false;
+            }
+            Ok(Event::End(ref e)) => {
+                if e.local_name().as_ref() == b"href" {
+                    in_href = false;
+                }
+            }
+            Ok(Event::Eof) => break,
+            Err(_) => break,
+            _ => {}
         }
+        buf.clear();
     }
 
     results
-}
-
-/// Extract text content between XML tags.
-fn extract_tag_content<'a>(text: &'a str, tag: &str) -> Option<&'a str> {
-    let open = format!("<{tag}>");
-    let close = format!("</{tag}>");
-    if let Some(start) = text.find(&open) {
-        let content_start = start + open.len();
-        if let Some(end) = text[content_start..].find(&close) {
-            return Some(&text[content_start..content_start + end]);
-        }
-    }
-    None
 }
 
 #[cfg(test)]
@@ -181,28 +200,49 @@ mod tests {
     use super::*;
 
     #[test]
-    fn webdav_config_serialization() {
+    fn webdav_config_debug_redacts_password() {
+        let config = WebDavConfig {
+            url: "https://dav.example.com/backups".into(),
+            username: "user".into(),
+            password: "super-secret".into(),
+        };
+        let debug_output = format!("{:?}", config);
+        assert!(!debug_output.contains("super-secret"));
+        assert!(debug_output.contains("[REDACTED]"));
+    }
+
+    #[test]
+    fn webdav_config_serialization_skips_password() {
         let config = WebDavConfig {
             url: "https://dav.example.com/backups".into(),
             username: "user".into(),
             password: "pass".into(),
         };
         let json = serde_json::to_string(&config).unwrap();
-        let restored: WebDavConfig = serde_json::from_str(&json).unwrap();
+        assert!(!json.contains("pass"));
+        // Can still deserialize with password provided
+        let json_with_pass = r#"{"url":"https://dav.example.com/backups","username":"user","password":"pass"}"#;
+        let restored: WebDavConfig = serde_json::from_str(json_with_pass).unwrap();
         assert_eq!(restored.url, "https://dav.example.com/backups");
+        assert_eq!(restored.password, "pass");
     }
 
     #[test]
-    fn full_url_construction() {
+    fn full_url_encodes_key() {
         let backend = WebDavBackend::new(WebDavConfig {
             url: "https://dav.example.com/backups/".into(),
             username: "user".into(),
             password: "pass".into(),
         });
+        // Normal key
         assert_eq!(
             backend.full_url("full-001.enc"),
             "https://dav.example.com/backups/full-001.enc"
         );
+        // Key with path traversal characters gets encoded
+        let url = backend.full_url("../../../etc/passwd");
+        assert!(!url.contains("../"));
+        assert!(url.contains("%2F"));
     }
 
     #[test]
@@ -241,11 +281,24 @@ mod tests {
     }
 
     #[test]
-    fn extract_tag_content_works() {
-        assert_eq!(
-            extract_tag_content("<d:href>/path/file.txt</d:href>", "d:href"),
-            Some("/path/file.txt")
-        );
-        assert_eq!(extract_tag_content("<other>data</other>", "d:href"), None);
+    fn parse_propfind_unprefixed_namespaces() {
+        let xml = r#"
+        <?xml version="1.0" encoding="utf-8"?>
+        <multistatus xmlns="DAV:">
+          <response>
+            <href>/backups/full-001.enc</href>
+          </response>
+        </multistatus>
+        "#;
+        let results = parse_propfind_response(xml, "backups/");
+        assert_eq!(results.len(), 1);
+        assert!(results[0].key.contains("full-001.enc"));
+    }
+
+    #[test]
+    fn parse_propfind_malformed_xml_no_panic() {
+        let xml = "<<<not valid xml>>>";
+        let results = parse_propfind_response(xml, "backups/");
+        assert!(results.is_empty());
     }
 }

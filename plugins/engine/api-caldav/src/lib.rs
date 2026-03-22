@@ -96,6 +96,15 @@ impl CorePlugin for CalDavApiPlugin {
                 method: HttpMethod::Get,
                 path: "/.well-known/caldav".into(),
             },
+            // TODO(F-092): Register PROPFIND /calendars/default route.
+            // The plugin SDK's HttpMethod enum does not yet include PROPFIND
+            // (WebDAV extension method). Add HttpMethod::Propfind to the SDK,
+            // then register the route here.
+            //
+            // TODO(F-092): Register REPORT /calendars/default route.
+            // The plugin SDK's HttpMethod enum does not yet include REPORT
+            // (CalDAV extension method for calendar-query / calendar-multiget).
+            // Add HttpMethod::Report to the SDK, then register the route here.
         ]
     }
 

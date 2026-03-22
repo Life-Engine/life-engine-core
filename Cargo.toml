@@ -74,3 +74,5 @@ extism = "1"
 ed25519-dalek = { version = "2", features = ["rand_core", "pem"] }
 async-graphql = { version = "7", features = ["chrono", "uuid"] }
 async-graphql-axum = "7"
+tokio-postgres-rustls = "0.13"
+rustls-native-certs = "0.8"

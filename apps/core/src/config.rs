@@ -8,12 +8,17 @@
 //! Sensible defaults are provided for all fields.
 
 use crate::error::CoreError;
+use crate::pg_storage::PgSslMode;
 use clap::Parser;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use std::path::{Path, PathBuf};
 
+/// Placeholder shown in Debug/Display output for sensitive fields.
+const REDACTED: &str = "[REDACTED]";
+
 /// Top-level configuration for the Core binary.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Clone, Default, Serialize, Deserialize)]
 pub struct CoreConfig {
     /// Core server settings.
     #[serde(default)]
@@ -34,6 +39,18 @@ pub struct CoreConfig {
     /// Network and TLS settings.
     #[serde(default)]
     pub network: NetworkSettings,
+}
+
+impl fmt::Debug for CoreConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("CoreConfig")
+            .field("core", &self.core)
+            .field("auth", &self.auth)
+            .field("storage", &self.storage)
+            .field("plugins", &self.plugins)
+            .field("network", &self.network)
+            .finish()
+    }
 }
 
 /// Core server settings.
@@ -118,7 +135,7 @@ fn default_webauthn_challenge_ttl() -> u64 {
 }
 
 /// OIDC-specific configuration for Pocket ID integration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct OidcSettings {
     /// The OIDC issuer URL (e.g., "http://localhost:3751").
     pub issuer_url: String,
@@ -133,6 +150,18 @@ pub struct OidcSettings {
     /// Expected audience claim value.
     #[serde(default)]
     pub audience: Option<String>,
+}
+
+impl fmt::Debug for OidcSettings {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("OidcSettings")
+            .field("issuer_url", &self.issuer_url)
+            .field("client_id", &self.client_id)
+            .field("client_secret", &self.client_secret.as_ref().map(|_| REDACTED))
+            .field("jwks_uri", &self.jwks_uri)
+            .field("audience", &self.audience)
+            .finish()
+    }
 }
 
 /// Storage settings.
@@ -167,7 +196,7 @@ impl Default for StorageSettings {
 }
 
 /// PostgreSQL connection settings.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct PostgresSettings {
     /// PostgreSQL host.
     #[serde(default = "default_pg_host")]
@@ -187,6 +216,24 @@ pub struct PostgresSettings {
     /// Connection pool size.
     #[serde(default = "default_pg_pool_size")]
     pub pool_size: usize,
+    /// TLS mode for the connection (disable, prefer, require).
+    /// Defaults to `require` so credentials are never sent in plaintext.
+    #[serde(default)]
+    pub ssl_mode: PgSslMode,
+}
+
+impl fmt::Debug for PostgresSettings {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PostgresSettings")
+            .field("host", &self.host)
+            .field("port", &self.port)
+            .field("dbname", &self.dbname)
+            .field("user", &self.user)
+            .field("password", &REDACTED)
+            .field("pool_size", &self.pool_size)
+            .field("ssl_mode", &self.ssl_mode)
+            .finish()
+    }
 }
 
 impl Default for PostgresSettings {
@@ -198,6 +245,7 @@ impl Default for PostgresSettings {
             user: default_pg_user(),
             password: String::new(),
             pool_size: default_pg_pool_size(),
+            ssl_mode: PgSslMode::default(),
         }
     }
 }
@@ -475,14 +523,24 @@ impl CoreConfig {
             });
             oidc.issuer_url = issuer;
         }
-        if let Ok(client_id) = std::env::var("LIFE_ENGINE_OIDC_CLIENT_ID")
-            && let Some(ref mut oidc) = self.auth.oidc
-        {
+        if let Ok(client_id) = std::env::var("LIFE_ENGINE_OIDC_CLIENT_ID") {
+            let oidc = self.auth.oidc.get_or_insert(OidcSettings {
+                issuer_url: String::new(),
+                client_id: String::new(),
+                client_secret: None,
+                jwks_uri: None,
+                audience: None,
+            });
             oidc.client_id = client_id;
         }
-        if let Ok(secret) = std::env::var("LIFE_ENGINE_OIDC_CLIENT_SECRET")
-            && let Some(ref mut oidc) = self.auth.oidc
-        {
+        if let Ok(secret) = std::env::var("LIFE_ENGINE_OIDC_CLIENT_SECRET") {
+            let oidc = self.auth.oidc.get_or_insert(OidcSettings {
+                issuer_url: String::new(),
+                client_id: String::new(),
+                client_secret: None,
+                jwks_uri: None,
+                audience: None,
+            });
             oidc.client_secret = Some(secret);
         }
         // WebAuthn env var overrides.
@@ -495,20 +553,33 @@ impl CoreConfig {
             });
             wn.rp_name = rp_name;
         }
-        if let Ok(rp_id) = std::env::var("LIFE_ENGINE_WEBAUTHN_RP_ID")
-            && let Some(ref mut wn) = self.auth.webauthn
-        {
+        if let Ok(rp_id) = std::env::var("LIFE_ENGINE_WEBAUTHN_RP_ID") {
+            let wn = self.auth.webauthn.get_or_insert(WebAuthnSettings {
+                rp_name: String::new(),
+                rp_id: String::new(),
+                rp_origin: String::new(),
+                challenge_ttl_secs: default_webauthn_challenge_ttl(),
+            });
             wn.rp_id = rp_id;
         }
-        if let Ok(rp_origin) = std::env::var("LIFE_ENGINE_WEBAUTHN_RP_ORIGIN")
-            && let Some(ref mut wn) = self.auth.webauthn
-        {
+        if let Ok(rp_origin) = std::env::var("LIFE_ENGINE_WEBAUTHN_RP_ORIGIN") {
+            let wn = self.auth.webauthn.get_or_insert(WebAuthnSettings {
+                rp_name: String::new(),
+                rp_id: String::new(),
+                rp_origin: String::new(),
+                challenge_ttl_secs: default_webauthn_challenge_ttl(),
+            });
             wn.rp_origin = rp_origin;
         }
         if let Ok(ttl) = std::env::var("LIFE_ENGINE_WEBAUTHN_CHALLENGE_TTL")
             && let Ok(secs) = ttl.parse::<u64>()
-            && let Some(ref mut wn) = self.auth.webauthn
         {
+            let wn = self.auth.webauthn.get_or_insert(WebAuthnSettings {
+                rp_name: String::new(),
+                rp_id: String::new(),
+                rp_origin: String::new(),
+                challenge_ttl_secs: default_webauthn_challenge_ttl(),
+            });
             wn.challenge_ttl_secs = secs;
         }
         if let Ok(val) = std::env::var("LIFE_ENGINE_STORAGE_BACKEND") {
@@ -541,6 +612,12 @@ impl CoreConfig {
         if let Ok(password) = std::env::var("LIFE_ENGINE_PG_PASSWORD") {
             let pg = self.storage.postgres.get_or_insert(PostgresSettings::default());
             pg.password = password;
+        }
+        if let Ok(ssl_mode) = std::env::var("LIFE_ENGINE_PG_SSLMODE")
+            && let Ok(mode) = ssl_mode.parse::<PgSslMode>()
+        {
+            let pg = self.storage.postgres.get_or_insert(PostgresSettings::default());
+            pg.ssl_mode = mode;
         }
         if let Ok(val) = std::env::var("LIFE_ENGINE_NETWORK_RATE_LIMIT")
             && let Ok(r) = val.parse::<u32>()
@@ -644,6 +721,92 @@ impl CoreConfig {
             return Err(
                 CoreError::Config("cors.allowed_origins must not be empty".into()).into(),
             );
+        }
+
+        // Auth provider must be a known value.
+        let valid_providers = ["local-token", "oidc", "webauthn"];
+        if !valid_providers.contains(&self.auth.provider.to_lowercase().as_str()) {
+            return Err(CoreError::Config(format!(
+                "invalid auth.provider '{}', must be one of: {valid_providers:?}",
+                self.auth.provider
+            ))
+            .into());
+        }
+
+        // If OIDC is selected, the OIDC section and required fields must be present.
+        if self.auth.provider == "oidc" {
+            match &self.auth.oidc {
+                None => {
+                    return Err(CoreError::Config(
+                        "auth.provider is 'oidc' but auth.oidc section is missing".into(),
+                    )
+                    .into());
+                }
+                Some(oidc) => {
+                    if oidc.issuer_url.is_empty() {
+                        return Err(CoreError::Config(
+                            "auth.provider is 'oidc' but oidc.issuer_url is empty".into(),
+                        )
+                        .into());
+                    }
+                    if oidc.client_id.is_empty() {
+                        return Err(CoreError::Config(
+                            "auth.provider is 'oidc' but oidc.client_id is empty".into(),
+                        )
+                        .into());
+                    }
+                }
+            }
+        }
+
+        // If WebAuthn is selected, the webauthn section and required fields must be present.
+        if self.auth.provider == "webauthn" {
+            match &self.auth.webauthn {
+                None => {
+                    return Err(CoreError::Config(
+                        "auth.provider is 'webauthn' but auth.webauthn section is missing".into(),
+                    )
+                    .into());
+                }
+                Some(wn) => {
+                    if wn.rp_name.is_empty() {
+                        return Err(CoreError::Config(
+                            "auth.provider is 'webauthn' but webauthn.rp_name is empty".into(),
+                        )
+                        .into());
+                    }
+                    if wn.rp_id.is_empty() {
+                        return Err(CoreError::Config(
+                            "auth.provider is 'webauthn' but webauthn.rp_id is empty".into(),
+                        )
+                        .into());
+                    }
+                    if wn.rp_origin.is_empty() {
+                        return Err(CoreError::Config(
+                            "auth.provider is 'webauthn' but webauthn.rp_origin is empty".into(),
+                        )
+                        .into());
+                    }
+                }
+            }
+        }
+
+        // Storage backend must be a known value.
+        let valid_backends = ["sqlite", "postgres"];
+        if !valid_backends.contains(&self.storage.backend.to_lowercase().as_str()) {
+            return Err(CoreError::Config(format!(
+                "invalid storage.backend '{}', must be one of: {valid_backends:?}",
+                self.storage.backend
+            ))
+            .into());
+        }
+
+        // If postgres backend is selected, the postgres section must be present.
+        if self.storage.backend == "postgres" && self.storage.postgres.is_none() {
+            return Err(CoreError::Config(
+                "storage.backend is 'postgres' but storage.postgres section is missing".into(),
+            )
+            .into());
         }
 
         // Rate limit must be > 0.
@@ -938,5 +1101,137 @@ network:
         let restored: CoreConfig = serde_yaml::from_str(&yaml).expect("deserialize");
         assert_eq!(config.core.port, restored.core.port);
         assert_eq!(config.core.host, restored.core.host);
+    }
+
+    #[test]
+    fn debug_redacts_oidc_client_secret() {
+        let mut config = CoreConfig::default();
+        config.auth.oidc = Some(OidcSettings {
+            issuer_url: "https://idp.example.com".into(),
+            client_id: "my-client".into(),
+            client_secret: Some("super-secret-value".into()),
+            jwks_uri: None,
+            audience: None,
+        });
+        let debug_output = format!("{:?}", config);
+        assert!(
+            !debug_output.contains("super-secret-value"),
+            "client_secret should be redacted in Debug output"
+        );
+        assert!(debug_output.contains("[REDACTED]"));
+    }
+
+    #[test]
+    fn debug_redacts_postgres_password() {
+        let pg = PostgresSettings {
+            host: "db.example.com".into(),
+            port: 5432,
+            dbname: "mydb".into(),
+            user: "admin".into(),
+            password: "s3cret-password".into(),
+            pool_size: 8,
+            ssl_mode: PgSslMode::default(),
+        };
+        let debug_output = format!("{:?}", pg);
+        assert!(
+            !debug_output.contains("s3cret-password"),
+            "password should be redacted in Debug output"
+        );
+        assert!(debug_output.contains("[REDACTED]"));
+    }
+
+    #[test]
+    fn validation_rejects_invalid_auth_provider() {
+        let mut config = CoreConfig::default();
+        config.auth.provider = "ldap".into();
+        let err = config.validate().unwrap_err();
+        assert!(err.to_string().contains("invalid auth.provider"));
+    }
+
+    #[test]
+    fn validation_rejects_oidc_without_config() {
+        let mut config = CoreConfig::default();
+        config.auth.provider = "oidc".into();
+        config.auth.oidc = None;
+        let err = config.validate().unwrap_err();
+        assert!(err.to_string().contains("oidc section is missing"));
+    }
+
+    #[test]
+    fn validation_rejects_oidc_with_empty_issuer() {
+        let mut config = CoreConfig::default();
+        config.auth.provider = "oidc".into();
+        config.auth.oidc = Some(OidcSettings {
+            issuer_url: String::new(),
+            client_id: "client".into(),
+            client_secret: None,
+            jwks_uri: None,
+            audience: None,
+        });
+        let err = config.validate().unwrap_err();
+        assert!(err.to_string().contains("issuer_url is empty"));
+    }
+
+    #[test]
+    fn validation_rejects_oidc_with_empty_client_id() {
+        let mut config = CoreConfig::default();
+        config.auth.provider = "oidc".into();
+        config.auth.oidc = Some(OidcSettings {
+            issuer_url: "https://idp.example.com".into(),
+            client_id: String::new(),
+            client_secret: None,
+            jwks_uri: None,
+            audience: None,
+        });
+        let err = config.validate().unwrap_err();
+        assert!(err.to_string().contains("client_id is empty"));
+    }
+
+    #[test]
+    fn validation_accepts_valid_oidc_config() {
+        let mut config = CoreConfig::default();
+        config.auth.provider = "oidc".into();
+        config.auth.oidc = Some(OidcSettings {
+            issuer_url: "https://idp.example.com".into(),
+            client_id: "my-client".into(),
+            client_secret: Some("secret".into()),
+            jwks_uri: None,
+            audience: None,
+        });
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn validation_rejects_webauthn_without_config() {
+        let mut config = CoreConfig::default();
+        config.auth.provider = "webauthn".into();
+        config.auth.webauthn = None;
+        let err = config.validate().unwrap_err();
+        assert!(err.to_string().contains("webauthn section is missing"));
+    }
+
+    #[test]
+    fn validation_rejects_invalid_storage_backend() {
+        let mut config = CoreConfig::default();
+        config.storage.backend = "mysql".into();
+        let err = config.validate().unwrap_err();
+        assert!(err.to_string().contains("invalid storage.backend"));
+    }
+
+    #[test]
+    fn validation_rejects_postgres_without_config() {
+        let mut config = CoreConfig::default();
+        config.storage.backend = "postgres".into();
+        config.storage.postgres = None;
+        let err = config.validate().unwrap_err();
+        assert!(err.to_string().contains("postgres section is missing"));
+    }
+
+    #[test]
+    fn validation_accepts_postgres_with_config() {
+        let mut config = CoreConfig::default();
+        config.storage.backend = "postgres".into();
+        config.storage.postgres = Some(PostgresSettings::default());
+        assert!(config.validate().is_ok());
     }
 }

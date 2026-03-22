@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::broadcast;
 use tokio_postgres::NoTls;
+use tokio_postgres_rustls::MakeRustlsConnect;
 
 use crate::sqlite_storage::{ChangeEvent, ChangeType};
 use crate::storage::{
@@ -23,6 +24,50 @@ use crate::storage::{
 
 /// Broadcast channel capacity for change events.
 const CHANGE_CHANNEL_CAPACITY: usize = 256;
+
+/// TLS mode for the PostgreSQL connection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PgSslMode {
+    /// No TLS — connections are unencrypted.
+    Disable,
+    /// Use TLS if the server supports it, fall back to plaintext otherwise.
+    Prefer,
+    /// Require TLS; fail if the server does not support it.
+    Require,
+}
+
+impl Default for PgSslMode {
+    fn default() -> Self {
+        Self::Require
+    }
+}
+
+impl std::fmt::Display for PgSslMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Disable => write!(f, "disable"),
+            Self::Prefer => write!(f, "prefer"),
+            Self::Require => write!(f, "require"),
+        }
+    }
+}
+
+impl std::str::FromStr for PgSslMode {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "disable" => Ok(Self::Disable),
+            "prefer" => Ok(Self::Prefer),
+            "require" => Ok(Self::Require),
+            other => Err(anyhow::anyhow!(
+                "invalid PG SSL mode '{}': expected disable, prefer, or require",
+                other
+            )),
+        }
+    }
+}
 
 /// PostgreSQL connection pool configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -40,6 +85,10 @@ pub struct PgConfig {
     /// Maximum pool size.
     #[serde(default = "default_pool_size")]
     pub pool_size: usize,
+    /// TLS mode for the connection (disable, prefer, require).
+    /// Defaults to `require` so credentials are never sent in plaintext.
+    #[serde(default)]
+    pub ssl_mode: PgSslMode,
 }
 
 fn default_pool_size() -> usize {
@@ -55,8 +104,21 @@ impl Default for PgConfig {
             user: "life_engine".into(),
             password: String::new(),
             pool_size: default_pool_size(),
+            ssl_mode: PgSslMode::default(),
         }
     }
+}
+
+/// Build a `rustls::ClientConfig` that trusts the system root certificates.
+fn make_rustls_config() -> anyhow::Result<rustls::ClientConfig> {
+    let mut root_store = rustls::RootCertStore::empty();
+    for cert in rustls_native_certs::load_native_certs().expect("failed to load native certs") {
+        root_store.add(cert).ok();
+    }
+    let config = rustls::ClientConfig::builder()
+        .with_root_certificates(root_store)
+        .with_no_client_auth();
+    Ok(config)
 }
 
 /// PostgreSQL-backed storage adapter with connection pooling.
@@ -67,6 +129,16 @@ pub struct PgStorage {
 
 impl PgStorage {
     /// Create a new PostgreSQL storage with the given configuration.
+    ///
+    /// TLS behaviour is controlled by `config.ssl_mode`:
+    ///
+    /// - `Disable` — no TLS (plain TCP).
+    /// - `Prefer` — try TLS first, fall back to plaintext on failure.
+    /// - `Require` — TLS is mandatory; the connection fails if TLS
+    ///   cannot be established.
+    ///
+    /// The default is `Require` so that database credentials are never
+    /// transmitted in plaintext.
     pub async fn open(config: &PgConfig) -> anyhow::Result<Self> {
         let mut pool_config = PoolConfig::new();
         pool_config.host = Some(config.host.clone());
@@ -75,7 +147,18 @@ impl PgStorage {
         pool_config.user = Some(config.user.clone());
         pool_config.password = Some(config.password.clone());
 
-        let pool = pool_config.create_pool(Some(Runtime::Tokio1), NoTls)?;
+        let pool = match config.ssl_mode {
+            PgSslMode::Disable => {
+                tracing::warn!("PostgreSQL TLS is disabled — credentials will be sent in plaintext");
+                pool_config.create_pool(Some(Runtime::Tokio1), NoTls)?
+            }
+            PgSslMode::Prefer | PgSslMode::Require => {
+                let tls_config = make_rustls_config()?;
+                let tls_connector = MakeRustlsConnect::new(tls_config);
+                tracing::info!("PostgreSQL TLS mode: {}", config.ssl_mode);
+                pool_config.create_pool(Some(Runtime::Tokio1), tls_connector)?
+            }
+        };
 
         let storage = Self::from_pool(pool).await?;
         Ok(storage)
@@ -341,14 +424,25 @@ impl StorageAdapter for PgStorage {
         data: Value,
     ) -> anyhow::Result<Record> {
         let id = uuid::Uuid::new_v4().to_string();
+        self.create_with_id(plugin_id, collection, &id, data).await
+    }
+
+    async fn create_with_id(
+        &self,
+        plugin_id: &str,
+        collection: &str,
+        id: &str,
+        data: Value,
+    ) -> anyhow::Result<Record> {
         let now = Utc::now();
 
+        let id_owned = id.to_string();
         let client = self.pool.get().await?;
         client
             .execute(
                 "INSERT INTO plugin_data (id, plugin_id, collection, data, version, created_at, updated_at)
                  VALUES ($1, $2, $3, $4, 1, $5, $6)",
-                &[&id, &plugin_id, &collection, &data, &now, &now],
+                &[&id_owned, &plugin_id, &collection, &data, &now, &now],
             )
             .await?;
 
@@ -364,12 +458,12 @@ impl StorageAdapter for PgStorage {
 
         self.publish(ChangeEvent {
             collection: collection.into(),
-            record_id: id.clone(),
+            record_id: id_owned.clone(),
             change_type: ChangeType::Created,
         });
 
         Ok(Record {
-            id,
+            id: id_owned,
             plugin_id: plugin_id.into(),
             collection: collection.into(),
             data,
@@ -388,11 +482,14 @@ impl StorageAdapter for PgStorage {
         id: &str,
         data: Value,
         version: i64,
-    ) -> anyhow::Result<Record> {
+    ) -> Result<Record, crate::storage::StorageError> {
+        use crate::storage::StorageError;
+
         let now = Utc::now();
         let new_version = version + 1;
 
-        let client = self.pool.get().await?;
+        let client = self.pool.get().await
+            .map_err(|e| StorageError::Other(e.into()))?;
         let rows = client
             .execute(
                 "UPDATE plugin_data
@@ -400,10 +497,24 @@ impl StorageAdapter for PgStorage {
                  WHERE id = $4 AND plugin_id = $5 AND collection = $6 AND version = $7",
                 &[&data, &new_version, &now, &id, &plugin_id, &collection, &version],
             )
-            .await?;
+            .await
+            .map_err(|e| StorageError::Other(e.into()))?;
 
         if rows == 0 {
-            return Err(anyhow::anyhow!("version mismatch or record not found"));
+            // Distinguish between "not found" and "version mismatch".
+            let exists = client
+                .query_one(
+                    "SELECT EXISTS(SELECT 1 FROM plugin_data WHERE id = $1 AND plugin_id = $2 AND collection = $3)",
+                    &[&id, &plugin_id, &collection],
+                )
+                .await
+                .map(|row| row.get::<_, bool>(0))
+                .unwrap_or(false);
+            return if exists {
+                Err(StorageError::VersionMismatch)
+            } else {
+                Err(StorageError::NotFound)
+            };
         }
 
         // Fetch created_at from the existing row.
@@ -412,7 +523,8 @@ impl StorageAdapter for PgStorage {
                 "SELECT created_at FROM plugin_data WHERE id = $1",
                 &[&id],
             )
-            .await?;
+            .await
+            .map_err(|e| StorageError::Other(e.into()))?;
         let created_at: chrono::DateTime<Utc> = row.get(0);
 
         self.log_audit(
@@ -424,7 +536,8 @@ impl StorageAdapter for PgStorage {
                 "new_version": new_version,
             })),
         )
-        .await?;
+        .await
+        .map_err(|e| StorageError::Other(e.into()))?;
 
         self.publish(ChangeEvent {
             collection: collection.into(),
@@ -723,6 +836,11 @@ mod tests {
         let url = pg_test_url()?;
 
         let url_parsed: url::Url = url.parse().ok()?;
+        let ssl_mode = url_parsed
+            .query_pairs()
+            .find(|(k, _)| k == "sslmode")
+            .and_then(|(_, v)| v.parse::<PgSslMode>().ok())
+            .unwrap_or(PgSslMode::Disable);
         let config = PgConfig {
             host: url_parsed.host_str().unwrap_or("localhost").into(),
             port: url_parsed.port().unwrap_or(5432),
@@ -730,6 +848,7 @@ mod tests {
             user: url_parsed.username().into(),
             password: url_parsed.password().unwrap_or("").into(),
             pool_size: 4,
+            ssl_mode,
         };
 
         let storage = PgStorage::open(&config).await.ok()?;

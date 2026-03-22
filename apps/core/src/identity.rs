@@ -18,7 +18,7 @@ use base64::Engine as _;
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use uuid::Uuid;
@@ -394,12 +394,16 @@ impl IdentityStore {
         let token_id = Uuid::new_v4().to_string();
         let expires_at = now + ttl;
 
+        // Use BTreeMap for deterministic key ordering in the signature payload.
+        // HashMap iteration order is non-deterministic and can vary across
+        // processes/platforms, causing signature verification failures.
+        let sorted_claims: BTreeMap<_, _> = disclosed_claims.iter().collect();
         let payload = serde_json::json!({
-            "id": token_id,
             "credential_id": credential_id,
-            "disclosed_claims": disclosed_claims,
-            "issued_at": now.to_rfc3339(),
+            "disclosed_claims": sorted_claims,
             "expires_at": expires_at.to_rfc3339(),
+            "id": token_id,
+            "issued_at": now.to_rfc3339(),
         });
         let payload_bytes = serde_json::to_vec(&payload)?;
         let signature = self.sign(&payload_bytes);
@@ -427,12 +431,14 @@ impl IdentityStore {
 
     /// Verify a disclosure token's signature and expiration.
     pub fn verify_token(&self, token: &DisclosureToken) -> Result<bool> {
+        // Use BTreeMap for deterministic key ordering, matching disclose().
+        let sorted_claims: BTreeMap<_, _> = token.disclosed_claims.iter().collect();
         let payload = serde_json::json!({
-            "id": token.id,
             "credential_id": token.credential_id,
-            "disclosed_claims": token.disclosed_claims,
-            "issued_at": token.issued_at.to_rfc3339(),
+            "disclosed_claims": sorted_claims,
             "expires_at": token.expires_at.to_rfc3339(),
+            "id": token.id,
+            "issued_at": token.issued_at.to_rfc3339(),
         });
         let payload_bytes = serde_json::to_vec(&payload)?;
         let expected_signature = self.sign(&payload_bytes);

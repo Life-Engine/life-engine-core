@@ -276,12 +276,17 @@ impl HouseholdStore {
     ///
     /// Delegates to the pure [`check_record_access`] function after
     /// resolving the user's household context from the store.
+    ///
+    /// The `write` parameter controls whether this is a read or write
+    /// check. Guest users are only allowed read access to shared
+    /// collections; write requests from guests are denied.
     pub async fn can_access_record(
         &self,
         requesting_user_id: &str,
         record_user_id: Option<&str>,
         record_household_id: Option<&str>,
         collection: &str,
+        write: bool,
     ) -> bool {
         let user_household = self.get_user_household(requesting_user_id).await;
         let (user_hid, user_role, shared_cols) = match &user_household {
@@ -304,6 +309,7 @@ impl HouseholdStore {
             record_household_id,
             collection,
             shared_cols,
+            write,
         )
     }
 }
@@ -320,6 +326,10 @@ impl Default for HouseholdStore {
 /// the household store, data routes, and plugin isolation layers without
 /// needing a reference to the full `HouseholdStore`.
 ///
+/// When `write` is `true` the check enforces write-level access. Guest
+/// users are read-only: they may read shared collections but are never
+/// permitted to write, even to shared collections.
+///
 /// Returns `true` if access is allowed.
 pub fn check_record_access(
     requesting_user_id: &str,
@@ -329,6 +339,7 @@ pub fn check_record_access(
     record_household_id: Option<&str>,
     collection: &str,
     shared_collections: &[String],
+    write: bool,
 ) -> bool {
     // Legacy data without user scoping is accessible to all.
     let record_owner = match record_user_id {
@@ -336,7 +347,7 @@ pub fn check_record_access(
         None => return true,
     };
 
-    // Owner always has access.
+    // Owner always has access (read and write).
     if record_owner == requesting_user_id {
         return true;
     }
@@ -347,10 +358,15 @@ pub fn check_record_access(
         None => return false,
     };
 
-    let user_hid = match requesting_user_household_id {
-        Some(hid) if hid == record_hid => hid,
+    match requesting_user_household_id {
+        Some(hid) if hid == record_hid => {}
         _ => return false,
     };
+
+    // Guests are read-only — deny any write attempt on non-owned data.
+    if write && matches!(requesting_user_role, Some(HouseholdRole::Guest)) {
+        return false;
+    }
 
     // Shared collections are accessible to all household members.
     if shared_collections.contains(&collection.to_string()) {
@@ -387,7 +403,7 @@ mod tests {
         // User B should NOT be able to access user A's private data
         // in a non-shared collection.
         let can_access = store
-            .can_access_record("user-b", Some("user-a"), Some(&household.id), "private-notes")
+            .can_access_record("user-b", Some("user-a"), Some(&household.id), "private-notes", false)
             .await;
         assert!(
             !can_access,
@@ -403,7 +419,7 @@ mod tests {
             .await;
 
         let can_access = store
-            .can_access_record("user-a", Some("user-a"), Some(&household.id), "private-notes")
+            .can_access_record("user-a", Some("user-a"), Some(&household.id), "private-notes", false)
             .await;
         assert!(can_access, "user should access their own data");
     }
@@ -439,6 +455,7 @@ mod tests {
                 Some("user-a"),
                 Some(&household.id),
                 "family-calendar",
+                false,
             )
             .await;
         assert!(
@@ -453,6 +470,7 @@ mod tests {
                 Some("user-a"),
                 Some(&household.id),
                 "private-notes",
+                false,
             )
             .await;
         assert!(
@@ -491,6 +509,7 @@ mod tests {
                 Some("member-user"),
                 Some(&household.id),
                 "private-notes",
+                false,
             )
             .await;
         assert!(can_access, "admin should access all household data");
@@ -525,16 +544,32 @@ mod tests {
             .await
             .unwrap();
 
-        // Guest can access shared collection.
-        let can_access = store
+        // Guest can read shared collection.
+        let can_read = store
             .can_access_record(
                 "guest-user",
                 Some("admin-user"),
                 Some(&household.id),
                 "shopping-list",
+                false,
             )
             .await;
-        assert!(can_access, "guest should access shared collections");
+        assert!(can_read, "guest should read shared collections");
+
+        // Guest cannot write to shared collection.
+        let can_write = store
+            .can_access_record(
+                "guest-user",
+                Some("admin-user"),
+                Some(&household.id),
+                "shopping-list",
+                true,
+            )
+            .await;
+        assert!(
+            !can_write,
+            "guest should not write to shared collections"
+        );
 
         // Guest cannot access non-shared data.
         let cannot_access = store
@@ -543,6 +578,7 @@ mod tests {
                 Some("admin-user"),
                 Some(&household.id),
                 "private-notes",
+                false,
             )
             .await;
         assert!(
@@ -665,6 +701,7 @@ mod tests {
                 Some("user-a"),
                 Some(&household_a.id),
                 "tasks",
+                false,
             )
             .await;
         assert!(
@@ -682,7 +719,7 @@ mod tests {
 
         // Records without user_id (legacy) should be accessible to all.
         let can_access = store
-            .can_access_record("user-a", None, None, "tasks")
+            .can_access_record("user-a", None, None, "tasks", false)
             .await;
         assert!(can_access, "legacy data should be accessible");
     }
@@ -722,6 +759,7 @@ mod tests {
             None,
             "tasks",
             &[],
+            false,
         ));
     }
 
@@ -735,6 +773,7 @@ mod tests {
             Some("h1"),
             "tasks",
             &[],
+            false,
         ));
     }
 
@@ -748,6 +787,7 @@ mod tests {
             Some("h1"),
             "private-notes",
             &[],
+            false,
         ));
     }
 
@@ -761,6 +801,7 @@ mod tests {
             Some("h1"),
             "family-calendar",
             &["family-calendar".to_string()],
+            false,
         ));
     }
 
@@ -774,6 +815,7 @@ mod tests {
             Some("h1"),
             "private-notes",
             &[],
+            false,
         ));
     }
 
@@ -787,12 +829,13 @@ mod tests {
             Some("h1"),
             "tasks",
             &[],
+            false,
         ));
     }
 
     #[test]
     fn pure_check_guest_shared_only() {
-        // Guest can access shared collections.
+        // Guest can read shared collections.
         assert!(check_record_access(
             "guest",
             Some(HouseholdRole::Guest),
@@ -801,6 +844,19 @@ mod tests {
             Some("h1"),
             "shopping-list",
             &["shopping-list".to_string()],
+            false,
+        ));
+
+        // Guest cannot write to shared collections.
+        assert!(!check_record_access(
+            "guest",
+            Some(HouseholdRole::Guest),
+            Some("h1"),
+            Some("admin"),
+            Some("h1"),
+            "shopping-list",
+            &["shopping-list".to_string()],
+            true,
         ));
 
         // Guest cannot access non-shared collections.
@@ -812,6 +868,7 @@ mod tests {
             Some("h1"),
             "private-notes",
             &[],
+            false,
         ));
     }
 }

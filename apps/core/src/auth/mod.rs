@@ -18,7 +18,7 @@ pub mod webauthn_provider;
 pub mod webauthn_store;
 
 use async_trait::async_trait;
-pub use types::{AuthError, AuthIdentity, HouseholdRole, TokenInfo, TokenRequest, TokenResponse};
+pub use types::{AuthError, AuthIdentity, TokenInfo, TokenRequest, TokenResponse};
 
 /// Trait for pluggable authentication providers.
 ///

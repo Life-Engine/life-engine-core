@@ -15,43 +15,30 @@ pub async fn trigger_sync(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    let loader = state.plugin_loader.lock().await;
+    // Acquire the lock, validate the plugin, clone the Arc, then drop
+    // the lock *before* performing IO via handle_route.
+    let plugin = {
+        let loader = state.plugin_loader.lock().await;
 
-    // Check if the plugin exists and is loaded.
-    let plugin_info = match loader.get_plugin_info(&id) {
-        Some(info) => info,
-        None => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(json!({
-                    "error": {
-                        "code": "CONNECTOR_NOT_FOUND",
-                        "message": format!("connector '{id}' not found")
-                    }
-                })),
-            )
-                .into_response();
-        }
-    };
+        // Check if the plugin exists and is loaded.
+        let plugin_info = match loader.get_plugin_info(&id) {
+            Some(info) => info,
+            None => {
+                return (
+                    StatusCode::NOT_FOUND,
+                    Json(json!({
+                        "error": {
+                            "code": "CONNECTOR_NOT_FOUND",
+                            "message": format!("connector '{id}' not found")
+                        }
+                    })),
+                )
+                    .into_response();
+            }
+        };
 
-    // Verify the plugin is in the Loaded state.
-    if plugin_info.status != PluginStatus::Loaded {
-        return (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(json!({
-                "error": {
-                    "code": "CONNECTOR_NOT_LOADED",
-                    "message": format!("connector '{id}' is not loaded")
-                }
-            })),
-        )
-            .into_response();
-    }
-
-    // Get the plugin reference and check that it supports POST /sync.
-    let plugin = match loader.get_plugin(&id) {
-        Some(p) => p,
-        None => {
+        // Verify the plugin is in the Loaded state.
+        if plugin_info.status != PluginStatus::Loaded {
             return (
                 StatusCode::SERVICE_UNAVAILABLE,
                 Json(json!({
@@ -63,9 +50,27 @@ pub async fn trigger_sync(
             )
                 .into_response();
         }
+
+        // Get an Arc handle to the plugin so we can drop the lock.
+        match loader.get_plugin_arc(&id) {
+            Some(p) => p,
+            None => {
+                return (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    Json(json!({
+                        "error": {
+                            "code": "CONNECTOR_NOT_LOADED",
+                            "message": format!("connector '{id}' is not loaded")
+                        }
+                    })),
+                )
+                    .into_response();
+            }
+        }
+        // `loader` (MutexGuard) is dropped here at the end of the block.
     };
 
-    // Check the plugin declares a POST /sync route.
+    // Check the plugin declares a POST /sync route (lock already released).
     let has_sync_route = plugin.routes().iter().any(|r| {
         r.method == HttpMethod::Post && r.path == "/sync"
     });
@@ -83,7 +88,7 @@ pub async fn trigger_sync(
             .into_response();
     }
 
-    // Invoke the plugin's handle_route for POST /sync.
+    // Invoke the plugin's handle_route for POST /sync without holding the mutex.
     match plugin
         .handle_route(&HttpMethod::Post, "/sync", json!({}))
         .await
@@ -114,7 +119,7 @@ pub async fn trigger_sync(
                 Json(json!({
                     "error": {
                         "code": "CONNECTOR_SYNC_FAILED",
-                        "message": format!("sync failed for connector '{id}': {e}")
+                        "message": format!("sync failed for connector '{id}'")
                     }
                 })),
             )
@@ -380,7 +385,9 @@ mod tests {
         let json = body_json(resp).await;
         assert_eq!(json["error"]["code"], "CONNECTOR_SYNC_FAILED");
         let msg = json["error"]["message"].as_str().unwrap();
-        assert!(msg.contains("connection refused"));
+        assert!(msg.contains("sync failed"));
+        // Internal error details must not leak to the client.
+        assert!(!msg.contains("connection refused"));
     }
 
     #[tokio::test]

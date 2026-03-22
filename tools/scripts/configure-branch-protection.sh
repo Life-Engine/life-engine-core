@@ -67,7 +67,7 @@ gh api "repos/${REPO}/branches/${BRANCH}/protection" \
   "allow_force_pushes": false,
   "allow_deletions": false,
   "required_conversation_resolution": true,
-  "enforce_admins": false
+  "enforce_admins": true
 }
 PAYLOAD
 

@@ -90,7 +90,7 @@ fn ci_check_script_has_no_syntax_errors() {
 fn ci_check_script_passes_on_current_codebase() {
     let script = repo_root().join("tools/scripts/ci-check.sh");
     let output = Command::new("bash")
-        .args([&script.to_string_lossy().to_string(), "--rust-only"])
+        .args([&script.to_string_lossy().to_string(), "--quick"])
         .current_dir(repo_root())
         .output()
         .expect("failed to run ci-check.sh");

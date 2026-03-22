@@ -8,13 +8,13 @@
 //! - `GET  /api/federation/changes/{collection}` — Serve changes to a pulling peer.
 
 use crate::federation::{
-    FederationStatus, FederationStore, PeerRequest, SyncRequest, SyncResult,
+    FederationStatus, FederationStore, PeerRequest, SyncResult,
 };
 use crate::routes::health::AppState;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::Json;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::sync::Arc;
 
 // ── Peer management ─────────────────────────────────────────────────
@@ -226,11 +226,154 @@ fn get_federation_store(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_helpers::default_app_state;
+    use crate::sqlite_storage::SqliteStorage;
+    use crate::test_helpers::{body_json, default_app_state};
+    use axum::body::Body;
+    use axum::http::Request;
+    use axum::routing::{delete, get, post};
+    use axum::Router;
+    use std::sync::Arc;
+    use tower::ServiceExt;
+
+    /// Build a Router with federation routes and a state that has a
+    /// federation store and in-memory storage wired up.
+    fn federation_app() -> Router {
+        let storage = Arc::new(SqliteStorage::open_in_memory().unwrap());
+        let mut state = default_app_state();
+        state.storage = Some(storage);
+        state.federation_store = Some(Arc::new(FederationStore::new()));
+
+        Router::new()
+            .route(
+                "/api/federation/peers",
+                post(create_peer).get(list_peers),
+            )
+            .route(
+                "/api/federation/peers/{id}",
+                delete(delete_peer),
+            )
+            .route(
+                "/api/federation/status",
+                get(federation_status),
+            )
+            .route(
+                "/api/federation/changes/{collection}",
+                get(serve_changes),
+            )
+            .with_state(state)
+    }
+
+    // ── HTTP-level integration tests ────────────────────────────────
+
+    #[tokio::test]
+    async fn http_federation_status_returns_ok() {
+        let app = federation_app();
+        let req = Request::builder()
+            .uri("/api/federation/status")
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let json = body_json(resp).await;
+        assert_eq!(json["peer_count"], 0);
+    }
+
+    #[tokio::test]
+    async fn http_create_and_list_peers() {
+        let app = federation_app();
+
+        // Create a peer.
+        let req = Request::builder()
+            .method("POST")
+            .uri("/api/federation/peers")
+            .header("Content-Type", "application/json")
+            .body(Body::from(
+                serde_json::json!({
+                    "name": "HTTP Peer",
+                    "endpoint": "https://http-peer:3750",
+                    "collections": ["tasks"]
+                })
+                .to_string(),
+            ))
+            .unwrap();
+        let resp = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::CREATED);
+
+        // List peers.
+        let req = Request::builder()
+            .uri("/api/federation/peers")
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let json = body_json(resp).await;
+        assert_eq!(json.as_array().unwrap().len(), 1);
+        assert_eq!(json[0]["name"], "HTTP Peer");
+    }
+
+    #[tokio::test]
+    async fn http_delete_nonexistent_peer_returns_404() {
+        let app = federation_app();
+
+        let req = Request::builder()
+            .method("DELETE")
+            .uri("/api/federation/peers/nonexistent")
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn http_changes_invalid_since_returns_400() {
+        let app = federation_app();
+
+        let req = Request::builder()
+            .uri("/api/federation/changes/tasks?since=not-a-date")
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+
+        let json = body_json(resp).await;
+        assert!(json["error"].as_str().unwrap().contains("invalid"));
+    }
+
+    #[tokio::test]
+    async fn http_changes_empty_since_returns_ok() {
+        let app = federation_app();
+
+        let req = Request::builder()
+            .uri("/api/federation/changes/tasks")
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let json = body_json(resp).await;
+        assert!(json["changes"].as_array().unwrap().is_empty());
+        assert!(json["cursor"].as_str().is_some());
+    }
+
+    #[tokio::test]
+    async fn http_changes_valid_since_returns_ok() {
+        let app = federation_app();
+
+        let req = Request::builder()
+            .uri("/api/federation/changes/tasks?since=2020-01-01T00:00:00Z")
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    // ── Unit tests (store-level) ────────────────────────────────────
 
     #[tokio::test]
     async fn federation_status_returns_empty_initially() {
-        let state = default_app_state();
+        let _state = default_app_state();
         // The OnceLock store is shared across tests in the same process,
         // so we test the store directly for isolation.
         let store = FederationStore::new();

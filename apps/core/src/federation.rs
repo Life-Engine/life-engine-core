@@ -136,6 +136,10 @@ pub struct PeerStatusSummary {
 
 // ── Federation store ────────────────────────────────────────────────
 
+/// Maximum number of sync history entries retained per store.
+/// Older entries are discarded once the cap is reached.
+const MAX_SYNC_HISTORY: usize = 100;
+
 /// In-memory store for federation peers and sync state.
 pub struct FederationStore {
     peers: RwLock<HashMap<String, FederationPeer>>,
@@ -219,8 +223,13 @@ impl FederationStore {
                 peer.updated_at = Utc::now();
             }
         }
-        // Append to history.
-        self.sync_history.write().await.push(result);
+        // Append to history, capping at MAX_SYNC_HISTORY entries.
+        let mut history = self.sync_history.write().await;
+        history.push(result);
+        if history.len() > MAX_SYNC_HISTORY {
+            let excess = history.len() - MAX_SYNC_HISTORY;
+            history.drain(..excess);
+        }
         Ok(())
     }
 
@@ -559,11 +568,11 @@ mod tests {
         }
 
         fn record_count(&self) -> usize {
-            self.records.lock().unwrap().len()
+            self.records.lock().unwrap_or_else(|e| e.into_inner()).len()
         }
 
         fn records_in_collection(&self, plugin_id: &str, collection: &str) -> Vec<Record> {
-            let records = self.records.lock().unwrap();
+            let records = self.records.lock().unwrap_or_else(|e| e.into_inner());
             records
                 .values()
                 .filter(|r| r.plugin_id == plugin_id && r.collection == collection)
@@ -581,7 +590,7 @@ mod tests {
             id: &str,
         ) -> anyhow::Result<Option<Record>> {
             let key = Self::make_key(plugin_id, collection, id);
-            let records = self.records.lock().unwrap();
+            let records = self.records.lock().unwrap_or_else(|e| e.into_inner());
             Ok(records.get(&key).cloned())
         }
 
@@ -605,7 +614,7 @@ mod tests {
                 updated_at: now,
             };
             let key = Self::make_key(plugin_id, collection, &id);
-            self.records.lock().unwrap().insert(key, record.clone());
+            self.records.lock().unwrap_or_else(|e| e.into_inner()).insert(key, record.clone());
             Ok(record)
         }
 
@@ -616,14 +625,15 @@ mod tests {
             id: &str,
             data: serde_json::Value,
             version: i64,
-        ) -> anyhow::Result<Record> {
+        ) -> Result<Record, crate::storage::StorageError> {
+            use crate::storage::StorageError;
             let key = Self::make_key(plugin_id, collection, id);
-            let mut records = self.records.lock().unwrap();
+            let mut records = self.records.lock().unwrap_or_else(|e| e.into_inner());
             let record = records
                 .get(&key)
-                .ok_or_else(|| anyhow::anyhow!("not found"))?;
+                .ok_or(StorageError::NotFound)?;
             if record.version != version {
-                return Err(anyhow::anyhow!("version mismatch"));
+                return Err(StorageError::VersionMismatch);
             }
             let updated = Record {
                 data,
@@ -643,7 +653,7 @@ mod tests {
             _sort: Option<SortOptions>,
             pagination: Pagination,
         ) -> anyhow::Result<QueryResult> {
-            let records = self.records.lock().unwrap();
+            let records = self.records.lock().unwrap_or_else(|e| e.into_inner());
             let matching: Vec<Record> = records
                 .values()
                 .filter(|r| r.plugin_id == plugin_id && r.collection == collection)
@@ -670,7 +680,7 @@ mod tests {
             id: &str,
         ) -> anyhow::Result<bool> {
             let key = Self::make_key(plugin_id, collection, id);
-            Ok(self.records.lock().unwrap().remove(&key).is_some())
+            Ok(self.records.lock().unwrap_or_else(|e| e.into_inner()).remove(&key).is_some())
         }
 
         async fn list(

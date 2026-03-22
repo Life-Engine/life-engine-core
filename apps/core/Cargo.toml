@@ -60,6 +60,8 @@ extism = { workspace = true }
 ed25519-dalek = { workspace = true }
 async-graphql = { workspace = true }
 async-graphql-axum = { workspace = true }
+tokio-postgres-rustls = { workspace = true }
+rustls-native-certs = { workspace = true }
 
 [dev-dependencies]
 life-engine-test-utils = { path = "../../packages/test-utils" }

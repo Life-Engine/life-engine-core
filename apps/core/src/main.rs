@@ -5,51 +5,32 @@
 
 mod auth;
 mod config;
-#[allow(dead_code)]
 mod conflict;
-#[allow(dead_code)]
 mod connector;
 mod crypto;
-#[allow(dead_code)]
 mod credential_bridge;
-#[allow(dead_code)]
 mod credential_store;
-#[allow(dead_code)]
 mod error;
-#[allow(dead_code)]
 mod message_bus;
-#[allow(dead_code)]
 mod plugin_loader;
 mod rate_limit;
-#[allow(dead_code)]
 mod rekey;
 mod routes;
 mod schema_registry;
-#[allow(dead_code)]
 mod search;
 mod search_processor;
 mod shutdown;
 mod sqlite_storage;
-#[allow(dead_code)]
 mod storage;
-#[allow(dead_code)]
 mod pg_storage;
-#[allow(dead_code)]
 mod storage_migration;
 mod tls;
-#[allow(dead_code)]
 mod plugin_signing;
-#[allow(dead_code)]
 mod wasm_adapter;
-#[allow(dead_code)]
 mod wasm_runtime;
-#[allow(dead_code)]
 mod household;
-#[allow(dead_code)]
 mod sync_primitives;
-#[allow(dead_code)]
 mod federation;
-#[allow(dead_code)]
 mod identity;
 
 use crate::auth::middleware::{auth_middleware, AuthMiddlewareState, RateLimiter};
@@ -133,7 +114,11 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!(path = %db_path.display(), encrypted = config.storage.encryption, "storage initialised");
 
     // 4c. Initialise schema registry (must happen before plugin loading).
-    let schema_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/schemas");
+    let schema_dir = if let Ok(dir) = std::env::var("LIFE_ENGINE_SCHEMA_DIR") {
+        std::path::PathBuf::from(dir)
+    } else {
+        data_dir_path.join("schemas")
+    };
     let schema_registry = if schema_dir.exists() {
         match SchemaRegistry::load_from_directory(&schema_dir) {
             Ok(registry) => {
@@ -286,7 +271,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Storage init endpoint (no auth required, callable once).
     let data_dir = std::path::PathBuf::from(&config.core.data_dir);
-    let _ = std::fs::create_dir_all(&data_dir);
+    std::fs::create_dir_all(&data_dir)?;
     let storage_init_state = StorageInitState {
         initialized: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         db_path: data_dir.join("life-engine.db"),
@@ -446,11 +431,15 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Maximum number of concurrent TLS connections to prevent resource exhaustion.
+const MAX_TLS_CONNECTIONS: usize = 1024;
+
 /// Serve HTTP over TLS using `tokio-rustls` and `hyper-util`.
 ///
 /// Accepts TCP connections, performs TLS handshakes, and serves each
-/// connection using the axum router. Graceful shutdown is handled by
-/// monitoring the shutdown signal.
+/// connection using the axum router. A semaphore caps concurrent connections
+/// to `MAX_TLS_CONNECTIONS`. Graceful shutdown is handled by monitoring the
+/// shutdown signal.
 async fn serve_tls(
     listener: tokio::net::TcpListener,
     app: axum::Router,
@@ -462,12 +451,25 @@ async fn serve_tls(
     let shutdown = shutdown_signal();
     tokio::pin!(shutdown);
 
+    let conn_semaphore = Arc::new(tokio::sync::Semaphore::new(MAX_TLS_CONNECTIONS));
+    tracing::info!(max = MAX_TLS_CONNECTIONS, "TLS connection limit configured");
+
     loop {
         tokio::select! {
             result = listener.accept() => {
                 let (stream, _remote_addr) = result?;
                 let acceptor = tls_acceptor.clone();
                 let app = app.clone();
+                let sem = Arc::clone(&conn_semaphore);
+
+                let permit = match sem.try_acquire_owned() {
+                    Ok(permit) => permit,
+                    Err(_) => {
+                        tracing::warn!("TLS connection limit reached, dropping connection");
+                        drop(stream);
+                        continue;
+                    }
+                };
 
                 tokio::spawn(async move {
                     let tls_stream = match acceptor.accept(stream).await {
@@ -493,6 +495,8 @@ async fn serve_tls(
                     {
                         tracing::error!(error = %e, "TLS connection error");
                     }
+
+                    drop(permit);
                 });
             }
             _ = &mut shutdown => {

@@ -148,19 +148,35 @@ pub async fn migrate_sqlite_to_pg(
         collections_migrated.push(collection.clone());
     }
 
-    // 5. Verify record counts before committing.
+    // 5. Verify record counts per-collection before committing.
+    //    We compare per (plugin_id, collection) rather than using a global
+    //    COUNT(*), because the target table may already contain rows from a
+    //    previous migration run (INSERT … ON CONFLICT DO NOTHING skips
+    //    duplicates). A global count would include pre-existing rows and
+    //    produce a false mismatch.
     let final_migrated = migrated_count.load(Ordering::Relaxed);
-    let pg_count_row = transaction
-        .query_one("SELECT COUNT(*) FROM plugin_data", &[])
-        .await?;
-    let pg_count: i64 = pg_count_row.get(0);
 
-    if pg_count as u64 != total_records {
-        // Rollback happens automatically when transaction is dropped.
-        return Err(anyhow::anyhow!(
-            "record count mismatch after migration: SQLite has {total_records} records, \
-             PostgreSQL has {pg_count} records"
-        ));
+    for (plugin_id, collection) in &collections {
+        let sqlite_result = sqlite
+            .list(plugin_id, collection, None, Pagination { limit: 1, offset: 0 })
+            .await?;
+        let expected = sqlite_result.total as i64;
+
+        let pg_count_row = transaction
+            .query_one(
+                "SELECT COUNT(*) FROM plugin_data WHERE plugin_id = $1 AND collection = $2",
+                &[plugin_id, collection],
+            )
+            .await?;
+        let pg_count: i64 = pg_count_row.get(0);
+
+        if pg_count != expected {
+            // Rollback happens automatically when transaction is dropped.
+            return Err(anyhow::anyhow!(
+                "record count mismatch for {plugin_id}/{collection}: \
+                 SQLite has {expected} records, PostgreSQL has {pg_count} records"
+            ));
+        }
     }
 
     // 6. Commit the transaction.
@@ -220,7 +236,7 @@ async fn discover_collections(sqlite: &SqliteStorage) -> anyhow::Result<Vec<(Str
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pg_storage::PgConfig;
+    use crate::pg_storage::{PgConfig, PgSslMode};
     use std::sync::atomic::AtomicBool;
 
     fn pg_test_url() -> Option<String> {
@@ -230,6 +246,11 @@ mod tests {
     async fn test_pg_storage() -> Option<PgStorage> {
         let url = pg_test_url()?;
         let url_parsed: url::Url = url.parse().ok()?;
+        let ssl_mode = url_parsed
+            .query_pairs()
+            .find(|(k, _)| k == "sslmode")
+            .and_then(|(_, v)| v.parse::<PgSslMode>().ok())
+            .unwrap_or(PgSslMode::Disable);
         let config = PgConfig {
             host: url_parsed.host_str().unwrap_or("localhost").into(),
             port: url_parsed.port().unwrap_or(5432),
@@ -237,6 +258,7 @@ mod tests {
             user: url_parsed.username().into(),
             password: url_parsed.password().unwrap_or("").into(),
             pool_size: 4,
+            ssl_mode,
         };
         let storage = PgStorage::open(&config).await.ok()?;
         let client = storage.pool().get().await.ok()?;

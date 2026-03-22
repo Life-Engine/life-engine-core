@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// Each endpoint has a unique ID used in the receive URL:
 /// `POST /api/plugins/com.life-engine.webhook-receiver/receive/{id}`
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct WebhookEndpoint {
     /// Unique identifier for this endpoint (used in URL path).
     pub id: String,
@@ -16,9 +16,25 @@ pub struct WebhookEndpoint {
     /// The CDM collection to store received data in.
     pub target_collection: String,
     /// Optional HMAC-SHA256 secret for signature verification.
+    #[serde(skip_serializing)]
     pub secret: Option<String>,
     /// Optional payload field mappings (JSON path -> CDM field).
     pub payload_mappings: Option<Vec<PayloadMapping>>,
+}
+
+impl std::fmt::Debug for WebhookEndpoint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WebhookEndpoint")
+            .field("id", &self.id)
+            .field("source_name", &self.source_name)
+            .field("target_collection", &self.target_collection)
+            .field(
+                "secret",
+                &self.secret.as_ref().map(|_| "[REDACTED]"),
+            )
+            .field("payload_mappings", &self.payload_mappings)
+            .finish()
+    }
 }
 
 /// Maps a JSON path in the incoming payload to a CDM field name.
@@ -50,7 +66,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn webhook_endpoint_serialization_roundtrip() {
+    fn webhook_endpoint_serialization_skips_secret() {
         let endpoint = WebhookEndpoint {
             id: "test-hook".to_string(),
             source_name: "TestService".to_string(),
@@ -62,11 +78,27 @@ mod tests {
             }]),
         };
         let json = serde_json::to_string(&endpoint).expect("serialize");
-        let restored: WebhookEndpoint = serde_json::from_str(&json).expect("deserialize");
+        assert!(!json.contains("my-secret"), "secret must not appear in serialized output");
+        // Deserialize with secret provided externally.
+        let json_with_secret = r#"{"id":"test-hook","source_name":"TestService","target_collection":"events","secret":"my-secret","payload_mappings":[{"source_path":"data.id","target_field":"external_id"}]}"#;
+        let restored: WebhookEndpoint = serde_json::from_str(json_with_secret).expect("deserialize");
         assert_eq!(restored.id, "test-hook");
-        assert_eq!(restored.source_name, "TestService");
-        assert!(restored.secret.is_some());
+        assert_eq!(restored.secret.as_deref(), Some("my-secret"));
         assert_eq!(restored.payload_mappings.unwrap().len(), 1);
+    }
+
+    #[test]
+    fn webhook_endpoint_debug_redacts_secret() {
+        let endpoint = WebhookEndpoint {
+            id: "test-hook".to_string(),
+            source_name: "TestService".to_string(),
+            target_collection: "events".to_string(),
+            secret: Some("super-secret-value".to_string()),
+            payload_mappings: None,
+        };
+        let debug_output = format!("{:?}", endpoint);
+        assert!(!debug_output.contains("super-secret-value"));
+        assert!(debug_output.contains("[REDACTED]"));
     }
 
     #[test]

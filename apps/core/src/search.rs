@@ -6,10 +6,10 @@
 use crate::storage::Record;
 use serde::Serialize;
 use std::sync::Arc;
-use tantivy::collector::TopDocs;
-use tantivy::query::QueryParser;
-use tantivy::schema::{Field, Schema, Value as TantivyValue, STRING, STORED, TEXT};
-use tantivy::{doc, Index, IndexReader, IndexWriter, TantivyDocument};
+use tantivy::collector::{Count, TopDocs};
+use tantivy::query::{BooleanQuery, Occur, QueryParser, TermQuery};
+use tantivy::schema::{Field, IndexRecordOption, Schema, Value as TantivyValue, STRING, STORED, TEXT};
+use tantivy::{doc, Index, IndexReader, IndexWriter, TantivyDocument, Term};
 use tokio::sync::Mutex;
 
 /// Full-text search engine wrapping a tantivy index.
@@ -61,7 +61,7 @@ impl SearchEngine {
     pub fn new() -> anyhow::Result<Self> {
         let mut schema_builder = Schema::builder();
         let id = schema_builder.add_text_field("id", STRING | STORED);
-        let collection = schema_builder.add_text_field("collection", TEXT | STORED);
+        let collection = schema_builder.add_text_field("collection", STRING | STORED);
         let plugin_id = schema_builder.add_text_field("plugin_id", STORED);
         let content = schema_builder.add_text_field("content", TEXT);
         let title = schema_builder.add_text_field("title", TEXT | STORED);
@@ -110,6 +110,33 @@ impl SearchEngine {
         Ok(())
     }
 
+    /// Index multiple records in a single batch, committing once at the end.
+    ///
+    /// This is significantly faster than calling `index_record` in a loop
+    /// because it avoids per-document commit overhead.
+    pub async fn index_records_bulk(&self, records: &[Record]) -> anyhow::Result<usize> {
+        let mut writer = self.writer.lock().await;
+        let mut count = 0usize;
+
+        for record in records {
+            let (title_text, content_text) = extract_text(&record.collection, &record.data);
+            writer.add_document(doc!(
+                self.fields.id => record.id.as_str(),
+                self.fields.collection => record.collection.as_str(),
+                self.fields.plugin_id => record.plugin_id.as_str(),
+                self.fields.title => title_text.as_str(),
+                self.fields.content => content_text.as_str(),
+            ))?;
+            count += 1;
+        }
+
+        writer.commit()?;
+        self.reader.reload()?;
+
+        tracing::debug!(count, "bulk indexed records");
+        Ok(count)
+    }
+
     /// Search the index with a text query.
     ///
     /// Returns ranked results filtered optionally by collection.
@@ -131,14 +158,35 @@ impl SearchEngine {
             QueryParser::for_index(&self.index, vec![self.fields.title, self.fields.content]);
         let parsed_query = query_parser.parse_query(query)?;
 
-        // Fetch more results than needed to apply collection filter and offset.
-        let fetch_count = (offset + limit) * 2 + 100;
-        let top_docs = searcher.search(&parsed_query, &TopDocs::with_limit(fetch_count))?;
+        // When a collection filter is provided, combine the text query
+        // with a TermQuery on the collection field using BooleanQuery
+        // with MUST clauses for correct AND semantics.
+        let effective_query: Box<dyn tantivy::query::Query> = if let Some(filter) =
+            collection_filter
+        {
+            let collection_term = Term::from_field_text(self.fields.collection, filter);
+            let collection_query =
+                TermQuery::new(collection_term, IndexRecordOption::Basic);
+            Box::new(BooleanQuery::new(vec![
+                (Occur::Must, parsed_query),
+                (Occur::Must, Box::new(collection_query)),
+            ]))
+        } else {
+            parsed_query
+        };
+
+        let fetch_count = offset + limit;
+        let (top_docs, total) =
+            searcher.search(&effective_query, &(TopDocs::with_limit(fetch_count), Count))?;
 
         let mut hits = Vec::new();
-        let mut total = 0usize;
 
-        for (score, doc_address) in top_docs {
+        for (idx, (score, doc_address)) in top_docs.into_iter().enumerate() {
+            // Skip results before the offset.
+            if idx < offset {
+                continue;
+            }
+
             let doc: TantivyDocument = searcher.doc(doc_address)?;
 
             let doc_id = doc
@@ -161,25 +209,13 @@ impl SearchEngine {
                 .and_then(|v| v.as_str())
                 .map(str::to_string);
 
-            // Apply collection filter.
-            if let Some(filter) = collection_filter
-                && doc_collection != filter
-            {
-                continue;
-            }
-
-            total += 1;
-
-            // Apply offset/limit pagination.
-            if total > offset && hits.len() < limit {
-                hits.push(SearchHit {
-                    id: doc_id,
-                    collection: doc_collection,
-                    plugin_id: doc_plugin_id,
-                    score,
-                    snippet: doc_title,
-                });
-            }
+            hits.push(SearchHit {
+                id: doc_id,
+                collection: doc_collection,
+                plugin_id: doc_plugin_id,
+                score,
+                snippet: doc_title,
+            });
         }
 
         Ok(SearchResults {
@@ -630,5 +666,39 @@ mod tests {
         let results = engine.search("capped", None, 500, 0).unwrap();
         assert_eq!(results.total, 1);
         assert_eq!(results.hits.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn bulk_index_records() {
+        let engine = SearchEngine::new().unwrap();
+        let records: Vec<Record> = (0..10)
+            .map(|i| {
+                make_record(
+                    &format!("b{i}"),
+                    "tasks",
+                    json!({"title": format!("Bulk item {i}")}),
+                )
+            })
+            .collect();
+
+        let count = engine.index_records_bulk(&records).await.unwrap();
+        assert_eq!(count, 10);
+
+        let results = engine.search("bulk", None, 20, 0).unwrap();
+        assert_eq!(results.total, 10);
+    }
+
+    #[tokio::test]
+    async fn collection_filter_exact_match_no_false_positives() {
+        let engine = SearchEngine::new().unwrap();
+        // "task" is a substring of "tasks" — with TEXT this could cause false matches.
+        let r1 = make_record("r1", "tasks", json!({"title": "Alpha item"}));
+        let r2 = make_record("r2", "task", json!({"title": "Alpha item"}));
+        engine.index_record(&r1).await.unwrap();
+        engine.index_record(&r2).await.unwrap();
+
+        let results = engine.search("alpha", Some("task"), 20, 0).unwrap();
+        assert_eq!(results.total, 1);
+        assert_eq!(results.hits[0].id, "r2");
     }
 }

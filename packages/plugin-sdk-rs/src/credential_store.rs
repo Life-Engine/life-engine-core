@@ -14,7 +14,10 @@ use async_trait::async_trait;
 ///
 /// Contains a key-value pair scoped to a specific plugin.
 /// The `value` is stored encrypted at rest by the implementation.
-#[derive(Debug, Clone)]
+///
+/// The `Debug` implementation redacts the `value` field to prevent
+/// accidental credential leakage in logs or error messages.
+#[derive(Clone)]
 pub struct StoredCredential {
     /// The plugin ID this credential belongs to.
     pub plugin_id: String,
@@ -22,6 +25,16 @@ pub struct StoredCredential {
     pub key: String,
     /// The credential value (plaintext in memory, encrypted at rest).
     pub value: String,
+}
+
+impl std::fmt::Debug for StoredCredential {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("StoredCredential")
+            .field("plugin_id", &self.plugin_id)
+            .field("key", &self.key)
+            .field("value", &"[REDACTED]")
+            .finish()
+    }
 }
 
 /// Trait for encrypted credential storage.
@@ -95,6 +108,26 @@ mod tests {
         assert_eq!(cred.plugin_id, "com.test.plugin");
         assert_eq!(cred.key, "api_key");
         assert_eq!(cred.value, "secret-value");
+    }
+
+    #[test]
+    fn stored_credential_debug_redacts_value() {
+        let cred = StoredCredential {
+            plugin_id: "com.test.plugin".into(),
+            key: "api_key".into(),
+            value: "super-secret-value".into(),
+        };
+        let debug_output = format!("{:?}", cred);
+        assert!(
+            debug_output.contains("[REDACTED]"),
+            "Debug output must redact the value"
+        );
+        assert!(
+            !debug_output.contains("super-secret-value"),
+            "Debug output must not contain the actual secret"
+        );
+        assert!(debug_output.contains("com.test.plugin"));
+        assert!(debug_output.contains("api_key"));
     }
 
     #[test]

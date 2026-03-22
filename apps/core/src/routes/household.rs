@@ -4,7 +4,7 @@
 //! members, managing roles, and configuring shared collections.
 
 use crate::auth::types::{AuthIdentity, HouseholdRole};
-use crate::household::{HouseholdStore, Household, HouseholdInvite, HouseholdMember};
+use crate::household::HouseholdStore;
 
 use axum::extract::State;
 use axum::http::StatusCode;
@@ -438,6 +438,43 @@ mod tests {
         serde_json::from_slice(&body).unwrap()
     }
 
+    fn app_with_identity(store: Arc<HouseholdStore>, identity: crate::auth::types::AuthIdentity) -> Router {
+        let household_state = HouseholdState { store };
+        Router::new()
+            .route("/api/household", post(create_household).get(get_household))
+            .route("/api/household/invite", post(invite_member))
+            .route("/api/household/invite/accept", post(accept_invite))
+            .route("/api/household/members/role", put(update_member_role))
+            .route(
+                "/api/household/shared-collections",
+                post(add_shared_collection).get(list_shared_collections),
+            )
+            .with_state(household_state)
+            .layer(axum::Extension(identity))
+    }
+
+    fn test_identity(user_id: &str) -> crate::auth::types::AuthIdentity {
+        crate::auth::types::AuthIdentity {
+            token_id: "test-token".into(),
+            user_id: Some(user_id.into()),
+            household_id: None,
+            role: None,
+            created_at: chrono::Utc::now(),
+            expires_at: chrono::Utc::now() + chrono::Duration::days(30),
+        }
+    }
+
+    fn json_request(method: &str, uri: &str, body: Option<String>) -> Request<Body> {
+        let builder = Request::builder()
+            .method(method)
+            .uri(uri)
+            .header("Content-Type", "application/json");
+        match body {
+            Some(b) => builder.body(Body::from(b)).unwrap(),
+            None => builder.body(Body::empty()).unwrap(),
+        }
+    }
+
     #[tokio::test]
     async fn household_routes_require_auth() {
         let (app, _token, _store) = setup_household_app().await;
@@ -447,5 +484,198 @@ mod tests {
             .unwrap();
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn create_household_returns_201() {
+        let store = Arc::new(HouseholdStore::new());
+        let app = app_with_identity(Arc::clone(&store), test_identity("user-a"));
+        let req = json_request(
+            "POST",
+            "/api/household",
+            Some(r#"{"name":"Test Family","display_name":"User A"}"#.into()),
+        );
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        let json = body_json(resp).await;
+        assert_eq!(json["data"]["name"], "Test Family");
+        assert_eq!(json["data"]["members"][0]["user_id"], "user-a");
+        assert_eq!(json["data"]["members"][0]["role"], "Admin");
+    }
+
+    #[tokio::test]
+    async fn get_household_after_create() {
+        let store = Arc::new(HouseholdStore::new());
+        store.create_household("My House", "user-a", "User A").await;
+        let app = app_with_identity(Arc::clone(&store), test_identity("user-a"));
+        let req = json_request("GET", "/api/household", None);
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let json = body_json(resp).await;
+        assert_eq!(json["data"]["name"], "My House");
+    }
+
+    #[tokio::test]
+    async fn get_household_returns_404_when_none() {
+        let store = Arc::new(HouseholdStore::new());
+        let app = app_with_identity(Arc::clone(&store), test_identity("orphan"));
+        let req = json_request("GET", "/api/household", None);
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+        let json = body_json(resp).await;
+        assert_eq!(json["error"]["code"], "HOUSEHOLD_NOT_FOUND");
+    }
+
+    #[tokio::test]
+    async fn invite_member_creates_invite() {
+        let store = Arc::new(HouseholdStore::new());
+        store.create_household("Family", "admin-user", "Admin").await;
+        let app = app_with_identity(Arc::clone(&store), test_identity("admin-user"));
+        let req = json_request(
+            "POST",
+            "/api/household/invite",
+            Some(r#"{"email":"new@test.com","role":"Member"}"#.into()),
+        );
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        let json = body_json(resp).await;
+        assert_eq!(json["data"]["email"], "new@test.com");
+        assert_eq!(json["data"]["role"], "Member");
+    }
+
+    #[tokio::test]
+    async fn invite_member_forbidden_for_non_admin() {
+        let store = Arc::new(HouseholdStore::new());
+        let household = store.create_household("Family", "admin-user", "Admin").await;
+        let invite = store
+            .create_invite(&household.id, "m@test.com", HouseholdRole::Member, "admin-user")
+            .await
+            .unwrap();
+        store.accept_invite(&invite.id, "member-user", "Member").await.unwrap();
+        let app = app_with_identity(Arc::clone(&store), test_identity("member-user"));
+        let req = json_request(
+            "POST",
+            "/api/household/invite",
+            Some(r#"{"email":"other@test.com","role":"Member"}"#.into()),
+        );
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+        let json = body_json(resp).await;
+        assert_eq!(json["error"]["code"], "HOUSEHOLD_FORBIDDEN");
+    }
+
+    #[tokio::test]
+    async fn accept_invite_adds_member() {
+        let store = Arc::new(HouseholdStore::new());
+        let household = store.create_household("Family", "admin-user", "Admin").await;
+        let invite = store
+            .create_invite(&household.id, "new@test.com", HouseholdRole::Member, "admin-user")
+            .await
+            .unwrap();
+        let app = app_with_identity(Arc::clone(&store), test_identity("new-user"));
+        let body = serde_json::json!({ "invite_id": invite.id, "display_name": "New User" });
+        let req = json_request("POST", "/api/household/invite/accept", Some(body.to_string()));
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let json = body_json(resp).await;
+        assert_eq!(json["data"]["user_id"], "new-user");
+        assert_eq!(json["data"]["role"], "Member");
+        let updated = store.get_household(&household.id).await.unwrap();
+        assert_eq!(updated.members.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn update_member_role_succeeds() {
+        let store = Arc::new(HouseholdStore::new());
+        let household = store.create_household("Family", "admin-user", "Admin").await;
+        let invite = store
+            .create_invite(&household.id, "m@test.com", HouseholdRole::Member, "admin-user")
+            .await
+            .unwrap();
+        store.accept_invite(&invite.id, "member-user", "Member").await.unwrap();
+        let app = app_with_identity(Arc::clone(&store), test_identity("admin-user"));
+        let req = json_request(
+            "PUT",
+            "/api/household/members/role",
+            Some(r#"{"user_id":"member-user","role":"Guest"}"#.into()),
+        );
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let json = body_json(resp).await;
+        assert_eq!(json["data"]["role"], "Guest");
+        let role = store.get_user_role("member-user").await;
+        assert_eq!(role, Some(HouseholdRole::Guest));
+    }
+
+    #[tokio::test]
+    async fn last_admin_cannot_be_demoted() {
+        let store = Arc::new(HouseholdStore::new());
+        store.create_household("Family", "sole-admin", "Admin").await;
+        let app = app_with_identity(Arc::clone(&store), test_identity("sole-admin"));
+        let req = json_request(
+            "PUT",
+            "/api/household/members/role",
+            Some(r#"{"user_id":"sole-admin","role":"Member"}"#.into()),
+        );
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        let json = body_json(resp).await;
+        assert_eq!(json["error"]["code"], "HOUSEHOLD_LAST_ADMIN");
+    }
+
+    #[tokio::test]
+    async fn add_shared_collection_succeeds() {
+        let store = Arc::new(HouseholdStore::new());
+        let household = store.create_household("Family", "admin-user", "Admin").await;
+        let app = app_with_identity(Arc::clone(&store), test_identity("admin-user"));
+        let req = json_request(
+            "POST",
+            "/api/household/shared-collections",
+            Some(r#"{"collection":"shopping-list"}"#.into()),
+        );
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let json = body_json(resp).await;
+        assert_eq!(json["data"]["collection"], "shopping-list");
+        assert_eq!(json["data"]["shared"], true);
+        assert!(store.is_shared_collection(&household.id, "shopping-list").await);
+    }
+
+    #[tokio::test]
+    async fn list_shared_collections_returns_all() {
+        let store = Arc::new(HouseholdStore::new());
+        let household = store.create_household("Family", "admin-user", "Admin").await;
+        store.add_shared_collection(&household.id, "calendar").await.unwrap();
+        store.add_shared_collection(&household.id, "tasks").await.unwrap();
+        let app = app_with_identity(Arc::clone(&store), test_identity("admin-user"));
+        let req = json_request("GET", "/api/household/shared-collections", None);
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let json = body_json(resp).await;
+        let collections = json["data"].as_array().unwrap();
+        assert_eq!(collections.len(), 2);
+        assert!(collections.contains(&serde_json::json!("calendar")));
+        assert!(collections.contains(&serde_json::json!("tasks")));
+    }
+
+    #[tokio::test]
+    async fn shared_collection_forbidden_for_non_admin() {
+        let store = Arc::new(HouseholdStore::new());
+        let household = store.create_household("Family", "admin-user", "Admin").await;
+        let invite = store
+            .create_invite(&household.id, "m@test.com", HouseholdRole::Member, "admin-user")
+            .await
+            .unwrap();
+        store.accept_invite(&invite.id, "member-user", "Member").await.unwrap();
+        let app = app_with_identity(Arc::clone(&store), test_identity("member-user"));
+        let req = json_request(
+            "POST",
+            "/api/household/shared-collections",
+            Some(r#"{"collection":"secret"}"#.into()),
+        );
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+        let json = body_json(resp).await;
+        assert_eq!(json["error"]["code"], "HOUSEHOLD_FORBIDDEN");
     }
 }

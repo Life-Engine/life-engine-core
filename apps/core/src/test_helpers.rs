@@ -10,13 +10,19 @@ use crate::auth::AuthProvider;
 use crate::message_bus::MessageBus;
 use crate::plugin_loader::PluginLoader;
 use crate::routes::health::AppState;
+use crate::storage::{
+    Pagination, QueryFilters, QueryResult, Record, SortOptions, StorageAdapter, StorageError,
+};
+use async_trait::async_trait;
 use axum::body::Body;
 use axum::http::Request;
+use chrono::Utc;
 use http_body_util::BodyExt;
 use serde_json::Value;
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use tokio::sync::Mutex;
+use tokio::sync::Mutex as TokioMutex;
 
 /// Create an `AuthMiddlewareState` and its backing `LocalTokenProvider`.
 ///
@@ -66,7 +72,7 @@ pub async fn body_json(response: axum::http::Response<Body>) -> Value {
 pub fn default_app_state() -> AppState {
     AppState {
         start_time: Instant::now(),
-        plugin_loader: Arc::new(Mutex::new(PluginLoader::new())),
+        plugin_loader: Arc::new(TokioMutex::new(PluginLoader::new())),
         storage: None,
         message_bus: Arc::new(MessageBus::new()),
         conflict_store: None,
@@ -76,5 +82,143 @@ pub fn default_app_state() -> AppState {
         household_store: None,
         federation_store: None,
         identity_store: None,
+    }
+}
+
+/// In-memory mock storage for tests.
+///
+/// Shared across test modules to avoid duplicating this ~120-line impl
+/// in every file that needs a `StorageAdapter`.
+pub struct MockStorage {
+    records: Mutex<HashMap<String, Record>>,
+}
+
+impl MockStorage {
+    pub fn new() -> Self {
+        Self {
+            records: Mutex::new(HashMap::new()),
+        }
+    }
+
+    fn key(plugin_id: &str, collection: &str, id: &str) -> String {
+        format!("{plugin_id}:{collection}:{id}")
+    }
+}
+
+#[async_trait]
+impl StorageAdapter for MockStorage {
+    async fn get(
+        &self,
+        plugin_id: &str,
+        collection: &str,
+        id: &str,
+    ) -> anyhow::Result<Option<Record>> {
+        let key = Self::key(plugin_id, collection, id);
+        Ok(self.records.lock().unwrap().get(&key).cloned())
+    }
+
+    async fn create(
+        &self,
+        plugin_id: &str,
+        collection: &str,
+        data: serde_json::Value,
+    ) -> anyhow::Result<Record> {
+        let id = uuid::Uuid::new_v4().to_string();
+        let now = Utc::now();
+        let record = Record {
+            id: id.clone(),
+            plugin_id: plugin_id.into(),
+            collection: collection.into(),
+            data,
+            version: 1,
+            user_id: None,
+            household_id: None,
+            created_at: now,
+            updated_at: now,
+        };
+        let key = Self::key(plugin_id, collection, &id);
+        self.records.lock().unwrap().insert(key, record.clone());
+        Ok(record)
+    }
+
+    async fn update(
+        &self,
+        plugin_id: &str,
+        collection: &str,
+        id: &str,
+        data: serde_json::Value,
+        version: i64,
+    ) -> Result<Record, StorageError> {
+        let key = Self::key(plugin_id, collection, id);
+        let mut records = self.records.lock().unwrap();
+        let record = records
+            .get(&key)
+            .ok_or(StorageError::NotFound)?;
+        if record.version != version {
+            return Err(StorageError::VersionMismatch);
+        }
+        let updated = Record {
+            data,
+            version: version + 1,
+            updated_at: Utc::now(),
+            ..record.clone()
+        };
+        records.insert(key, updated.clone());
+        Ok(updated)
+    }
+
+    async fn query(
+        &self,
+        plugin_id: &str,
+        collection: &str,
+        _filters: QueryFilters,
+        _sort: Option<SortOptions>,
+        pagination: Pagination,
+    ) -> anyhow::Result<QueryResult> {
+        let records = self.records.lock().unwrap();
+        let matching: Vec<Record> = records
+            .values()
+            .filter(|r| r.plugin_id == plugin_id && r.collection == collection)
+            .cloned()
+            .collect();
+        let total = matching.len() as u64;
+        let paged = matching
+            .into_iter()
+            .skip(pagination.offset as usize)
+            .take(pagination.limit as usize)
+            .collect();
+        Ok(QueryResult {
+            records: paged,
+            total,
+            limit: pagination.limit,
+            offset: pagination.offset,
+        })
+    }
+
+    async fn delete(
+        &self,
+        plugin_id: &str,
+        collection: &str,
+        id: &str,
+    ) -> anyhow::Result<bool> {
+        let key = Self::key(plugin_id, collection, id);
+        Ok(self.records.lock().unwrap().remove(&key).is_some())
+    }
+
+    async fn list(
+        &self,
+        plugin_id: &str,
+        collection: &str,
+        sort: Option<SortOptions>,
+        pagination: Pagination,
+    ) -> anyhow::Result<QueryResult> {
+        self.query(
+            plugin_id,
+            collection,
+            QueryFilters::default(),
+            sort,
+            pagination,
+        )
+        .await
     }
 }

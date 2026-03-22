@@ -39,45 +39,51 @@ pub async fn create_full_backup(
         }
     }
 
-    let manifest = BackupManifest {
-        id: backup_id.clone(),
-        created_at: now,
-        backup_type: BackupType::Full,
-        collections,
-        record_counts,
-        compressed_size: 0,
-        checksum: String::new(),
-        parent_id: None,
-        cursor: Some(now.to_rfc3339()),
-    };
-
+    // Serialize -> compress -> encrypt first, so we can compute final stats.
     let archive = BackupArchive {
-        manifest: manifest.clone(),
+        manifest: BackupManifest {
+            id: backup_id.clone(),
+            created_at: now,
+            backup_type: BackupType::Full,
+            collections: collections.clone(),
+            record_counts: record_counts.clone(),
+            compressed_size: 0,
+            checksum: String::new(),
+            parent_id: None,
+            cursor: Some(now.to_rfc3339()),
+        },
         records,
     };
 
-    // Serialize -> compress -> encrypt.
     let json = serde_json::to_vec(&archive)?;
     let compressed = crypto::compress(&json)?;
     let key = crypto::derive_key(passphrase, argon2_params)?;
     let encrypted = crypto::encrypt(&compressed, &key)?;
     let checksum = crypto::sha256_hex(&encrypted);
 
+    // Build the final manifest with accurate stats.
+    let manifest = BackupManifest {
+        id: backup_id.clone(),
+        created_at: now,
+        backup_type: BackupType::Full,
+        collections,
+        record_counts,
+        compressed_size: compressed.len() as u64,
+        checksum,
+        parent_id: None,
+        cursor: Some(now.to_rfc3339()),
+    };
+
     // Store the encrypted backup.
     let storage_key = format!("{backup_id}.enc");
     backend.put(&storage_key, &encrypted).await?;
 
     // Store the manifest separately (unencrypted, for listing).
-    let manifest_with_stats = BackupManifest {
-        compressed_size: compressed.len() as u64,
-        checksum,
-        ..manifest
-    };
-    let manifest_json = serde_json::to_vec(&manifest_with_stats)?;
+    let manifest_json = serde_json::to_vec(&manifest)?;
     let manifest_key = format!("{backup_id}.manifest.json");
     backend.put(&manifest_key, &manifest_json).await?;
 
-    Ok(manifest_with_stats)
+    Ok(manifest)
 }
 
 /// Create an incremental backup of records changed since the parent backup.
@@ -101,20 +107,19 @@ pub async fn create_incremental_backup(
         }
     }
 
-    let manifest = BackupManifest {
-        id: backup_id.clone(),
-        created_at: now,
-        backup_type: BackupType::Incremental,
-        collections,
-        record_counts,
-        compressed_size: 0,
-        checksum: String::new(),
-        parent_id: Some(parent_id.to_string()),
-        cursor: Some(now.to_rfc3339()),
-    };
-
+    // Serialize -> compress -> encrypt first, so we can compute final stats.
     let archive = BackupArchive {
-        manifest: manifest.clone(),
+        manifest: BackupManifest {
+            id: backup_id.clone(),
+            created_at: now,
+            backup_type: BackupType::Incremental,
+            collections: collections.clone(),
+            record_counts: record_counts.clone(),
+            compressed_size: 0,
+            checksum: String::new(),
+            parent_id: Some(parent_id.to_string()),
+            cursor: Some(now.to_rfc3339()),
+        },
         records: changed_records,
     };
 
@@ -124,19 +129,27 @@ pub async fn create_incremental_backup(
     let encrypted = crypto::encrypt(&compressed, &key)?;
     let checksum = crypto::sha256_hex(&encrypted);
 
+    // Build the final manifest with accurate stats.
+    let manifest = BackupManifest {
+        id: backup_id.clone(),
+        created_at: now,
+        backup_type: BackupType::Incremental,
+        collections,
+        record_counts,
+        compressed_size: compressed.len() as u64,
+        checksum,
+        parent_id: Some(parent_id.to_string()),
+        cursor: Some(now.to_rfc3339()),
+    };
+
     let storage_key = format!("{backup_id}.enc");
     backend.put(&storage_key, &encrypted).await?;
 
-    let manifest_with_stats = BackupManifest {
-        compressed_size: compressed.len() as u64,
-        checksum,
-        ..manifest
-    };
-    let manifest_json = serde_json::to_vec(&manifest_with_stats)?;
+    let manifest_json = serde_json::to_vec(&manifest)?;
     let manifest_key = format!("{backup_id}.manifest.json");
     backend.put(&manifest_key, &manifest_json).await?;
 
-    Ok(manifest_with_stats)
+    Ok(manifest)
 }
 
 /// Restore all records from a backup.
@@ -220,13 +233,28 @@ pub async fn restore_partial(
 }
 
 /// List all backup manifests from the backend.
+///
+/// Fetches manifest files concurrently to avoid N+1 sequential requests.
 pub async fn list_backups(backend: &dyn BackupBackend) -> anyhow::Result<Vec<BackupManifest>> {
     let stored = backend.list("").await?;
-    let mut manifests = Vec::new();
 
-    for entry in stored {
-        if entry.key.ends_with(".manifest.json") {
-            let data = backend.get(&entry.key).await?;
+    let manifest_keys: Vec<String> = stored
+        .into_iter()
+        .filter(|entry| entry.key.ends_with(".manifest.json"))
+        .map(|entry| entry.key)
+        .collect();
+
+    // Fetch all manifests concurrently.
+    let futures: Vec<_> = manifest_keys
+        .iter()
+        .map(|key| backend.get(key))
+        .collect();
+
+    let results = futures::future::join_all(futures).await;
+
+    let mut manifests = Vec::with_capacity(manifest_keys.len());
+    for result in results {
+        if let Ok(data) = result {
             if let Ok(manifest) = serde_json::from_slice::<BackupManifest>(&data) {
                 manifests.push(manifest);
             }

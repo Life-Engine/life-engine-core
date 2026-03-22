@@ -383,7 +383,12 @@ pub async fn greenmail_send_email(
         Ok(line)
     };
 
-    // Helper to send a command and read the response.
+    // Helper to send a command and read the full SMTP response.
+    //
+    // Per RFC 5321, multi-line responses use a hyphen after the status code
+    // (e.g. "250-PIPELINING\r\n") for continuation lines, and a space
+    // (e.g. "250 OK\r\n") for the final line. This helper reads all lines
+    // until the terminating line is found.
     let send_cmd =
         |stream: &mut TcpStream,
          reader: &mut BufReader<TcpStream>,
@@ -393,43 +398,25 @@ pub async fn greenmail_send_email(
                 .write_all(cmd.as_bytes())
                 .map_err(|e| format!("SMTP write error: {e}"))?;
             stream.flush().map_err(|e| format!("SMTP flush error: {e}"))?;
-            read_line(reader)
+            // Read all response lines per RFC 5321 multi-line format.
+            let mut full_response = String::new();
+            loop {
+                let line = read_line(reader)?;
+                full_response.push_str(&line);
+                // A line with a space at position 3 (e.g. "250 OK") is the
+                // final line. Lines shorter than 4 chars also terminate.
+                if line.len() < 4 || line.as_bytes()[3] == b' ' {
+                    break;
+                }
+            }
+            Ok(full_response)
         };
 
-    // Read greeting.
+    // Read greeting (may also be multi-line).
     let _greeting = read_line(&mut reader)?;
 
-    // EHLO
+    // EHLO — send_cmd now correctly drains the full multi-line response.
     let _ehlo = send_cmd(&mut stream, &mut reader, "EHLO localhost\r\n")?;
-    // Drain any multi-line EHLO response.
-    loop {
-        let mut peek_buf = [0u8; 1];
-        stream
-            .set_nonblocking(true)
-            .map_err(|e| e.to_string())?;
-        match std::io::Read::read(&mut reader, &mut peek_buf) {
-            Ok(0) => break,
-            Ok(_) => {
-                // Read the rest of the line.
-                let mut rest = String::new();
-                stream
-                    .set_nonblocking(false)
-                    .map_err(|e| e.to_string())?;
-                reader
-                    .read_line(&mut rest)
-                    .map_err(|e| format!("SMTP read error: {e}"))?;
-            }
-            Err(_) => {
-                stream
-                    .set_nonblocking(false)
-                    .map_err(|e| e.to_string())?;
-                break;
-            }
-        }
-    }
-    stream
-        .set_nonblocking(false)
-        .map_err(|e| e.to_string())?;
 
     // MAIL FROM
     let _mail = send_cmd(

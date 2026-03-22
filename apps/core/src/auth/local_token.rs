@@ -48,6 +48,8 @@ pub(crate) struct TokenState {
     pub(crate) passphrase_hash: Option<String>,
     /// All stored tokens keyed by token ID.
     pub(crate) tokens: HashMap<String, StoredToken>,
+    /// Reverse index: SHA-256 token hash -> token ID for O(1) lookup.
+    pub(crate) hash_index: HashMap<String, String>,
 }
 
 /// Local token authentication provider.
@@ -137,10 +139,17 @@ impl LocalTokenProvider {
             tokens
         };
 
+        // Build the reverse hash_index from loaded tokens.
+        let hash_index: HashMap<String, String> = tokens
+            .values()
+            .map(|t| (t.token_hash.clone(), t.id.clone()))
+            .collect();
+
         Ok(Self {
             state: Arc::new(RwLock::new(TokenState {
                 passphrase_hash,
                 tokens,
+                hash_index,
             })),
             db: Arc::new(tokio::sync::Mutex::new(conn)),
         })
@@ -210,10 +219,13 @@ impl AuthProvider for LocalTokenProvider {
         let token_hash = Self::hash_token(token);
         let state = self.state.read().await;
 
+        let token_id = state
+            .hash_index
+            .get(&token_hash)
+            .ok_or(AuthError::TokenNotFound)?;
         let stored = state
             .tokens
-            .values()
-            .find(|t| t.token_hash == token_hash)
+            .get(token_id)
             .ok_or(AuthError::TokenNotFound)?;
 
         if Utc::now() >= stored.expires_at {
@@ -279,10 +291,11 @@ impl AuthProvider for LocalTokenProvider {
 
         let stored = StoredToken {
             id: token_id.clone(),
-            token_hash,
+            token_hash: token_hash.clone(),
             created_at: now,
             expires_at,
         };
+        state.hash_index.insert(token_hash, token_id.clone());
         state.tokens.insert(token_id.clone(), stored);
 
         tracing::info!(token_id = %token_id, "token generated");
@@ -296,9 +309,9 @@ impl AuthProvider for LocalTokenProvider {
 
     async fn revoke_token(&self, token_id: &str) -> Result<(), AuthError> {
         let mut state = self.state.write().await;
-        if state.tokens.remove(token_id).is_none() {
-            return Err(AuthError::TokenNotFound);
-        }
+        let removed = state.tokens.remove(token_id)
+            .ok_or(AuthError::TokenNotFound)?;
+        state.hash_index.remove(&removed.token_hash);
 
         // Remove from SQLite.
         {

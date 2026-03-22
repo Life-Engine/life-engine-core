@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// Configuration for the backup plugin.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct BackupConfig {
     /// The passphrase used to derive the encryption key.
     /// Same derivation as SQLCipher (Argon2id).
@@ -24,6 +24,18 @@ pub struct BackupConfig {
     /// Argon2 settings for key derivation.
     #[serde(default)]
     pub argon2: Argon2Params,
+}
+
+impl std::fmt::Debug for BackupConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BackupConfig")
+            .field("passphrase", &"[REDACTED]")
+            .field("target", &self.target)
+            .field("schedule", &self.schedule)
+            .field("retention", &self.retention)
+            .field("argon2", &self.argon2)
+            .finish()
+    }
 }
 
 /// Argon2 parameters for backup encryption key derivation.
@@ -55,7 +67,7 @@ impl Default for Argon2Params {
 }
 
 /// The backup storage target.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum BackupTarget {
     /// Local filesystem directory.
@@ -87,6 +99,37 @@ pub enum BackupTarget {
         /// Password for authentication.
         password: String,
     },
+}
+
+impl std::fmt::Debug for BackupTarget {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Local { path } => f.debug_struct("Local").field("path", path).finish(),
+            Self::S3 {
+                endpoint,
+                region,
+                bucket,
+                prefix,
+                ..
+            } => f
+                .debug_struct("S3")
+                .field("endpoint", endpoint)
+                .field("region", region)
+                .field("bucket", bucket)
+                .field("access_key_id", &"[REDACTED]")
+                .field("secret_access_key", &"[REDACTED]")
+                .field("prefix", prefix)
+                .finish(),
+            Self::WebDav {
+                url, username, ..
+            } => f
+                .debug_struct("WebDav")
+                .field("url", url)
+                .field("username", username)
+                .field("password", &"[REDACTED]")
+                .finish(),
+        }
+    }
 }
 
 /// Backup schedule configuration.

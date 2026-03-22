@@ -138,8 +138,21 @@ pub async fn resolve_conflict(
     };
 
     if store.resolve(&id, resolution) {
-        let conflict = store.get(&id).expect("just resolved");
-        (StatusCode::OK, Json(json!({ "data": conflict }))).into_response()
+        match store.get(&id) {
+            Some(conflict) => {
+                (StatusCode::OK, Json(json!({ "data": conflict }))).into_response()
+            }
+            None => {
+                tracing::error!(conflict_id = %id, "conflict disappeared after resolve (race condition)");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({
+                        "error": { "code": "SYSTEM_INTERNAL_ERROR", "message": "internal server error" }
+                    })),
+                )
+                    .into_response()
+            }
+        }
     } else {
         (
             StatusCode::NOT_FOUND,

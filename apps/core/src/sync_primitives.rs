@@ -101,7 +101,7 @@ pub async fn apply_change(
         ChangeOperation::Create => {
             if let Some(ref data) = change.data {
                 storage
-                    .create(namespace, &change.collection, data.clone())
+                    .create_with_id(namespace, &change.collection, &change.id, data.clone())
                     .await?;
             }
         }
@@ -123,9 +123,10 @@ pub async fn apply_change(
                         // else: local version is newer, skip (last-write-wins).
                     }
                     None => {
-                        // Record doesn't exist locally, create it.
+                        // Record doesn't exist locally, create it preserving
+                        // the federated ID.
                         storage
-                            .create(namespace, &change.collection, data.clone())
+                            .create_with_id(namespace, &change.collection, &change.id, data.clone())
                             .await?;
                     }
                 }
@@ -199,9 +200,19 @@ mod tests {
             data: serde_json::Value,
         ) -> anyhow::Result<Record> {
             let id = uuid::Uuid::new_v4().to_string();
+            self.create_with_id(plugin_id, collection, &id, data).await
+        }
+
+        async fn create_with_id(
+            &self,
+            plugin_id: &str,
+            collection: &str,
+            id: &str,
+            data: serde_json::Value,
+        ) -> anyhow::Result<Record> {
             let now = Utc::now();
             let record = Record {
-                id: id.clone(),
+                id: id.to_string(),
                 plugin_id: plugin_id.into(),
                 collection: collection.into(),
                 data,
@@ -211,7 +222,7 @@ mod tests {
                 created_at: now,
                 updated_at: now,
             };
-            let key = Self::make_key(plugin_id, collection, &id);
+            let key = Self::make_key(plugin_id, collection, id);
             self.records.lock().unwrap().insert(key, record.clone());
             Ok(record)
         }
@@ -223,14 +234,15 @@ mod tests {
             id: &str,
             data: serde_json::Value,
             version: i64,
-        ) -> anyhow::Result<Record> {
+        ) -> Result<Record, crate::storage::StorageError> {
+            use crate::storage::StorageError;
             let key = Self::make_key(plugin_id, collection, id);
             let mut records = self.records.lock().unwrap();
             let record = records
                 .get(&key)
-                .ok_or_else(|| anyhow::anyhow!("not found"))?;
+                .ok_or(StorageError::NotFound)?;
             if record.version != version {
-                return Err(anyhow::anyhow!("version mismatch"));
+                return Err(StorageError::VersionMismatch);
             }
             let updated = Record {
                 data,
@@ -317,6 +329,8 @@ mod tests {
         let records = storage.records_in_collection("sync:peer-a", "events");
         assert_eq!(records.len(), 1);
         assert_eq!(records[0].data, json!({"title": "Birthday"}));
+        // Federated ID must be preserved (F-062).
+        assert_eq!(records[0].id, "rec-1");
     }
 
     #[tokio::test]

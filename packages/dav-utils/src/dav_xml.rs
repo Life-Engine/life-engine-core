@@ -63,11 +63,63 @@ pub fn write_response_entry(xml: &mut String, entry: &DavResourceEntry) {
     xml.push_str("  </D:response>\r\n");
 }
 
+/// Validate that an XML namespace declaration string contains only valid
+/// `xmlns:PREFIX="URI"` entries.
+///
+/// Returns `true` if the string is empty or all whitespace-separated tokens
+/// match the expected pattern. Returns `false` if any token is malformed.
+fn validate_namespace_declarations(ns: &str) -> bool {
+    let trimmed = ns.trim();
+    if trimmed.is_empty() {
+        return true;
+    }
+
+    // Split on whitespace; each token should be xmlns:PREFIX="URI"
+    for token in trimmed.split_whitespace() {
+        if !token.starts_with("xmlns:") {
+            return false;
+        }
+        let after_xmlns = &token["xmlns:".len()..];
+        let Some((prefix, uri)) = after_xmlns.split_once('=') else {
+            return false;
+        };
+
+        // Prefix must be non-empty and contain only valid XML NCName characters
+        // (simplified: alphanumeric, hyphen, underscore, period)
+        if prefix.is_empty()
+            || !prefix
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
+        {
+            return false;
+        }
+
+        // URI must be quoted
+        if !(uri.starts_with('"') && uri.ends_with('"') && uri.len() >= 2) {
+            return false;
+        }
+    }
+
+    true
+}
+
 /// Start a multi-status XML document with the given namespace declarations.
+///
+/// `extra_namespaces` must contain only valid `xmlns:PREFIX="URI"` entries
+/// (space-separated). Invalid declarations are silently dropped with a
+/// debug-level log to prevent malformed XML output.
 pub fn open_multistatus(xml: &mut String, extra_namespaces: &str) {
     xml.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\r\n");
+
+    let ns = if validate_namespace_declarations(extra_namespaces) {
+        extra_namespaces.to_string()
+    } else {
+        // Drop invalid namespace declarations to prevent malformed XML.
+        String::new()
+    };
+
     xml.push_str(&format!(
-        "<D:multistatus xmlns:D=\"DAV:\"{extra_namespaces}>\r\n"
+        "<D:multistatus xmlns:D=\"DAV:\"{ns}>\r\n"
     ));
 }
 
@@ -156,5 +208,54 @@ mod tests {
         assert!(xml.contains("/resource/1"));
         assert!(xml.contains("/resource/2"));
         assert!(xml.contains("</D:multistatus>"));
+    }
+
+    // --- validate_namespace_declarations ---
+
+    #[test]
+    fn validate_ns_empty_string() {
+        assert!(validate_namespace_declarations(""));
+        assert!(validate_namespace_declarations("   "));
+    }
+
+    #[test]
+    fn validate_ns_valid_single() {
+        assert!(validate_namespace_declarations("xmlns:C=\"urn:ietf:params:xml:ns:caldav\""));
+    }
+
+    #[test]
+    fn validate_ns_valid_multiple() {
+        assert!(validate_namespace_declarations(
+            "xmlns:C=\"urn:ietf:params:xml:ns:caldav\" xmlns:CR=\"urn:ietf:params:xml:ns:carddav\""
+        ));
+    }
+
+    #[test]
+    fn validate_ns_rejects_non_xmlns() {
+        assert!(!validate_namespace_declarations("foo=\"bar\""));
+    }
+
+    #[test]
+    fn validate_ns_rejects_missing_uri() {
+        assert!(!validate_namespace_declarations("xmlns:C"));
+    }
+
+    #[test]
+    fn validate_ns_rejects_unquoted_uri() {
+        assert!(!validate_namespace_declarations("xmlns:C=urn:foo"));
+    }
+
+    #[test]
+    fn validate_ns_rejects_empty_prefix() {
+        assert!(!validate_namespace_declarations("xmlns:=\"urn:foo\""));
+    }
+
+    #[test]
+    fn open_multistatus_drops_invalid_ns() {
+        let mut xml = String::new();
+        open_multistatus(&mut xml, "INVALID_NAMESPACE");
+        // Invalid namespace should be dropped; only DAV: namespace remains
+        assert!(xml.contains("xmlns:D=\"DAV:\""));
+        assert!(!xml.contains("INVALID_NAMESPACE"));
     }
 }

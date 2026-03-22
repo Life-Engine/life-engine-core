@@ -186,11 +186,15 @@ impl HostResponse {
 ///
 /// Each `WasmHostBridge` is scoped to a single plugin and enforces
 /// capability checks, collection scoping, and rate limits.
+/// Maximum length of a single plugin log message (characters).
+const MAX_LOG_MESSAGE_LEN: usize = 1_000;
+
 pub struct WasmHostBridge {
     config: WasmPluginConfig,
     storage: Arc<dyn StorageAdapter>,
     message_bus: Arc<MessageBus>,
     rate_limiter: Mutex<RateLimitState>,
+    http_client: reqwest::Client,
 }
 
 impl WasmHostBridge {
@@ -200,11 +204,13 @@ impl WasmHostBridge {
         message_bus: Arc<MessageBus>,
     ) -> Self {
         let rate_limiter = Mutex::new(RateLimitState::new(config.rate_limit_per_second));
+        let http_client = reqwest::Client::new();
         Self {
             config,
             storage,
             message_bus,
             rate_limiter,
+            http_client,
         }
     }
 
@@ -416,11 +422,18 @@ impl WasmHostBridge {
             return HostResponse::err("capability not granted: Logging");
         }
 
+        // Truncate oversized plugin log messages to prevent log flooding.
+        let msg = if message.len() > MAX_LOG_MESSAGE_LEN {
+            &message[..MAX_LOG_MESSAGE_LEN]
+        } else {
+            message
+        };
+
         match level {
-            "info" => tracing::info!(plugin_id = %self.config.plugin_id, "{}", message),
-            "warn" => tracing::warn!(plugin_id = %self.config.plugin_id, "{}", message),
-            "error" => tracing::error!(plugin_id = %self.config.plugin_id, "{}", message),
-            _ => tracing::info!(plugin_id = %self.config.plugin_id, "{}", message),
+            "info" => tracing::info!(plugin_id = %self.config.plugin_id, "{}", msg),
+            "warn" => tracing::warn!(plugin_id = %self.config.plugin_id, "{}", msg),
+            "error" => tracing::error!(plugin_id = %self.config.plugin_id, "{}", msg),
+            _ => tracing::info!(plugin_id = %self.config.plugin_id, "{}", msg),
         }
 
         HostResponse::ok(serde_json::json!({ "logged": true }))
@@ -463,8 +476,8 @@ impl WasmHostBridge {
             return HostResponse::err(format!("invalid URL: {}", url));
         }
 
-        // Execute the HTTP request
-        let client = reqwest::Client::new();
+        // Execute the HTTP request using the shared client (avoids per-request connection churn).
+        let client = &self.http_client;
         let mut req = match method.to_uppercase().as_str() {
             "GET" => client.get(url),
             "POST" => client.post(url),
@@ -564,143 +577,9 @@ impl WasmRuntime {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::{
-        Pagination, QueryFilters, QueryResult, Record, SortOptions, StorageAdapter,
-    };
-    use async_trait::async_trait;
-    use chrono::Utc;
+    use crate::storage::{QueryResult, Record};
+    use crate::test_helpers::MockStorage;
     use serde_json::json;
-    use std::collections::HashMap;
-    use std::sync::Mutex as StdMutex;
-
-    /// In-memory mock storage for WASM runtime tests.
-    struct MockStorage {
-        records: StdMutex<HashMap<String, Record>>,
-    }
-
-    impl MockStorage {
-        fn new() -> Self {
-            Self {
-                records: StdMutex::new(HashMap::new()),
-            }
-        }
-
-        fn key(plugin_id: &str, collection: &str, id: &str) -> String {
-            format!("{plugin_id}:{collection}:{id}")
-        }
-    }
-
-    #[async_trait]
-    impl StorageAdapter for MockStorage {
-        async fn get(
-            &self,
-            plugin_id: &str,
-            collection: &str,
-            id: &str,
-        ) -> Result<Option<Record>> {
-            let key = Self::key(plugin_id, collection, id);
-            Ok(self.records.lock().unwrap().get(&key).cloned())
-        }
-
-        async fn create(
-            &self,
-            plugin_id: &str,
-            collection: &str,
-            data: serde_json::Value,
-        ) -> Result<Record> {
-            let id = uuid::Uuid::new_v4().to_string();
-            let now = Utc::now();
-            let record = Record {
-                id: id.clone(),
-                plugin_id: plugin_id.into(),
-                collection: collection.into(),
-                data,
-                version: 1,
-                user_id: None,
-                household_id: None,
-                created_at: now,
-                updated_at: now,
-            };
-            let key = Self::key(plugin_id, collection, &id);
-            self.records.lock().unwrap().insert(key, record.clone());
-            Ok(record)
-        }
-
-        async fn update(
-            &self,
-            plugin_id: &str,
-            collection: &str,
-            id: &str,
-            data: serde_json::Value,
-            version: i64,
-        ) -> Result<Record> {
-            let key = Self::key(plugin_id, collection, id);
-            let mut records = self.records.lock().unwrap();
-            let record = records
-                .get(&key)
-                .ok_or_else(|| anyhow::anyhow!("not found"))?;
-            if record.version != version {
-                return Err(anyhow::anyhow!("version mismatch"));
-            }
-            let updated = Record {
-                data,
-                version: version + 1,
-                updated_at: Utc::now(),
-                ..record.clone()
-            };
-            records.insert(key, updated.clone());
-            Ok(updated)
-        }
-
-        async fn query(
-            &self,
-            plugin_id: &str,
-            collection: &str,
-            _filters: QueryFilters,
-            _sort: Option<SortOptions>,
-            pagination: Pagination,
-        ) -> Result<QueryResult> {
-            let records = self.records.lock().unwrap();
-            let matching: Vec<Record> = records
-                .values()
-                .filter(|r| r.plugin_id == plugin_id && r.collection == collection)
-                .cloned()
-                .collect();
-            let total = matching.len() as u64;
-            let paged = matching
-                .into_iter()
-                .skip(pagination.offset as usize)
-                .take(pagination.limit as usize)
-                .collect();
-            Ok(QueryResult {
-                records: paged,
-                total,
-                limit: pagination.limit,
-                offset: pagination.offset,
-            })
-        }
-
-        async fn delete(
-            &self,
-            plugin_id: &str,
-            collection: &str,
-            id: &str,
-        ) -> Result<bool> {
-            let key = Self::key(plugin_id, collection, id);
-            Ok(self.records.lock().unwrap().remove(&key).is_some())
-        }
-
-        async fn list(
-            &self,
-            plugin_id: &str,
-            collection: &str,
-            sort: Option<SortOptions>,
-            pagination: Pagination,
-        ) -> Result<QueryResult> {
-            self.query(plugin_id, collection, QueryFilters::default(), sort, pagination)
-                .await
-        }
-    }
 
     fn make_bridge(capabilities: HashSet<Capability>, collections: Vec<&str>) -> WasmHostBridge {
         let storage = Arc::new(MockStorage::new());

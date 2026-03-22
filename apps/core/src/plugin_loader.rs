@@ -141,7 +141,7 @@ fn is_valid_semver(version: &str) -> bool {
 
 /// Manages the lifecycle of `CorePlugin` instances.
 pub struct PluginLoader {
-    plugins: HashMap<String, Box<dyn CorePlugin>>,
+    plugins: HashMap<String, Arc<dyn CorePlugin>>,
     statuses: HashMap<String, PluginInfo>,
     /// Optional schema registry for registering plugin-declared collections.
     schema_registry: Option<Arc<SchemaRegistry>>,
@@ -245,7 +245,7 @@ impl PluginLoader {
 
         info!(plugin_id = %id, "plugin registered");
         self.statuses.insert(id.clone(), info);
-        self.plugins.insert(id, plugin);
+        self.plugins.insert(id, Arc::from(plugin));
         Ok(())
     }
 
@@ -269,11 +269,6 @@ impl PluginLoader {
     /// After calling `on_load`, queries the plugin for private collection
     /// schemas and registers each one in the schema registry (if present).
     async fn load_plugin(&mut self, id: &str) -> anyhow::Result<()> {
-        let plugin = self
-            .plugins
-            .get_mut(id)
-            .ok_or_else(|| anyhow::anyhow!("plugin '{id}' not found"))?;
-
         let ctx = match &self.credential_store {
             Some(store) => {
                 let bridge = PluginCredentialBridge::new(Arc::clone(store), id.to_string());
@@ -281,7 +276,19 @@ impl PluginLoader {
             }
             None => PluginContext::new(id),
         };
-        match plugin.on_load(&ctx).await {
+
+        // Obtain exclusive access to the plugin for on_load (requires &mut self).
+        let plugin_arc = self
+            .plugins
+            .get_mut(id)
+            .ok_or_else(|| anyhow::anyhow!("plugin '{id}' not found"))?;
+
+        let plugin_mut = Arc::get_mut(plugin_arc)
+            .ok_or_else(|| anyhow::anyhow!("plugin '{id}' has outstanding references, cannot load"))?;
+
+        let load_result = plugin_mut.on_load(&ctx).await;
+
+        match load_result {
             Ok(()) => {
                 info!(plugin_id = %id, "plugin loaded");
                 if let Some(info) = self.statuses.get_mut(id) {
@@ -290,6 +297,7 @@ impl PluginLoader {
 
                 // Register plugin-declared collection schemas.
                 if let Some(ref registry) = self.schema_registry {
+                    let plugin = self.plugins.get(id).expect("plugin just loaded");
                     let collections = plugin.collections();
                     for col in &collections {
                         if let Err(e) =
@@ -331,8 +339,15 @@ impl PluginLoader {
 
     /// Unload a single plugin by ID.
     async fn unload_plugin(&mut self, id: &str) {
-        if let Some(plugin) = self.plugins.get_mut(id) {
-            match plugin.on_unload().await {
+        if let Some(plugin_arc) = self.plugins.get_mut(id) {
+            let unload_result = match Arc::get_mut(plugin_arc) {
+                Some(plugin_mut) => plugin_mut.on_unload().await,
+                None => {
+                    warn!(plugin_id = %id, "plugin has outstanding references, skipping unload");
+                    return;
+                }
+            };
+            match unload_result {
                 Ok(()) => {
                     info!(plugin_id = %id, "plugin unloaded");
                     if let Some(info) = self.statuses.get_mut(id) {
@@ -409,6 +424,19 @@ impl PluginLoader {
             return None;
         }
         self.plugins.get(id).map(|p| p.as_ref())
+    }
+
+    /// Returns an `Arc` handle to a loaded plugin by ID.
+    ///
+    /// The caller can clone this `Arc` and use the plugin after the
+    /// `PluginLoader` lock is dropped, which is important for avoiding
+    /// holding the mutex during IO-heavy operations like `handle_route`.
+    pub fn get_plugin_arc(&self, id: &str) -> Option<Arc<dyn CorePlugin>> {
+        let info = self.statuses.get(id)?;
+        if info.status != PluginStatus::Loaded {
+            return None;
+        }
+        self.plugins.get(id).cloned()
     }
 }
 

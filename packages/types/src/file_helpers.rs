@@ -4,7 +4,8 @@
 //! `SystemTime` to `DateTime<Utc>` conversion. These utilities are
 //! designed to be reused by all connectors that work with files.
 
-use std::fs;
+use std::fs::File;
+use std::io::{BufReader, Read};
 use std::path::Path;
 use std::time::SystemTime;
 
@@ -36,12 +37,13 @@ pub fn detect_mime_type(path: &Path) -> String {
 
 /// Compute the SHA-256 checksum of a file's contents.
 ///
-/// Reads the entire file into memory and returns the hash in the format
-/// `sha256:{hex_digest}`. Returns an error if the file cannot be read.
+/// Streams the file in 8 KB chunks via `BufReader` to avoid loading the
+/// entire file into memory. Returns the hash in the format
+/// `sha256:{hex_digest}`.
 ///
 /// # Errors
 ///
-/// Returns `anyhow::Error` if the file at `path` cannot be read.
+/// Returns `anyhow::Error` if the file at `path` cannot be opened or read.
 ///
 /// # Examples
 ///
@@ -53,10 +55,20 @@ pub fn detect_mime_type(path: &Path) -> String {
 /// assert!(checksum.starts_with("sha256:"));
 /// ```
 pub fn compute_sha256(path: &Path) -> Result<String> {
-    let data = fs::read(path)
-        .with_context(|| format!("failed to read file for checksum: {}", path.display()))?;
+    let file = File::open(path)
+        .with_context(|| format!("failed to open file for checksum: {}", path.display()))?;
+    let mut reader = BufReader::new(file);
     let mut hasher = Sha256::new();
-    hasher.update(&data);
+    let mut buf = [0u8; 8192];
+    loop {
+        let bytes_read = reader
+            .read(&mut buf)
+            .with_context(|| format!("failed to read file for checksum: {}", path.display()))?;
+        if bytes_read == 0 {
+            break;
+        }
+        hasher.update(&buf[..bytes_read]);
+    }
     let hash = hasher.finalize();
     Ok(format!("sha256:{}", hex::encode(hash)))
 }
@@ -87,6 +99,7 @@ pub fn system_time_to_datetime(time: SystemTime) -> DateTime<Utc> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
     use std::time::{Duration, UNIX_EPOCH};
     use tempfile::TempDir;
 

@@ -5,7 +5,7 @@
 
 use crate::message_bus::BusEvent;
 use crate::routes::health::AppState;
-use crate::storage::{Pagination, QueryFilters, SortDirection, SortOptions, StorageAdapter};
+use crate::storage::{Pagination, QueryFilters, SortDirection, SortOptions, StorageAdapter, StorageError};
 
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
@@ -186,8 +186,13 @@ pub async fn create_record(
         }
     };
 
-    // Inject user/household context into the record data if available.
+    // Strip any client-supplied _user_id / _household_id to prevent
+    // identity spoofing, then inject from the authenticated identity.
     let mut record_data = body;
+    if let Some(obj) = record_data.as_object_mut() {
+        obj.remove("_user_id");
+        obj.remove("_household_id");
+    }
     if let Some(axum::Extension(ref id)) = identity {
         if let Some(ref uid) = id.user_id {
             if let Some(obj) = record_data.as_object_mut() {
@@ -253,8 +258,15 @@ pub async fn update_record(
         }
     };
 
+    // Strip client-supplied _user_id / _household_id to prevent identity spoofing.
+    let mut update_data = body.data;
+    if let Some(obj) = update_data.as_object_mut() {
+        obj.remove("_user_id");
+        obj.remove("_household_id");
+    }
+
     match storage
-        .update(CORE_PLUGIN_ID, &collection, &id, body.data, body.version)
+        .update(CORE_PLUGIN_ID, &collection, &id, update_data, body.version)
         .await
     {
         Ok(record) => {
@@ -271,34 +283,33 @@ pub async fn update_record(
 
             (StatusCode::OK, Json(json!({ "data": record }))).into_response()
         }
+        Err(StorageError::VersionMismatch) => {
+            (
+                StatusCode::CONFLICT,
+                Json(json!({
+                    "error": { "code": "DATA_VERSION_CONFLICT", "message": "version conflict: record was modified by another request" }
+                })),
+            )
+                .into_response()
+        }
+        Err(StorageError::NotFound) => {
+            (
+                StatusCode::NOT_FOUND,
+                Json(json!({
+                    "error": { "code": "DATA_NOT_FOUND", "message": format!("record '{id}' not found in '{collection}'") }
+                })),
+            )
+                .into_response()
+        }
         Err(e) => {
-            let msg = e.to_string();
-            if msg.contains("version mismatch") {
-                (
-                    StatusCode::CONFLICT,
-                    Json(json!({
-                        "error": { "code": "DATA_VERSION_CONFLICT", "message": "version conflict: record was modified by another request" }
-                    })),
-                )
-                    .into_response()
-            } else if msg.contains("not found") {
-                (
-                    StatusCode::NOT_FOUND,
-                    Json(json!({
-                        "error": { "code": "DATA_NOT_FOUND", "message": format!("record '{id}' not found in '{collection}'") }
-                    })),
-                )
-                    .into_response()
-            } else {
-                tracing::error!(error = %e, "update record failed");
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({
-                        "error": { "code": "SYSTEM_INTERNAL_ERROR", "message": "failed to update record" }
-                    })),
-                )
-                    .into_response()
-            }
+            tracing::error!(error = %e, "update record failed");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "error": { "code": "SYSTEM_INTERNAL_ERROR", "message": "failed to update record" }
+                })),
+            )
+                .into_response()
         }
     }
 }

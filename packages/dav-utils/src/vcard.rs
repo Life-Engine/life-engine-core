@@ -23,6 +23,8 @@ pub fn escape_value(s: &str) -> String {
 /// Handles `PROP;PARAM1=val1;PARAM2:value` format.
 /// Returns `None` if the line has no colon separator.
 pub fn parse_property_line(line: &str) -> Option<(&str, Vec<(&str, &str)>, &str)> {
+    // Strip trailing CR for lines that still have CRLF endings (RFC 6350).
+    let line = line.strip_suffix('\r').unwrap_or(line);
     let (prop_with_params, value) = line.split_once(':')?;
 
     let mut parts = prop_with_params.split(';');
@@ -164,5 +166,15 @@ mod tests {
     fn extract_type_no_type_param() {
         let params: Vec<(&str, &str)> = vec![("VALUE", "uri")];
         assert_eq!(extract_type(&params), None);
+    }
+
+    // --- F-069: CRLF handling in parse_property_line ---
+
+    #[test]
+    fn parse_property_line_strips_trailing_cr() {
+        let (name, params, value) = parse_property_line("FN:Jane Doe\r").unwrap();
+        assert_eq!(name, "FN");
+        assert!(params.is_empty());
+        assert_eq!(value, "Jane Doe");
     }
 }

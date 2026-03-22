@@ -58,6 +58,9 @@ struct RegisterFinishRequest {
     challenge_id: String,
     /// The browser's `PublicKeyCredential` response from `navigator.credentials.create()`.
     response: RegisterPublicKeyCredential,
+    /// A user-friendly label for this passkey (e.g. "MacBook Pro Touch ID").
+    /// If omitted, defaults to "Passkey".
+    label: Option<String>,
 }
 
 /// Request body for `POST /api/auth/webauthn/authenticate/start`.
@@ -577,9 +580,14 @@ pub async fn webauthn_register_start(
         }
     };
 
-    let user_id = &identity.token_id;
+    // Use the stable OIDC user_id (sub claim) so passkeys work across sessions.
+    // Fall back to token_id only if no OIDC user_id is available.
+    let user_id = identity
+        .user_id
+        .as_deref()
+        .unwrap_or(&identity.token_id);
     let user_name = if req.label.is_empty() {
-        user_id.as_str()
+        user_id
     } else {
         &req.label
     };
@@ -647,10 +655,20 @@ pub async fn webauthn_register_finish(
         }
     };
 
-    let user_id = &identity.token_id;
+    // Use the stable OIDC user_id (sub claim) so passkeys work across sessions.
+    let user_id = identity
+        .user_id
+        .as_deref()
+        .unwrap_or(&identity.token_id);
+    // Preserve the user-provided label; default to "Passkey" if not supplied.
+    let label = req
+        .label
+        .as_deref()
+        .filter(|l| !l.is_empty())
+        .unwrap_or("Passkey");
 
     match wn
-        .finish_registration(&req.challenge_id, user_id, user_id, &req.response)
+        .finish_registration(&req.challenge_id, user_id, label, &req.response)
         .await
     {
         Ok(stored) => {
@@ -791,7 +809,13 @@ pub async fn webauthn_list_passkeys(
         Err(resp) => return resp,
     };
 
-    match wn.list_passkeys(&identity.token_id).await {
+    // Use the stable OIDC user_id so passkeys are consistent across sessions.
+    let user_id = identity
+        .user_id
+        .as_deref()
+        .unwrap_or(&identity.token_id);
+
+    match wn.list_passkeys(user_id).await {
         Ok(passkeys) => {
             let infos: Vec<PasskeyInfo> = passkeys
                 .into_iter()
@@ -826,13 +850,16 @@ pub async fn webauthn_delete_passkey(
     Path(passkey_id): Path<String>,
     request: axum::extract::Request,
 ) -> axum::response::Response {
-    if request.extensions().get::<AuthIdentity>().is_none() {
-        return (
-            StatusCode::UNAUTHORIZED,
-            Json(json!({"error": "AUTH_MISSING_TOKEN"})),
-        )
-            .into_response();
-    }
+    let identity = match request.extensions().get::<AuthIdentity>() {
+        Some(id) => id.clone(),
+        None => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({"error": "AUTH_MISSING_TOKEN"})),
+            )
+                .into_response();
+        }
+    };
 
     let wn = match require_webauthn(&state) {
         Ok(wn) => wn,
@@ -849,6 +876,31 @@ pub async fn webauthn_delete_passkey(
                 .into_response();
         }
     };
+
+    // Verify the passkey belongs to the authenticated user (prevents IDOR).
+    let user_id = identity
+        .user_id
+        .as_deref()
+        .unwrap_or(&identity.token_id);
+    match wn.list_passkeys(user_id).await {
+        Ok(passkeys) => {
+            if !passkeys.iter().any(|pk| pk.id == pk_uuid) {
+                return (
+                    StatusCode::NOT_FOUND,
+                    Json(json!({"error": "WEBAUTHN_NO_CREDENTIALS"})),
+                )
+                    .into_response();
+            }
+        }
+        Err(e) => {
+            tracing::error!(error = %e, "webauthn list passkeys for ownership check failed");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "WEBAUTHN_INTERNAL_ERROR"})),
+            )
+                .into_response();
+        }
+    }
 
     match wn.remove_passkey(&pk_uuid).await {
         Ok(()) => (StatusCode::OK, Json(json!({"status": "deleted"}))).into_response(),

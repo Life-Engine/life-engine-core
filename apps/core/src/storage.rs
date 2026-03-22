@@ -7,6 +7,23 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use thiserror::Error;
+
+/// Typed errors for storage operations, replacing brittle string matching.
+#[derive(Debug, Error)]
+pub enum StorageError {
+    /// The record was not found.
+    #[error("record not found")]
+    NotFound,
+
+    /// Optimistic concurrency version mismatch.
+    #[error("version mismatch")]
+    VersionMismatch,
+
+    /// Any other storage error.
+    #[error("{0}")]
+    Other(#[from] anyhow::Error),
+}
 
 /// A stored record in the document model.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -181,8 +198,26 @@ pub trait StorageAdapter: Send + Sync {
         data: Value,
     ) -> anyhow::Result<Record>;
 
+    /// Create a record with a specific ID (used by federated sync to preserve
+    /// the originating hub's record ID). The default implementation ignores the
+    /// provided ID and falls back to `create`, which generates a new one.
+    /// Storage backends should override this to honour the supplied ID.
+    async fn create_with_id(
+        &self,
+        plugin_id: &str,
+        collection: &str,
+        id: &str,
+        data: Value,
+    ) -> anyhow::Result<Record> {
+        let _ = id;
+        self.create(plugin_id, collection, data).await
+    }
+
     /// Update an existing record by ID. Uses optimistic concurrency:
     /// the update succeeds only if the provided `version` matches.
+    ///
+    /// Returns `StorageError::NotFound` if the record does not exist,
+    /// or `StorageError::VersionMismatch` if the version does not match.
     async fn update(
         &self,
         plugin_id: &str,
@@ -190,7 +225,7 @@ pub trait StorageAdapter: Send + Sync {
         id: &str,
         data: Value,
         version: i64,
-    ) -> anyhow::Result<Record>;
+    ) -> Result<Record, StorageError>;
 
     /// Query records with filters, sorting, and pagination.
     async fn query(
@@ -223,144 +258,7 @@ pub trait StorageAdapter: Send + Sync {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
-    use std::sync::Mutex;
-
-    /// In-memory mock implementation for testing the trait contract.
-    struct MockStorage {
-        records: Mutex<HashMap<String, Record>>,
-    }
-
-    impl MockStorage {
-        fn new() -> Self {
-            Self {
-                records: Mutex::new(HashMap::new()),
-            }
-        }
-
-        fn make_key(plugin_id: &str, collection: &str, id: &str) -> String {
-            format!("{plugin_id}:{collection}:{id}")
-        }
-    }
-
-    #[async_trait]
-    impl StorageAdapter for MockStorage {
-        async fn get(
-            &self,
-            plugin_id: &str,
-            collection: &str,
-            id: &str,
-        ) -> anyhow::Result<Option<Record>> {
-            let key = Self::make_key(plugin_id, collection, id);
-            let records = self.records.lock().unwrap();
-            Ok(records.get(&key).cloned())
-        }
-
-        async fn create(
-            &self,
-            plugin_id: &str,
-            collection: &str,
-            data: Value,
-        ) -> anyhow::Result<Record> {
-            let id = uuid::Uuid::new_v4().to_string();
-            let now = Utc::now();
-            let record = Record {
-                id: id.clone(),
-                plugin_id: plugin_id.into(),
-                collection: collection.into(),
-                data,
-                version: 1,
-                user_id: None,
-                household_id: None,
-                created_at: now,
-                updated_at: now,
-            };
-            let key = Self::make_key(plugin_id, collection, &id);
-            self.records.lock().unwrap().insert(key, record.clone());
-            Ok(record)
-        }
-
-        async fn update(
-            &self,
-            plugin_id: &str,
-            collection: &str,
-            id: &str,
-            data: Value,
-            version: i64,
-        ) -> anyhow::Result<Record> {
-            let key = Self::make_key(plugin_id, collection, id);
-            let mut records = self.records.lock().unwrap();
-            let record = records
-                .get(&key)
-                .ok_or_else(|| anyhow::anyhow!("not found"))?;
-            if record.version != version {
-                return Err(anyhow::anyhow!("version mismatch"));
-            }
-            let updated = Record {
-                data,
-                version: version + 1,
-                updated_at: Utc::now(),
-                ..record.clone()
-            };
-            records.insert(key, updated.clone());
-            Ok(updated)
-        }
-
-        async fn query(
-            &self,
-            plugin_id: &str,
-            collection: &str,
-            _filters: QueryFilters,
-            _sort: Option<SortOptions>,
-            pagination: Pagination,
-        ) -> anyhow::Result<QueryResult> {
-            let records = self.records.lock().unwrap();
-            let matching: Vec<Record> = records
-                .values()
-                .filter(|r| r.plugin_id == plugin_id && r.collection == collection)
-                .cloned()
-                .collect();
-            let total = matching.len() as u64;
-            let paged = matching
-                .into_iter()
-                .skip(pagination.offset as usize)
-                .take(pagination.limit as usize)
-                .collect();
-            Ok(QueryResult {
-                records: paged,
-                total,
-                limit: pagination.limit,
-                offset: pagination.offset,
-            })
-        }
-
-        async fn delete(
-            &self,
-            plugin_id: &str,
-            collection: &str,
-            id: &str,
-        ) -> anyhow::Result<bool> {
-            let key = Self::make_key(plugin_id, collection, id);
-            Ok(self.records.lock().unwrap().remove(&key).is_some())
-        }
-
-        async fn list(
-            &self,
-            plugin_id: &str,
-            collection: &str,
-            _sort: Option<SortOptions>,
-            pagination: Pagination,
-        ) -> anyhow::Result<QueryResult> {
-            self.query(
-                plugin_id,
-                collection,
-                QueryFilters::default(),
-                None,
-                pagination,
-            )
-            .await
-        }
-    }
+    use crate::test_helpers::MockStorage;
 
     #[tokio::test]
     async fn create_and_get() {

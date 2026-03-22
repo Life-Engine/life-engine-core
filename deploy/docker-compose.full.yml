@@ -8,7 +8,7 @@ services:
     environment:
       LIFE_ENGINE_CORE_HOST: "0.0.0.0"
       LIFE_ENGINE_AUTH_PROVIDER: "oidc"
-      LIFE_ENGINE_OIDC_ISSUER_URL: "http://pocket-id:3751"
+      LIFE_ENGINE_OIDC_ISSUER_URL: "http://pocket-id:80"
       LIFE_ENGINE_OIDC_CLIENT_ID: "life-engine"
       LIFE_ENGINE_CORE_DATA_DIR: "/data"
     volumes:
@@ -24,7 +24,7 @@ services:
       retries: 3
 
   pocket-id:
-    image: stonith404/pocket-id:latest
+    image: ghcr.io/pocket-id/pocket-id:latest
     ports:
       - "3751:3751"
     environment:

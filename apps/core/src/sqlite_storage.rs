@@ -61,6 +61,18 @@ pub struct ChangeEvent {
 const CHANGE_CHANNEL_CAPACITY: usize = 256;
 
 /// SQLite-backed storage adapter.
+///
+/// # Concurrency (F-046)
+///
+/// A single `Mutex<Connection>` serialises all database access.  An `RwLock`
+/// cannot be used because `rusqlite::Connection` is `Send` but *not* `Sync`,
+/// so concurrent readers sharing `&Connection` would not compile.
+///
+/// If this becomes a bottleneck under concurrent load, consider:
+///
+/// - **Connection pooling** via `r2d2_sqlite` (multiple connections, each
+///   behind its own lock, with WAL mode enabling true concurrent reads).
+/// - **Sharding** hot read paths into a separate read-only `Connection`.
 pub struct SqliteStorage {
     conn: Arc<Mutex<Connection>>,
     change_tx: broadcast::Sender<ChangeEvent>,
@@ -97,6 +109,18 @@ impl SqliteStorage {
         argon2_settings: &crate::config::Argon2Settings,
     ) -> anyhow::Result<Self> {
         let hex_key = crate::rekey::derive_key(passphrase, argon2_settings)?;
+
+        // F-045: Validate that the derived key contains only hex characters
+        // before interpolating into the PRAGMA statement. This prevents any
+        // unexpected characters from breaking or hijacking the PRAGMA.
+        if hex_key.is_empty()
+            || !hex_key
+                .chars()
+                .all(|c| c.is_ascii_hexdigit())
+        {
+            anyhow::bail!("derived key contains non-hex characters");
+        }
+
         let conn = Connection::open(path)?;
 
         // PRAGMA key must be the very first statement after open.
@@ -218,6 +242,16 @@ impl StorageAdapter for SqliteStorage {
         data: Value,
     ) -> anyhow::Result<Record> {
         let id = uuid::Uuid::new_v4().to_string();
+        self.create_with_id(plugin_id, collection, &id, data).await
+    }
+
+    async fn create_with_id(
+        &self,
+        plugin_id: &str,
+        collection: &str,
+        id: &str,
+        data: Value,
+    ) -> anyhow::Result<Record> {
         let now = Utc::now();
         let now_str = now.to_rfc3339();
         let data_str = serde_json::to_string(&data)?;
@@ -245,12 +279,12 @@ impl StorageAdapter for SqliteStorage {
 
         self.publish(ChangeEvent {
             collection: collection.into(),
-            record_id: id.clone(),
+            record_id: id.to_string(),
             change_type: ChangeType::Created,
         });
 
         Ok(Record {
-            id,
+            id: id.to_string(),
             plugin_id: plugin_id.into(),
             collection: collection.into(),
             data,
@@ -269,10 +303,13 @@ impl StorageAdapter for SqliteStorage {
         id: &str,
         data: Value,
         version: i64,
-    ) -> anyhow::Result<Record> {
+    ) -> Result<Record, crate::storage::StorageError> {
+        use crate::storage::StorageError;
+
         let now = Utc::now();
         let now_str = now.to_rfc3339();
-        let data_str = serde_json::to_string(&data)?;
+        let data_str = serde_json::to_string(&data)
+            .map_err(|e| StorageError::Other(e.into()))?;
         let new_version = version + 1;
 
         let conn = self.conn.lock().await;
@@ -281,10 +318,23 @@ impl StorageAdapter for SqliteStorage {
              SET data = ?1, version = ?2, updated_at = ?3
              WHERE id = ?4 AND plugin_id = ?5 AND collection = ?6 AND version = ?7",
             params![data_str, new_version, now_str, id, plugin_id, collection, version],
-        )?;
+        ).map_err(|e| StorageError::Other(e.into()))?;
 
         if rows == 0 {
-            return Err(anyhow::anyhow!("version mismatch or record not found"));
+            // Distinguish between "not found" and "version mismatch" by
+            // checking whether the record exists at all.
+            let exists: bool = conn
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM plugin_data WHERE id = ?1 AND plugin_id = ?2 AND collection = ?3)",
+                    params![id, plugin_id, collection],
+                    |row| row.get(0),
+                )
+                .map_err(|e| StorageError::Other(e.into()))?;
+            return if exists {
+                Err(StorageError::VersionMismatch)
+            } else {
+                Err(StorageError::NotFound)
+            };
         }
 
         // Fetch created_at from the existing row.
@@ -292,7 +342,7 @@ impl StorageAdapter for SqliteStorage {
             "SELECT created_at FROM plugin_data WHERE id = ?1",
             params![id],
             |row| row.get(0),
-        )?;
+        ).map_err(|e| StorageError::Other(e.into()))?;
 
         AuditLogger::log_event(
             &conn,
@@ -303,7 +353,7 @@ impl StorageAdapter for SqliteStorage {
                 "record_id": id,
                 "new_version": new_version,
             })),
-        )?;
+        ).map_err(|e| StorageError::Other(e.into()))?;
 
         drop(conn);
 
@@ -321,7 +371,9 @@ impl StorageAdapter for SqliteStorage {
             version: new_version,
             user_id: None,
             household_id: None,
-            created_at: chrono::DateTime::parse_from_rfc3339(&created_at)?.with_timezone(&Utc),
+            created_at: chrono::DateTime::parse_from_rfc3339(&created_at)
+                .map_err(|e| StorageError::Other(e.into()))?
+                .with_timezone(&Utc),
             updated_at: now,
         })
     }

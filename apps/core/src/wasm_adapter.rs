@@ -67,20 +67,13 @@ impl WasmPluginAdapter {
         &self.bridge
     }
 
-    /// Store a record through the WASM bridge (validates capability enforcement).
-    pub async fn bridge_store_write(
-        &self,
-        collection: &str,
-        data: serde_json::Value,
-    ) -> Result<serde_json::Value> {
-        let resp = self
-            .bridge
-            .handle_request(HostRequest::StoreWrite {
-                collection: collection.to_string(),
-                data,
-            })
-            .await;
-
+    /// Send a `HostRequest` through the bridge and convert the response
+    /// to a `Result<serde_json::Value>`.
+    ///
+    /// All `bridge_store_*` and `bridge_event_*` methods delegate to this
+    /// to avoid repeating the success/error conversion boilerplate.
+    async fn bridge_call(&self, request: HostRequest) -> Result<serde_json::Value> {
+        let resp = self.bridge.handle_request(request).await;
         if resp.success {
             Ok(resp.data.unwrap_or(serde_json::Value::Null))
         } else {
@@ -88,6 +81,19 @@ impl WasmPluginAdapter {
                 resp.error.unwrap_or_else(|| "unknown error".into())
             ))
         }
+    }
+
+    /// Store a record through the WASM bridge (validates capability enforcement).
+    pub async fn bridge_store_write(
+        &self,
+        collection: &str,
+        data: serde_json::Value,
+    ) -> Result<serde_json::Value> {
+        self.bridge_call(HostRequest::StoreWrite {
+            collection: collection.to_string(),
+            data,
+        })
+        .await
     }
 
     /// Read a record through the WASM bridge (validates capability enforcement).
@@ -96,21 +102,11 @@ impl WasmPluginAdapter {
         collection: &str,
         id: &str,
     ) -> Result<serde_json::Value> {
-        let resp = self
-            .bridge
-            .handle_request(HostRequest::StoreRead {
-                collection: collection.to_string(),
-                id: id.to_string(),
-            })
-            .await;
-
-        if resp.success {
-            Ok(resp.data.unwrap_or(serde_json::Value::Null))
-        } else {
-            Err(anyhow::anyhow!(
-                resp.error.unwrap_or_else(|| "unknown error".into())
-            ))
-        }
+        self.bridge_call(HostRequest::StoreRead {
+            collection: collection.to_string(),
+            id: id.to_string(),
+        })
+        .await
     }
 
     /// Query records through the WASM bridge.
@@ -119,23 +115,13 @@ impl WasmPluginAdapter {
         collection: &str,
         limit: Option<u32>,
     ) -> Result<serde_json::Value> {
-        let resp = self
-            .bridge
-            .handle_request(HostRequest::StoreQuery {
-                collection: collection.to_string(),
-                filters: serde_json::json!({}),
-                limit,
-                offset: None,
-            })
-            .await;
-
-        if resp.success {
-            Ok(resp.data.unwrap_or(serde_json::Value::Null))
-        } else {
-            Err(anyhow::anyhow!(
-                resp.error.unwrap_or_else(|| "unknown error".into())
-            ))
-        }
+        self.bridge_call(HostRequest::StoreQuery {
+            collection: collection.to_string(),
+            filters: serde_json::json!({}),
+            limit,
+            offset: None,
+        })
+        .await
     }
 
     /// Delete a record through the WASM bridge.
@@ -144,21 +130,11 @@ impl WasmPluginAdapter {
         collection: &str,
         id: &str,
     ) -> Result<serde_json::Value> {
-        let resp = self
-            .bridge
-            .handle_request(HostRequest::StoreDelete {
-                collection: collection.to_string(),
-                id: id.to_string(),
-            })
-            .await;
-
-        if resp.success {
-            Ok(resp.data.unwrap_or(serde_json::Value::Null))
-        } else {
-            Err(anyhow::anyhow!(
-                resp.error.unwrap_or_else(|| "unknown error".into())
-            ))
-        }
+        self.bridge_call(HostRequest::StoreDelete {
+            collection: collection.to_string(),
+            id: id.to_string(),
+        })
+        .await
     }
 
     /// Emit an event through the WASM bridge.
@@ -167,21 +143,11 @@ impl WasmPluginAdapter {
         event_type: &str,
         payload: serde_json::Value,
     ) -> Result<serde_json::Value> {
-        let resp = self
-            .bridge
-            .handle_request(HostRequest::EventEmit {
-                event_type: event_type.to_string(),
-                payload,
-            })
-            .await;
-
-        if resp.success {
-            Ok(resp.data.unwrap_or(serde_json::Value::Null))
-        } else {
-            Err(anyhow::anyhow!(
-                resp.error.unwrap_or_else(|| "unknown error".into())
-            ))
-        }
+        self.bridge_call(HostRequest::EventEmit {
+            event_type: event_type.to_string(),
+            payload,
+        })
+        .await
     }
 
     /// Log through the WASM bridge.
@@ -198,14 +164,7 @@ impl WasmPluginAdapter {
             },
         };
 
-        let resp = self.bridge.handle_request(req).await;
-        if resp.success {
-            Ok(())
-        } else {
-            Err(anyhow::anyhow!(
-                resp.error.unwrap_or_else(|| "unknown error".into())
-            ))
-        }
+        self.bridge_call(req).await.map(|_| ())
     }
 }
 
@@ -252,148 +211,9 @@ impl CorePlugin for WasmPluginAdapter {
 mod tests {
     use super::*;
     use crate::message_bus::MessageBus;
-    use crate::storage::{
-        Pagination, QueryFilters, QueryResult, Record, SortOptions, StorageAdapter,
-    };
-    use chrono::Utc;
+    use crate::storage::{Record, StorageAdapter};
+    use crate::test_helpers::MockStorage;
     use serde_json::json;
-    use std::collections::HashMap;
-    use std::sync::Mutex;
-
-    /// In-memory mock storage.
-    struct MockStorage {
-        records: Mutex<HashMap<String, Record>>,
-    }
-
-    impl MockStorage {
-        fn new() -> Self {
-            Self {
-                records: Mutex::new(HashMap::new()),
-            }
-        }
-
-        fn key(plugin_id: &str, collection: &str, id: &str) -> String {
-            format!("{plugin_id}:{collection}:{id}")
-        }
-    }
-
-    #[async_trait]
-    impl StorageAdapter for MockStorage {
-        async fn get(
-            &self,
-            plugin_id: &str,
-            collection: &str,
-            id: &str,
-        ) -> Result<Option<Record>> {
-            let key = Self::key(plugin_id, collection, id);
-            Ok(self.records.lock().unwrap().get(&key).cloned())
-        }
-
-        async fn create(
-            &self,
-            plugin_id: &str,
-            collection: &str,
-            data: serde_json::Value,
-        ) -> Result<Record> {
-            let id = uuid::Uuid::new_v4().to_string();
-            let now = Utc::now();
-            let record = Record {
-                id: id.clone(),
-                plugin_id: plugin_id.into(),
-                collection: collection.into(),
-                data,
-                version: 1,
-                user_id: None,
-                household_id: None,
-                created_at: now,
-                updated_at: now,
-            };
-            let key = Self::key(plugin_id, collection, &id);
-            self.records.lock().unwrap().insert(key, record.clone());
-            Ok(record)
-        }
-
-        async fn update(
-            &self,
-            plugin_id: &str,
-            collection: &str,
-            id: &str,
-            data: serde_json::Value,
-            version: i64,
-        ) -> Result<Record> {
-            let key = Self::key(plugin_id, collection, id);
-            let mut records = self.records.lock().unwrap();
-            let record = records
-                .get(&key)
-                .ok_or_else(|| anyhow::anyhow!("not found"))?;
-            if record.version != version {
-                return Err(anyhow::anyhow!("version mismatch"));
-            }
-            let updated = Record {
-                data,
-                version: version + 1,
-                updated_at: Utc::now(),
-                ..record.clone()
-            };
-            records.insert(key, updated.clone());
-            Ok(updated)
-        }
-
-        async fn query(
-            &self,
-            plugin_id: &str,
-            collection: &str,
-            _filters: QueryFilters,
-            _sort: Option<SortOptions>,
-            pagination: Pagination,
-        ) -> Result<QueryResult> {
-            let records = self.records.lock().unwrap();
-            let matching: Vec<Record> = records
-                .values()
-                .filter(|r| r.plugin_id == plugin_id && r.collection == collection)
-                .cloned()
-                .collect();
-            let total = matching.len() as u64;
-            let paged = matching
-                .into_iter()
-                .skip(pagination.offset as usize)
-                .take(pagination.limit as usize)
-                .collect();
-            Ok(QueryResult {
-                records: paged,
-                total,
-                limit: pagination.limit,
-                offset: pagination.offset,
-            })
-        }
-
-        async fn delete(
-            &self,
-            plugin_id: &str,
-            collection: &str,
-            id: &str,
-        ) -> Result<bool> {
-            let key = Self::key(plugin_id, collection, id);
-            Ok(self.records.lock().unwrap().remove(&key).is_some())
-        }
-
-        async fn list(
-            &self,
-            plugin_id: &str,
-            collection: &str,
-            sort: Option<SortOptions>,
-            pagination: Pagination,
-        ) -> Result<QueryResult> {
-            self.query(
-                plugin_id,
-                collection,
-                QueryFilters::default(),
-                sort,
-                pagination,
-            )
-            .await
-        }
-    }
 
     /// A simple test plugin that mimics a connector plugin.
     struct TestConnectorPlugin;

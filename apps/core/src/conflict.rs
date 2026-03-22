@@ -7,7 +7,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 
 use crate::storage::Record;
@@ -154,13 +154,8 @@ pub fn resolve_field_merge(
     let mut merged = serde_json::Map::new();
     let mut has_overlap_conflict = false;
 
-    // Collect all keys from both sides.
-    let mut all_keys: Vec<&String> = local_fields.keys().collect();
-    for k in remote_fields.keys() {
-        if !all_keys.contains(&k) {
-            all_keys.push(k);
-        }
-    }
+    // Collect all unique keys from both sides using HashSet for O(1) lookups.
+    let all_keys: HashSet<&String> = local_fields.keys().chain(remote_fields.keys()).collect();
 
     for key in &all_keys {
         let local_val = local_fields.get(*key);
@@ -229,12 +224,7 @@ pub fn field_merge_needs_manual(
 
     let base_fields = base_data.and_then(|v| v.as_object());
 
-    let mut all_keys: Vec<&String> = local_fields.keys().collect();
-    for k in remote_fields.keys() {
-        if !all_keys.contains(&k) {
-            all_keys.push(k);
-        }
-    }
+    let all_keys: HashSet<&String> = local_fields.keys().chain(remote_fields.keys()).collect();
 
     for key in &all_keys {
         let local_val = local_fields.get(*key);

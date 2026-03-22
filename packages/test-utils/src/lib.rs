@@ -156,8 +156,8 @@ pub fn create_test_credential() -> Credential {
         id: Uuid::new_v4(),
         credential_type: CredentialType::OauthToken,
         issuer: "https://auth.example.com".into(),
-        issued_date: "2026-01-15".into(),
-        expiry_date: Some("2027-01-15".into()),
+        issued_date: chrono::NaiveDate::from_ymd_opt(2026, 1, 15).unwrap(),
+        expiry_date: Some(chrono::NaiveDate::from_ymd_opt(2027, 1, 15).unwrap()),
         claims: serde_json::json!({
             "scope": "read write",
             "sub": "user-12345"

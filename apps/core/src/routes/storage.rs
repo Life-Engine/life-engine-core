@@ -125,7 +125,7 @@ pub async fn init_storage(
                 Json(json!({
                     "error": {
                         "code": "STORAGE_INIT_FAILED",
-                        "message": format!("failed to create encrypted database: {e}")
+                        "message": "failed to create encrypted database"
                     }
                 })),
             )

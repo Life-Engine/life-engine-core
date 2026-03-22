@@ -14,6 +14,14 @@ if [[ $# -lt 1 ]]; then
 fi
 
 NAME="$1"
+
+# Validate plugin name: lowercase alphanumeric and hyphens only, must start with a letter
+if [[ ! "$NAME" =~ ^[a-z][a-z0-9-]*$ ]]; then
+  echo "Error: plugin name must be lowercase alphanumeric with hyphens (e.g. my-plugin)"
+  echo "       Must start with a letter. Got: '$NAME'"
+  exit 1
+fi
+
 TARGET_DIR="$REPO_ROOT/plugins/engine/$NAME"
 TEMPLATE_DIR="$REPO_ROOT/tools/templates/engine-plugin"
 

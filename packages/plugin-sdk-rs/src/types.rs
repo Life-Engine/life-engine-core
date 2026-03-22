@@ -36,8 +36,9 @@ pub enum Capability {
     Logging,
 }
 
-/// HTTP methods for plugin route registration.
+/// HTTP methods for plugin route registration and outbound requests.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "UPPERCASE")]
 pub enum HttpMethod {
     /// HTTP GET
     Get,
@@ -49,6 +50,25 @@ pub enum HttpMethod {
     Delete,
     /// HTTP PATCH
     Patch,
+    /// HTTP HEAD
+    Head,
+    /// HTTP OPTIONS
+    Options,
+}
+
+impl fmt::Display for HttpMethod {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            HttpMethod::Get => "GET",
+            HttpMethod::Post => "POST",
+            HttpMethod::Put => "PUT",
+            HttpMethod::Delete => "DELETE",
+            HttpMethod::Patch => "PATCH",
+            HttpMethod::Head => "HEAD",
+            HttpMethod::Options => "OPTIONS",
+        };
+        f.write_str(s)
+    }
 }
 
 /// A route that a plugin exposes to Core.

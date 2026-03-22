@@ -7,21 +7,57 @@ use crate::message_bus::{BusEvent, MessageBus};
 use crate::search::SearchEngine;
 use std::sync::Arc;
 use tokio::sync::broadcast;
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 /// Spawn a background task that subscribes to the message bus and
 /// indexes records in the search engine.
+///
+/// Accepts an optional `shutdown` receiver. When the sender half is
+/// dropped or a value is sent, the processor drains remaining bus
+/// events, flushes pending index operations, and exits.
 ///
 /// Returns a `JoinHandle` that can be used to await shutdown.
 pub fn spawn(
     bus: &Arc<MessageBus>,
     engine: Arc<SearchEngine>,
 ) -> tokio::task::JoinHandle<()> {
+    spawn_with_shutdown(bus, engine, None)
+}
+
+/// Like [`spawn`], but accepts a shutdown signal via a `watch` receiver.
+///
+/// When the watch value becomes `true`, the processor will finish
+/// processing any already-received event and then exit cleanly.
+pub fn spawn_with_shutdown(
+    bus: &Arc<MessageBus>,
+    engine: Arc<SearchEngine>,
+    shutdown: Option<tokio::sync::watch::Receiver<bool>>,
+) -> tokio::task::JoinHandle<()> {
     let mut rx = bus.subscribe();
 
     tokio::spawn(async move {
+        let mut shutdown_rx = shutdown;
+
         loop {
-            match rx.recv().await {
+            // If a shutdown receiver was provided, race it against the
+            // next bus event so we can exit promptly.
+            let event = if let Some(ref mut srx) = shutdown_rx {
+                tokio::select! {
+                    biased;
+                    result = rx.recv() => result,
+                    _ = srx.changed() => {
+                        if *srx.borrow() {
+                            info!("search processor received shutdown signal, draining");
+                            break;
+                        }
+                        continue;
+                    }
+                }
+            } else {
+                rx.recv().await
+            };
+
+            match event {
                 Ok(BusEvent::RecordChanged { record }) => {
                     // Remove any previous version, then index the new one.
                     if let Err(e) = engine.remove(&record.id).await {
@@ -48,6 +84,29 @@ pub fn spawn(
                 }
             }
         }
+
+        // Drain any remaining events from the bus before exiting.
+        loop {
+            match rx.try_recv() {
+                Ok(BusEvent::RecordChanged { record }) => {
+                    if let Err(e) = engine.remove(&record.id).await {
+                        debug!(error = %e, record_id = %record.id, "drain: remove before re-index");
+                    }
+                    if let Err(e) = engine.index_record(&record).await {
+                        warn!(error = %e, record_id = %record.id, "drain: search indexing failed");
+                    }
+                }
+                Ok(BusEvent::RecordDeleted { record_id }) => {
+                    if let Err(e) = engine.remove(&record_id).await {
+                        warn!(error = %e, record_id = %record_id, "drain: search removal failed");
+                    }
+                }
+                Ok(_) => {}
+                Err(_) => break,
+            }
+        }
+
+        info!("search processor shut down cleanly");
     })
 }
 
@@ -162,5 +221,35 @@ mod tests {
         // Search engine should be empty.
         let results = engine.search("anything", None, 10, 0);
         assert!(results.is_err() || results.unwrap().total == 0);
+    }
+
+    #[tokio::test]
+    async fn graceful_shutdown_via_watch() {
+        let bus = Arc::new(MessageBus::new());
+        let engine = Arc::new(SearchEngine::new().unwrap());
+
+        let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+        let handle = spawn_with_shutdown(&bus, Arc::clone(&engine), Some(shutdown_rx));
+
+        // Index a record to verify the processor is working.
+        let record = test_record("s1", "tasks");
+        bus.publish(BusEvent::RecordChanged {
+            record: record.clone(),
+        });
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        let results = engine.search("Test s1", None, 10, 0).unwrap();
+        assert_eq!(results.total, 1);
+
+        // Signal shutdown.
+        shutdown_tx.send(true).unwrap();
+
+        // The task should complete promptly.
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            handle,
+        )
+        .await;
+        assert!(result.is_ok(), "search processor did not shut down in time");
     }
 }

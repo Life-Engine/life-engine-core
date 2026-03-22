@@ -277,4 +277,245 @@ mod tests {
             assert!(delay.is_some());
         }
     }
+
+    // ── Mock Connector for lifecycle tests ──────────────────────────
+
+    use serde_json::Value;
+
+    /// A mock connector whose authenticate, sync, and disconnect methods
+    /// can be individually configured to succeed or fail.
+    struct MockConnector {
+        authenticated: bool,
+        synced: bool,
+        disconnected: bool,
+        fail_authenticate: bool,
+        fail_sync: bool,
+        fail_disconnect: bool,
+    }
+
+    impl MockConnector {
+        fn new() -> Self {
+            Self {
+                authenticated: false,
+                synced: false,
+                disconnected: false,
+                fail_authenticate: false,
+                fail_sync: false,
+                fail_disconnect: false,
+            }
+        }
+    }
+
+    #[async_trait]
+    impl Connector for MockConnector {
+        fn id(&self) -> &str {
+            "mock-connector"
+        }
+
+        fn display_name(&self) -> &str {
+            "Mock Connector"
+        }
+
+        fn supported_collections(&self) -> Vec<&str> {
+            vec!["contacts", "events"]
+        }
+
+        async fn authenticate(
+            &mut self,
+            _credentials: ConnectorCredentials,
+        ) -> anyhow::Result<()> {
+            if self.fail_authenticate {
+                anyhow::bail!("authentication failed");
+            }
+            self.authenticated = true;
+            Ok(())
+        }
+
+        async fn sync(
+            &mut self,
+            _storage: &dyn StorageAdapter,
+            _last_sync: Option<DateTime<Utc>>,
+        ) -> anyhow::Result<SyncResult> {
+            if self.fail_sync {
+                anyhow::bail!("sync failed");
+            }
+            self.synced = true;
+            Ok(SyncResult {
+                new_records: 5,
+                updated_records: 2,
+                deleted_records: 1,
+            })
+        }
+
+        async fn disconnect(&mut self) -> anyhow::Result<()> {
+            if self.fail_disconnect {
+                anyhow::bail!("disconnect failed");
+            }
+            self.disconnected = true;
+            Ok(())
+        }
+    }
+
+    /// Minimal StorageAdapter stub — lifecycle tests do not exercise storage.
+    struct StubStorage;
+
+    #[async_trait]
+    impl StorageAdapter for StubStorage {
+        async fn get(
+            &self,
+            _plugin_id: &str,
+            _collection: &str,
+            _id: &str,
+        ) -> anyhow::Result<Option<crate::storage::Record>> {
+            Ok(None)
+        }
+
+        async fn create(
+            &self,
+            _plugin_id: &str,
+            _collection: &str,
+            _data: Value,
+        ) -> anyhow::Result<crate::storage::Record> {
+            unimplemented!("stub")
+        }
+
+        async fn update(
+            &self,
+            _plugin_id: &str,
+            _collection: &str,
+            _id: &str,
+            _data: Value,
+            _version: i64,
+        ) -> Result<crate::storage::Record, crate::storage::StorageError> {
+            unimplemented!("stub")
+        }
+
+        async fn query(
+            &self,
+            _plugin_id: &str,
+            _collection: &str,
+            _filters: crate::storage::QueryFilters,
+            _sort: Option<crate::storage::SortOptions>,
+            _pagination: crate::storage::Pagination,
+        ) -> anyhow::Result<crate::storage::QueryResult> {
+            unimplemented!("stub")
+        }
+
+        async fn delete(
+            &self,
+            _plugin_id: &str,
+            _collection: &str,
+            _id: &str,
+        ) -> anyhow::Result<bool> {
+            Ok(false)
+        }
+
+        async fn list(
+            &self,
+            _plugin_id: &str,
+            _collection: &str,
+            _sort: Option<crate::storage::SortOptions>,
+            _pagination: crate::storage::Pagination,
+        ) -> anyhow::Result<crate::storage::QueryResult> {
+            unimplemented!("stub")
+        }
+    }
+
+    fn test_credentials() -> ConnectorCredentials {
+        ConnectorCredentials {
+            host: "mock.example.com".into(),
+            port: 443,
+            username: "testuser".into(),
+            credential_id: Some("mock_token".into()),
+            use_tls: true,
+        }
+    }
+
+    // ── Lifecycle tests ─────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn lifecycle_happy_path_authenticate_sync_disconnect() {
+        let mut conn = MockConnector::new();
+        let storage = StubStorage;
+
+        conn.authenticate(test_credentials()).await.expect("auth should succeed");
+        assert!(conn.authenticated);
+
+        let result = conn.sync(&storage, None).await.expect("sync should succeed");
+        assert!(conn.synced);
+        assert_eq!(result.new_records, 5);
+        assert_eq!(result.updated_records, 2);
+        assert_eq!(result.deleted_records, 1);
+
+        conn.disconnect().await.expect("disconnect should succeed");
+        assert!(conn.disconnected);
+    }
+
+    #[tokio::test]
+    async fn lifecycle_authenticate_failure() {
+        let mut conn = MockConnector::new();
+        conn.fail_authenticate = true;
+
+        let err = conn
+            .authenticate(test_credentials())
+            .await
+            .expect_err("auth should fail");
+        assert!(
+            err.to_string().contains("authentication failed"),
+            "unexpected error: {err}"
+        );
+        assert!(!conn.authenticated, "should not be marked authenticated");
+    }
+
+    #[tokio::test]
+    async fn lifecycle_sync_failure_after_successful_auth() {
+        let mut conn = MockConnector::new();
+        let storage = StubStorage;
+
+        conn.authenticate(test_credentials()).await.expect("auth should succeed");
+        assert!(conn.authenticated);
+
+        conn.fail_sync = true;
+        let err = conn
+            .sync(&storage, None)
+            .await
+            .expect_err("sync should fail");
+        assert!(
+            err.to_string().contains("sync failed"),
+            "unexpected error: {err}"
+        );
+        assert!(!conn.synced, "should not be marked synced");
+    }
+
+    #[tokio::test]
+    async fn lifecycle_disconnect_failure() {
+        let mut conn = MockConnector::new();
+        let storage = StubStorage;
+
+        // Complete auth + sync successfully first.
+        conn.authenticate(test_credentials()).await.unwrap();
+        conn.sync(&storage, None).await.unwrap();
+
+        conn.fail_disconnect = true;
+        let err = conn.disconnect().await.expect_err("disconnect should fail");
+        assert!(
+            err.to_string().contains("disconnect failed"),
+            "unexpected error: {err}"
+        );
+        assert!(!conn.disconnected, "should not be marked disconnected");
+    }
+
+    #[tokio::test]
+    async fn connector_trait_object_dispatch() {
+        // Verify the trait is object-safe and works behind a dyn reference.
+        let mut conn = MockConnector::new();
+        let connector: &mut dyn Connector = &mut conn;
+
+        assert_eq!(connector.id(), "mock-connector");
+        assert_eq!(connector.display_name(), "Mock Connector");
+        assert_eq!(connector.supported_collections(), vec!["contacts", "events"]);
+
+        connector.authenticate(test_credentials()).await.unwrap();
+        assert!(conn.authenticated);
+    }
 }

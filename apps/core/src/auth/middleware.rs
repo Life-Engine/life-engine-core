@@ -24,10 +24,15 @@ const MAX_FAILURES: usize = 5;
 /// Duration of the rate-limit window in seconds.
 const WINDOW_SECS: u64 = 60;
 
+/// How often (in number of operations) to perform a full cleanup of expired entries.
+const CLEANUP_INTERVAL: u64 = 100;
+
 /// Tracks failed auth attempts per IP address.
 #[derive(Debug, Clone)]
 pub struct RateLimiter {
     failures: Arc<Mutex<HashMap<IpAddr, Vec<Instant>>>>,
+    /// Counter of operations since last full cleanup.
+    op_count: Arc<std::sync::atomic::AtomicU64>,
 }
 
 impl RateLimiter {
@@ -35,6 +40,7 @@ impl RateLimiter {
     pub fn new() -> Self {
         Self {
             failures: Arc::new(Mutex::new(HashMap::new())),
+            op_count: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         }
     }
 
@@ -42,11 +48,13 @@ impl RateLimiter {
     pub async fn record_failure(&self, ip: IpAddr) {
         let mut failures = self.failures.lock().await;
         failures.entry(ip).or_default().push(Instant::now());
+        self.maybe_cleanup(&mut failures);
     }
 
     /// Check if the given IP is rate limited.
     pub async fn is_rate_limited(&self, ip: IpAddr) -> bool {
         let mut failures = self.failures.lock().await;
+        self.maybe_cleanup(&mut failures);
         if let Some(attempts) = failures.get_mut(&ip) {
             let cutoff = Instant::now() - std::time::Duration::from_secs(WINDOW_SECS);
             attempts.retain(|t| *t > cutoff);
@@ -54,6 +62,22 @@ impl RateLimiter {
         } else {
             false
         }
+    }
+
+    /// Periodically remove all expired entries across all IPs to prevent
+    /// unbounded memory growth from IPs that are no longer active.
+    fn maybe_cleanup(&self, failures: &mut HashMap<IpAddr, Vec<Instant>>) {
+        let count = self
+            .op_count
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        if count % CLEANUP_INTERVAL != 0 {
+            return;
+        }
+        let cutoff = Instant::now() - std::time::Duration::from_secs(WINDOW_SECS);
+        failures.retain(|_ip, attempts| {
+            attempts.retain(|t| *t > cutoff);
+            !attempts.is_empty()
+        });
     }
 }
 

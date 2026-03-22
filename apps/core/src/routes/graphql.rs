@@ -325,20 +325,55 @@ impl GqlEmail {
     }
 
     /// Resolve attachment file_ids to FileMetadata records.
+    ///
+    /// Uses a single OR-filter query to batch-fetch all attachment files
+    /// instead of issuing one query per attachment (N+1).
     async fn attachment_files(&self, ctx: &Context<'_>) -> Result<Vec<GqlFile>> {
         let storage = ctx
             .data::<Arc<crate::sqlite_storage::SqliteStorage>>()
             .map_err(|_| Error::new("storage not available"))?;
 
-        let mut files = Vec::new();
-        for attachment in &self.attachments {
-            if let Ok(Some(record)) = storage
-                .get(CORE_PLUGIN_ID, "files", &attachment.file_id)
-                .await
-            {
-                files.push(record_to_file(&record.data));
-            }
+        if self.attachments.is_empty() {
+            return Ok(vec![]);
         }
+
+        // Build an OR filter matching any attachment file_id in a single query.
+        let or_groups: Vec<QueryFilters> = self
+            .attachments
+            .iter()
+            .map(|att| QueryFilters {
+                equality: vec![FieldFilter {
+                    field: "id".into(),
+                    value: serde_json::Value::String(att.file_id.clone()),
+                }],
+                ..Default::default()
+            })
+            .collect();
+
+        let filters = QueryFilters {
+            or: or_groups,
+            ..Default::default()
+        };
+
+        let result = storage
+            .query(
+                CORE_PLUGIN_ID,
+                "files",
+                filters,
+                None,
+                Pagination {
+                    limit: self.attachments.len() as u32,
+                    offset: 0,
+                },
+            )
+            .await
+            .map_err(|e| Error::new(format!("query failed: {e}")))?;
+
+        let files = result
+            .records
+            .iter()
+            .map(|r| record_to_file(&r.data))
+            .collect();
         Ok(files)
     }
 }
@@ -1064,8 +1099,14 @@ impl MutationRoot {
             .data::<Arc<MessageBus>>()
             .map_err(|_| Error::new("message bus not available"))?;
 
-        let data: JsonValue = serde_json::from_str(&input.data)
+        let mut data: JsonValue = serde_json::from_str(&input.data)
             .map_err(|e| Error::new(format!("invalid JSON: {e}")))?;
+
+        // Strip client-supplied identity fields to prevent spoofing.
+        if let Some(obj) = data.as_object_mut() {
+            obj.remove("_user_id");
+            obj.remove("_household_id");
+        }
 
         let record = storage
             .create(CORE_PLUGIN_ID, &collection, data)
@@ -1098,21 +1139,26 @@ impl MutationRoot {
             .data::<Arc<MessageBus>>()
             .map_err(|_| Error::new("message bus not available"))?;
 
-        let data: JsonValue = serde_json::from_str(&input.data)
+        let mut data: JsonValue = serde_json::from_str(&input.data)
             .map_err(|e| Error::new(format!("invalid JSON: {e}")))?;
+
+        // Strip client-supplied identity fields to prevent spoofing.
+        if let Some(obj) = data.as_object_mut() {
+            obj.remove("_user_id");
+            obj.remove("_household_id");
+        }
 
         let record = storage
             .update(CORE_PLUGIN_ID, &collection, &id, data, input.version)
             .await
-            .map_err(|e| {
-                let msg = e.to_string();
-                if msg.contains("version mismatch") {
+            .map_err(|e| match e {
+                crate::storage::StorageError::VersionMismatch => {
                     Error::new("version conflict: record was modified by another request")
-                } else if msg.contains("not found") {
-                    Error::new(format!("record '{id}' not found in '{collection}'"))
-                } else {
-                    Error::new(format!("update failed: {e}"))
                 }
+                crate::storage::StorageError::NotFound => {
+                    Error::new(format!("record '{id}' not found in '{collection}'"))
+                }
+                other => Error::new(format!("update failed: {other}")),
             })?;
 
         bus.publish(BusEvent::NewRecords {
@@ -1271,10 +1317,22 @@ pub async fn graphql_handler(
 }
 
 /// Axum handler for GraphQL Playground (GET /api/graphql/playground).
-pub async fn graphql_playground() -> impl axum::response::IntoResponse {
-    axum::response::Html(async_graphql::http::playground_source(
-        async_graphql::http::GraphQLPlaygroundConfig::new("/api/graphql"),
-    ))
+///
+/// Only available in debug builds. In release builds this returns 404
+/// to prevent exposing an interactive query tool in production.
+pub async fn graphql_playground() -> axum::response::Response {
+    if cfg!(debug_assertions) {
+        axum::response::Html(async_graphql::http::playground_source(
+            async_graphql::http::GraphQLPlaygroundConfig::new("/api/graphql"),
+        ))
+        .into_response()
+    } else {
+        (
+            axum::http::StatusCode::NOT_FOUND,
+            axum::Json(serde_json::json!({"error": "playground is disabled in release builds"})),
+        )
+            .into_response()
+    }
 }
 
 // ---------------------------------------------------------------------------

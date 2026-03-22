@@ -341,12 +341,18 @@ fn plugin_manifest_calendar_known_violations() {
 
     let validator =
         jsonschema::validator_for(&schema).expect("failed to compile manifest schema");
-    if let Err(error) = validator.validate(&manifest) {
-        // Expected to fail — document but don't panic
-        eprintln!(
-            "calendar plugin.json has known schema violations (see TODO):\n  {error}"
-        );
-    }
+    let result = validator.validate(&manifest);
+    assert!(
+        result.is_err(),
+        "calendar plugin.json was expected to have schema violations but passed validation — \
+         update this test if the manifest or schema has been fixed"
+    );
+    let error = result.unwrap_err().to_string();
+    // Assert on specific known violations so regressions are caught
+    assert!(
+        error.contains("collections") || error.contains("routes"),
+        "expected schema violation related to 'collections' or 'routes', got: {error}"
+    );
 }
 
 #[test]

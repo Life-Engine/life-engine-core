@@ -75,10 +75,10 @@ install_macos() {
     info "Installing launchd plist to $plist_dest"
     cp "$SCRIPT_DIR/launchd/com.life-engine.core.plist" "$plist_dest"
 
-    launchctl load "$plist_dest"
+    launchctl bootstrap "gui/$(id -u)" "$plist_dest"
 
     info "Life Engine Core installed and started (launchd)"
-    info "Check status: launchctl list | grep life-engine"
+    info "Check status: launchctl print gui/$(id -u)/com.life-engine.core"
 }
 
 main() {

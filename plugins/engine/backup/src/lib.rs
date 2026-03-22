@@ -101,3 +101,80 @@ impl CorePlugin for BackupPlugin {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn plugin_metadata() {
+        let plugin = BackupPlugin::new();
+        assert_eq!(plugin.id(), "com.life-engine.backup");
+        assert_eq!(plugin.display_name(), "Encrypted Remote Backup");
+        assert_eq!(plugin.version(), "0.1.0");
+    }
+
+    #[test]
+    fn plugin_capabilities() {
+        let plugin = BackupPlugin::new();
+        let caps = plugin.capabilities();
+        assert_eq!(caps.len(), 4);
+        assert!(caps.contains(&Capability::StorageRead));
+        assert!(caps.contains(&Capability::StorageWrite));
+        assert!(caps.contains(&Capability::ConfigRead));
+        assert!(caps.contains(&Capability::Logging));
+    }
+
+    #[test]
+    fn plugin_routes_registered() {
+        let plugin = BackupPlugin::new();
+        let routes = plugin.routes();
+        assert_eq!(routes.len(), 6);
+
+        let paths: Vec<&str> = routes.iter().map(|r| r.path.as_str()).collect();
+        assert!(paths.contains(&"/backup"));
+        assert!(paths.contains(&"/backup/incremental"));
+        assert!(paths.contains(&"/restore"));
+        assert!(paths.contains(&"/restore/partial"));
+        assert!(paths.contains(&"/backups"));
+        assert!(paths.contains(&"/status"));
+    }
+
+    #[test]
+    fn plugin_routes_methods() {
+        let plugin = BackupPlugin::new();
+        let routes = plugin.routes();
+
+        let post_routes: Vec<&str> = routes
+            .iter()
+            .filter(|r| r.method == HttpMethod::Post)
+            .map(|r| r.path.as_str())
+            .collect();
+        assert_eq!(post_routes.len(), 4);
+
+        let get_routes: Vec<&str> = routes
+            .iter()
+            .filter(|r| r.method == HttpMethod::Get)
+            .map(|r| r.path.as_str())
+            .collect();
+        assert_eq!(get_routes.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn plugin_lifecycle() {
+        let mut plugin = BackupPlugin::new();
+        let ctx = PluginContext::new(plugin.id());
+        plugin.on_load(&ctx).await.expect("on_load should succeed");
+        plugin
+            .on_unload()
+            .await
+            .expect("on_unload should succeed");
+    }
+
+    #[test]
+    fn default_impl() {
+        let plugin = BackupPlugin::default();
+        assert_eq!(plugin.id(), "com.life-engine.backup");
+        assert!(plugin.config.is_none());
+    }
+}

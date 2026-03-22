@@ -8,15 +8,26 @@ use chrono::{DateTime, Utc};
 use crate::types::BackupSchedule;
 
 /// Convert a BackupSchedule to a cron expression string.
-pub fn to_cron_expression(schedule: &BackupSchedule) -> String {
+///
+/// Returns an error if hour or day-of-week values are out of range.
+pub fn to_cron_expression(schedule: &BackupSchedule) -> Result<String, anyhow::Error> {
     match schedule {
         BackupSchedule::Daily { hour } => {
-            format!("0 0 {hour} * * *")
+            if *hour > 23 {
+                anyhow::bail!("invalid hour {hour}: must be 0-23");
+            }
+            Ok(format!("0 0 {hour} * * *"))
         }
         BackupSchedule::Weekly { day, hour } => {
-            format!("0 0 {hour} * * {day}")
+            if *hour > 23 {
+                anyhow::bail!("invalid hour {hour}: must be 0-23");
+            }
+            if *day > 6 {
+                anyhow::bail!("invalid day-of-week {day}: must be 0-6 (Sunday=0)");
+            }
+            Ok(format!("0 0 {hour} * * {day}"))
         }
-        BackupSchedule::Cron { expression } => expression.clone(),
+        BackupSchedule::Cron { expression } => Ok(expression.clone()),
     }
 }
 
@@ -42,14 +53,14 @@ mod tests {
     #[test]
     fn daily_schedule_to_cron() {
         let schedule = BackupSchedule::Daily { hour: 3 };
-        let cron = to_cron_expression(&schedule);
+        let cron = to_cron_expression(&schedule).unwrap();
         assert_eq!(cron, "0 0 3 * * *");
     }
 
     #[test]
     fn weekly_schedule_to_cron() {
         let schedule = BackupSchedule::Weekly { day: 0, hour: 2 };
-        let cron = to_cron_expression(&schedule);
+        let cron = to_cron_expression(&schedule).unwrap();
         assert_eq!(cron, "0 0 2 * * 0");
     }
 
@@ -58,8 +69,26 @@ mod tests {
         let schedule = BackupSchedule::Cron {
             expression: "0 30 4 * * 1-5".into(),
         };
-        let cron = to_cron_expression(&schedule);
+        let cron = to_cron_expression(&schedule).unwrap();
         assert_eq!(cron, "0 30 4 * * 1-5");
+    }
+
+    #[test]
+    fn daily_schedule_rejects_invalid_hour() {
+        let schedule = BackupSchedule::Daily { hour: 24 };
+        assert!(to_cron_expression(&schedule).is_err());
+    }
+
+    #[test]
+    fn weekly_schedule_rejects_invalid_day() {
+        let schedule = BackupSchedule::Weekly { day: 7, hour: 12 };
+        assert!(to_cron_expression(&schedule).is_err());
+    }
+
+    #[test]
+    fn weekly_schedule_rejects_invalid_hour() {
+        let schedule = BackupSchedule::Weekly { day: 3, hour: 25 };
+        assert!(to_cron_expression(&schedule).is_err());
     }
 
     #[test]

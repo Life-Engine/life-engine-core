@@ -19,6 +19,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::types::HttpMethod;
+
 /// Request types for calling host functions from WASM guest code.
 ///
 /// Each variant maps to a host function in the `WasmHostBridge`.
@@ -76,7 +78,7 @@ pub enum HostRequest {
     /// Make an HTTP request. Requires `HttpOutbound` capability.
     HttpRequest {
         url: String,
-        method: String,
+        method: HttpMethod,
         headers: Option<serde_json::Value>,
         body: Option<String>,
     },
@@ -234,7 +236,7 @@ mod tests {
             },
             HostRequest::HttpRequest {
                 url: "u".into(),
-                method: "GET".into(),
+                method: HttpMethod::Get,
                 headers: None,
                 body: None,
             },
@@ -244,6 +246,40 @@ mod tests {
             let json = serde_json::to_string(&req).unwrap();
             let _: HostRequest = serde_json::from_str(&json).unwrap();
         }
+    }
+
+    #[test]
+    fn http_method_serializes_uppercase() {
+        assert_eq!(
+            serde_json::to_value(HttpMethod::Get).unwrap(),
+            json!("GET")
+        );
+        assert_eq!(
+            serde_json::to_value(HttpMethod::Post).unwrap(),
+            json!("POST")
+        );
+        assert_eq!(
+            serde_json::to_value(HttpMethod::Delete).unwrap(),
+            json!("DELETE")
+        );
+    }
+
+    #[test]
+    fn http_method_deserializes_uppercase() {
+        let method: HttpMethod = serde_json::from_value(json!("GET")).unwrap();
+        assert_eq!(method, HttpMethod::Get);
+    }
+
+    #[test]
+    fn http_method_rejects_invalid() {
+        let result = serde_json::from_value::<HttpMethod>(json!("INVALID"));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn http_method_display() {
+        assert_eq!(HttpMethod::Get.to_string(), "GET");
+        assert_eq!(HttpMethod::Post.to_string(), "POST");
     }
 
     #[test]

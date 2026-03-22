@@ -17,8 +17,10 @@
 /// assert_eq!(unfolded, "FN:Long NameThat Wraps");
 /// ```
 pub fn unfold_lines(raw: &str) -> String {
-    let mut result = String::with_capacity(raw.len());
-    for line in raw.lines() {
+    // Normalize CRLF → LF first per RFC 6350 §3.2, then unfold.
+    let normalized = raw.replace("\r\n", "\n").replace('\r', "\n");
+    let mut result = String::with_capacity(normalized.len());
+    for line in normalized.lines() {
         if line.starts_with(' ') || line.starts_with('\t') {
             // Continuation: append without the leading whitespace
             result.push_str(&line[1..]);
@@ -47,11 +49,41 @@ pub fn unfold_lines(raw: &str) -> String {
 /// assert_eq!(dav_utils::text::decode_escaped_value("line1\\nline2"), "line1\nline2");
 /// ```
 pub fn decode_escaped_value(value: &str) -> String {
-    value
-        .replace("\\n", "\n")
-        .replace("\\,", ",")
-        .replace("\\;", ";")
-        .replace("\\\\", "\\")
+    // Process backslash escapes in a single pass to avoid ordering bugs.
+    // A chained `.replace()` approach fails because replacing `\\` before
+    // or after `\n` can cause double-unescaping (e.g. `\\n` → `\n` instead
+    // of literal backslash + 'n').
+    let mut result = String::with_capacity(value.len());
+    let mut chars = value.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            match chars.peek() {
+                Some('n') => {
+                    result.push('\n');
+                    chars.next();
+                }
+                Some(',') => {
+                    result.push(',');
+                    chars.next();
+                }
+                Some(';') => {
+                    result.push(';');
+                    chars.next();
+                }
+                Some('\\') => {
+                    result.push('\\');
+                    chars.next();
+                }
+                _ => {
+                    // Unknown escape sequence: preserve as-is
+                    result.push('\\');
+                }
+            }
+        } else {
+            result.push(c);
+        }
+    }
+    result
 }
 
 /// Return `Some(s)` if the string is non-empty after trimming, `None` otherwise.
@@ -198,5 +230,39 @@ mod tests {
     #[test]
     fn non_empty_tab_only() {
         assert_eq!(non_empty("\t\t"), None);
+    }
+
+    // --- F-068: escape ordering regression tests ---
+
+    #[test]
+    fn decode_double_backslash_before_n() {
+        // `\\n` in vCard means literal backslash followed by 'n', not a newline.
+        assert_eq!(decode_escaped_value("a\\\\nb"), "a\\nb");
+    }
+
+    #[test]
+    fn decode_backslash_then_newline_escape() {
+        // `\\\n` means literal backslash + newline escape
+        assert_eq!(decode_escaped_value("a\\\\\\nb"), "a\\\nb");
+    }
+
+    #[test]
+    fn decode_unknown_escape_preserved() {
+        // Unknown escape sequences are preserved as-is
+        assert_eq!(decode_escaped_value("a\\xb"), "a\\xb");
+    }
+
+    // --- F-069: CRLF normalization in unfold_lines ---
+
+    #[test]
+    fn unfold_crlf_input() {
+        let input = "FN:Name\r\n continued\r\nEMAIL:a@b.com";
+        assert_eq!(unfold_lines(input), "FN:Namecontinued\nEMAIL:a@b.com");
+    }
+
+    #[test]
+    fn unfold_bare_cr() {
+        let input = "FN:Name\r continued";
+        assert_eq!(unfold_lines(input), "FN:Namecontinued");
     }
 }

@@ -2,6 +2,8 @@
 
 ## 2026-03-23
 
+- WP 1.9 Directory Layout Verification: verify complete directory structure against ARCHITECTURE.md. All 24 required top-level directories confirmed present (apps/core, 15 package crates, 7 plugin crates, tools/templates/plugin, .odm/doc). All 7 plugin crates have complete standard layout (lib.rs, config.rs, error.rs, steps/, transform/, types.rs, tests/). Add missing tests/ directories with .gitkeep to 5 crates (types, plugin-sdk-rs, dav-utils, test-utils, test-fixtures). Package crate deviations documented and justified by crate purpose. Workspace compiles clean.
+
 - WP 1.8 Plugin Scaffold Template: create tools/templates/plugin/ with full WASM-compatible plugin scaffold (Cargo.toml, manifest.toml, src/lib.rs with CorePlugin impl, config.rs, error.rs, steps/, transform/, types.rs, tests/). Uses __NAME__/__ID__ placeholders for sed substitution. Fix justfile new-plugin recipe to use compatible placeholder syntax instead of broken just brace escaping. Verified: scaffolded test plugin compiles and all 7 template tests pass.
 
 - WP 1.4 Package Crate Scaffolding: add standard internal layout to all 10 package crates (traits, crypto, storage-sqlite, auth, workflow-engine, transport-rest, transport-graphql, transport-caldav, transport-carddav, transport-webhook). Each crate now has the convention: lib.rs with module declarations, config.rs, error.rs with thiserror-based error enums, handlers/mod.rs (or domain-specific modules like storage.rs, transport.rs, plugin.rs for traits; encryption.rs, kdf.rs, hmac.rs for crypto; loader.rs, executor.rs, event_bus.rs, scheduler.rs for workflow-engine), types.rs, and tests/mod.rs. Also marks WP 1.3 (pnpm workspace) as complete since it was already configured. All crates compile.

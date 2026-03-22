@@ -154,7 +154,7 @@ Progress: 0 / 11 work packages complete
 ## 1.9 — Directory Layout Verification
 > spec: .odm/spec/monorepo-and-tooling/brief.md
 
-- [ ] Verify and create the complete documented directory structure
+- [x] Verify and create the complete documented directory structure
   <!-- file: apps/, packages/, plugins/, .odm/doc/, tools/ -->
   <!-- purpose: Walk the directory tree and confirm all required directories from ARCHITECTURE.md exist: apps/core/, packages/types/, packages/traits/, packages/crypto/, packages/plugin-sdk/, packages/storage-sqlite/, packages/auth/, packages/workflow-engine/, packages/transport-rest/, packages/transport-graphql/, packages/transport-caldav/, packages/transport-carddav/, packages/transport-webhook/, packages/test-utils/, packages/test-fixtures/, plugins/connector-email/, plugins/connector-calendar/, plugins/connector-contacts/, plugins/connector-filesystem/, plugins/webhook-sender/, plugins/search-indexer/, plugins/backup/, tools/templates/plugin/. Create missing directories with .gitkeep files. Verify each crate has the standard internal layout (lib.rs, config.rs, error.rs, handlers/ or steps/, types.rs, tests/). Report any deviations. -->
   <!-- requirements: 5.1, 5.2, 5.3 -->

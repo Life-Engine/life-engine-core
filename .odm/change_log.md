@@ -2,6 +2,8 @@
 
 ## 2026-03-23
 
+- WP 2.4 Shared Config Types & API Client: add TypeScript interfaces in apps/admin/src/types/config.ts mirroring all CoreConfig Rust structs (CoreSettings, AuthSettings, OidcSettings, WebAuthnSettings, StorageSettings, PostgresSettings, Argon2Settings, PluginSettings, NetworkSettings, TlsSettings, CorsSettings, RateLimitSettings) plus SystemInfo, PluginInfo, and HealthStatus types; add fetch-based API client in apps/admin/src/api/client.ts with getConfig(), updateConfig(), getSystemInfo(), getPlugins(), and healthCheck() methods with ApiError class for error handling
+
 - WP 2.3 Admin App Scaffolding: scaffold React 19 + Vite 6 + TypeScript admin app at apps/admin with Tailwind CSS, PostCSS, dev server proxy to Core on port 3750, Nx project.json with dev/build/preview/lint targets, ESLint config, and .gitignore for build artifacts
 
 - WP 2.1 Config API Endpoints: add GET /api/system/config (returns current CoreConfig with secrets redacted) and PUT /api/system/config (accepts partial JSON, merges with current config, validates, persists to config.yaml). Added CoreConfig.to_redacted_json(), merge_partial(), recursive JSON merge, and Arc<RwLock<CoreConfig>> in AppState. 5 new tests covering redaction, auth requirement, update+persist, validation rejection, and PUT auth.

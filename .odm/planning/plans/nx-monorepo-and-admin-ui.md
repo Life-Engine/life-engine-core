@@ -188,13 +188,13 @@ Progress: 0 / 14 work packages complete
 ## 2.4 — Shared Config Types & API Client
 > depends: 2.2, 2.3
 
-- [ ] Create TypeScript interfaces matching CoreConfig structs
+- [x] Create TypeScript interfaces matching CoreConfig structs
   <!-- file: apps/admin/src/types/config.ts -->
   <!-- purpose: Define TypeScript interfaces for CoreConfig, CoreSettings, AuthSettings, StorageSettings, PluginSettings, NetworkSettings and their nested types -->
   <!-- requirements: type-safe config editing -->
   <!-- leverage: apps/core/src/config.rs struct definitions -->
 
-- [ ] Create API client module for Core communication
+- [x] Create API client module for Core communication
   <!-- file: apps/admin/src/api/client.ts -->
   <!-- purpose: Create fetch-based API client with getConfig(), updateConfig(), getSystemInfo(), getPlugins(), healthCheck() methods with error handling -->
   <!-- requirements: admin UI talks to Core API -->

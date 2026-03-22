@@ -4,6 +4,8 @@
 //! AES-256-GCM for authenticated encryption, and gzip for compression.
 
 use crate::types::Argon2Params;
+use aes_gcm::aead::{Aead, KeyInit, OsRng};
+use aes_gcm::{AeadCore, Aes256Gcm, Nonce};
 use anyhow::Result;
 use sha2::{Digest, Sha256};
 
@@ -62,99 +64,46 @@ pub fn decompress(data: &[u8]) -> Result<Vec<u8>> {
     Ok(decompressed)
 }
 
-/// Encrypt data with AES-256-GCM using a key derived from the passphrase.
+/// Encrypt data with AES-256-GCM.
 ///
 /// The output format is: `[12-byte nonce][ciphertext+tag]`.
+/// The key must be exactly 32 bytes.
 pub fn encrypt(plaintext: &[u8], key: &[u8]) -> Result<Vec<u8>> {
-    // Generate a random nonce.
-    let nonce: [u8; NONCE_SIZE] = rand_nonce();
+    let cipher = Aes256Gcm::new_from_slice(key)
+        .map_err(|_| anyhow::anyhow!("encryption key must be 32 bytes"))?;
+    let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
+    let ciphertext = cipher
+        .encrypt(&nonce, plaintext)
+        .map_err(|_| anyhow::anyhow!("AES-256-GCM encryption failed"))?;
 
-    // Use a simple XOR-based encryption with HMAC for authenticity.
-    // In production this would use a proper AES-256-GCM crate, but
-    // for the plugin we use a stream cipher approach with SHA-256.
-    let ciphertext = xor_encrypt(plaintext, key, &nonce);
-
-    // Compute HMAC for integrity.
-    let mut hmac_input = Vec::with_capacity(nonce.len() + ciphertext.len() + key.len());
-    hmac_input.extend_from_slice(&nonce);
-    hmac_input.extend_from_slice(&ciphertext);
-    hmac_input.extend_from_slice(key);
-    let tag: [u8; 32] = Sha256::digest(&hmac_input).into();
-
-    // Output: nonce + ciphertext + tag
-    let mut output = Vec::with_capacity(NONCE_SIZE + ciphertext.len() + 32);
+    let mut output = Vec::with_capacity(NONCE_SIZE + ciphertext.len());
     output.extend_from_slice(&nonce);
     output.extend_from_slice(&ciphertext);
-    output.extend_from_slice(&tag);
 
     Ok(output)
 }
 
 /// Decrypt data that was encrypted with [`encrypt`].
 ///
-/// Verifies the HMAC tag before returning plaintext.
+/// Verifies the AES-256-GCM authentication tag before returning plaintext.
 pub fn decrypt(encrypted: &[u8], key: &[u8]) -> Result<Vec<u8>> {
-    if encrypted.len() < NONCE_SIZE + 32 {
+    if encrypted.len() < NONCE_SIZE + 16 {
         anyhow::bail!("encrypted data too short");
     }
 
-    let nonce = &encrypted[..NONCE_SIZE];
-    let ciphertext = &encrypted[NONCE_SIZE..encrypted.len() - 32];
-    let stored_tag = &encrypted[encrypted.len() - 32..];
-
-    // Verify HMAC.
-    let mut hmac_input = Vec::with_capacity(nonce.len() + ciphertext.len() + key.len());
-    hmac_input.extend_from_slice(nonce);
-    hmac_input.extend_from_slice(ciphertext);
-    hmac_input.extend_from_slice(key);
-    let computed_tag: [u8; 32] = Sha256::digest(&hmac_input).into();
-
-    if computed_tag.as_slice() != stored_tag {
-        anyhow::bail!("backup integrity check failed: HMAC mismatch (wrong passphrase or corrupted data)");
-    }
-
-    let plaintext = xor_encrypt(ciphertext, key, nonce);
+    let (nonce_bytes, ciphertext) = encrypted.split_at(NONCE_SIZE);
+    let nonce = Nonce::from_slice(nonce_bytes);
+    let cipher = Aes256Gcm::new_from_slice(key)
+        .map_err(|_| anyhow::anyhow!("encryption key must be 32 bytes"))?;
+    let plaintext = cipher
+        .decrypt(nonce, ciphertext)
+        .map_err(|_| anyhow::anyhow!("backup integrity check failed: authentication failed (wrong passphrase or corrupted data)"))?;
     Ok(plaintext)
 }
 
 /// Compute SHA-256 checksum of data.
 pub fn sha256_hex(data: &[u8]) -> String {
     hex::encode(Sha256::digest(data))
-}
-
-/// XOR-based stream cipher using SHA-256 as a PRF.
-fn xor_encrypt(data: &[u8], key: &[u8], nonce: &[u8]) -> Vec<u8> {
-    let mut output = Vec::with_capacity(data.len());
-
-    for (counter, chunk) in data.chunks(32).enumerate() {
-        // Generate keystream block: SHA-256(key || nonce || counter)
-        let mut hasher = Sha256::new();
-        hasher.update(key);
-        hasher.update(nonce);
-        hasher.update((counter as u64).to_le_bytes());
-        let keystream: [u8; 32] = hasher.finalize().into();
-
-        for (i, byte) in chunk.iter().enumerate() {
-            output.push(byte ^ keystream[i]);
-        }
-    }
-
-    output
-}
-
-/// Generate a random nonce.
-fn rand_nonce() -> [u8; NONCE_SIZE] {
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    // Use timestamp + counter for uniqueness.
-    let ts = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
-    let mut nonce = [0u8; NONCE_SIZE];
-    let ts_bytes = ts.to_le_bytes();
-    nonce[..NONCE_SIZE.min(ts_bytes.len())].copy_from_slice(&ts_bytes[..NONCE_SIZE.min(ts_bytes.len())]);
-    nonce
 }
 
 #[cfg(test)]
@@ -231,7 +180,7 @@ mod tests {
         let encrypted = encrypt(plaintext, &key1).unwrap();
         let result = decrypt(&encrypted, &key2);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("HMAC mismatch"));
+        assert!(result.unwrap_err().to_string().contains("authentication failed"));
     }
 
     #[test]

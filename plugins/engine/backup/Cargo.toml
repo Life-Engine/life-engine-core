@@ -26,6 +26,7 @@ uuid = { workspace = true }
 tracing = { workspace = true }
 sha2 = { workspace = true }
 hex = { workspace = true }
+aes-gcm = { workspace = true }
 argon2 = { workspace = true }
 reqwest = { workspace = true }
 aws-sdk-s3 = { version = "1", optional = true }

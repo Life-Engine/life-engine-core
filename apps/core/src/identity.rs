@@ -569,7 +569,8 @@ impl IdentityStore {
 
     fn encrypt_claims(&self, claims: &serde_json::Value) -> Result<String> {
         let plaintext = serde_json::to_vec(claims)?;
-        let encrypted = crypto::xor_encrypt(&plaintext, &self.encryption_key);
+        let encrypted = crypto::encrypt(&plaintext, &self.encryption_key)
+            .map_err(|_| anyhow::anyhow!("failed to encrypt claims"))?;
         Ok(base64::engine::general_purpose::STANDARD.encode(encrypted))
     }
 
@@ -577,7 +578,8 @@ impl IdentityStore {
         let decoded = base64::engine::general_purpose::STANDARD
             .decode(encrypted)
             .context("failed to decode base64 claims")?;
-        let decrypted = crypto::xor_encrypt(&decoded, &self.encryption_key);
+        let decrypted = crypto::decrypt(&decoded, &self.encryption_key)
+            .map_err(|_| anyhow::anyhow!("failed to decrypt claims"))?;
         serde_json::from_slice(&decrypted).context("failed to parse decrypted claims")
     }
 

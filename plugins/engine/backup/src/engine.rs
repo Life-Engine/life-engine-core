@@ -344,7 +344,7 @@ mod tests {
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("HMAC mismatch"));
+            .contains("authentication failed"));
     }
 
     #[tokio::test]

@@ -1,10 +1,12 @@
 //! Shared encryption utilities for the Core application.
 //!
-//! Centralises key derivation and XOR-based encryption used across
-//! the credential store, identity store, and other subsystems.
+//! Centralises key derivation and AES-256-GCM authenticated encryption
+//! used across the credential store, identity store, and other subsystems.
 //! Each subsystem uses a distinct domain separator to ensure key
 //! independence.
 
+use aes_gcm::aead::{Aead, KeyInit, OsRng};
+use aes_gcm::{AeadCore, Aes256Gcm, Nonce};
 use sha2::{Digest, Sha256};
 
 /// Derive a 32-byte key from a secret and domain separator using SHA-256.
@@ -18,15 +20,33 @@ pub fn derive_key(secret: &str, domain: &str) -> Vec<u8> {
     hasher.finalize().to_vec()
 }
 
-/// XOR-based stream cipher with key repetition.
+/// Encrypt data using AES-256-GCM with a random nonce.
 ///
-/// Used for at-rest encryption of credential values. The key is
-/// repeated cyclically to match the data length.
-pub fn xor_encrypt(data: &[u8], key: &[u8]) -> Vec<u8> {
-    data.iter()
-        .enumerate()
-        .map(|(i, byte)| byte ^ key[i % key.len()])
-        .collect()
+/// Returns the 12-byte nonce prepended to the ciphertext+tag.
+/// The key must be exactly 32 bytes.
+pub fn encrypt(data: &[u8], key: &[u8]) -> Result<Vec<u8>, aes_gcm::Error> {
+    let cipher = Aes256Gcm::new_from_slice(key).expect("key must be 32 bytes");
+    let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
+    let ciphertext = cipher.encrypt(&nonce, data)?;
+    let mut output = Vec::with_capacity(12 + ciphertext.len());
+    output.extend_from_slice(&nonce);
+    output.extend_from_slice(&ciphertext);
+    Ok(output)
+}
+
+/// Decrypt data produced by [`encrypt`].
+///
+/// Expects the first 12 bytes to be the nonce, followed by the
+/// ciphertext+tag. Returns an error if the data is too short,
+/// the key is wrong, or the ciphertext has been tampered with.
+pub fn decrypt(data: &[u8], key: &[u8]) -> Result<Vec<u8>, aes_gcm::Error> {
+    if data.len() < 12 {
+        return Err(aes_gcm::Error);
+    }
+    let (nonce_bytes, ciphertext) = data.split_at(12);
+    let nonce = Nonce::from_slice(nonce_bytes);
+    let cipher = Aes256Gcm::new_from_slice(key).expect("key must be 32 bytes");
+    cipher.decrypt(nonce, ciphertext)
 }
 
 /// Compute HMAC-SHA256 of data with a signing key.
@@ -83,20 +103,55 @@ mod tests {
     }
 
     #[test]
-    fn xor_encrypt_roundtrip() {
+    fn encrypt_decrypt_roundtrip() {
         let key = derive_key("test-key", "test");
         let plaintext = b"hello world";
-        let encrypted = xor_encrypt(plaintext, &key);
-        let decrypted = xor_encrypt(&encrypted, &key);
+        let encrypted = encrypt(plaintext, &key).unwrap();
+        let decrypted = decrypt(&encrypted, &key).unwrap();
         assert_eq!(decrypted, plaintext);
     }
 
     #[test]
-    fn xor_encrypt_changes_data() {
+    fn encrypt_changes_data() {
         let key = derive_key("test-key", "test");
         let plaintext = b"hello world";
-        let encrypted = xor_encrypt(plaintext, &key);
-        assert_ne!(encrypted, plaintext.to_vec());
+        let encrypted = encrypt(plaintext, &key).unwrap();
+        // Skip nonce (12 bytes) when comparing
+        assert_ne!(&encrypted[12..], plaintext.as_slice());
+    }
+
+    #[test]
+    fn encrypt_produces_unique_ciphertexts() {
+        let key = derive_key("test-key", "test");
+        let plaintext = b"hello world";
+        let e1 = encrypt(plaintext, &key).unwrap();
+        let e2 = encrypt(plaintext, &key).unwrap();
+        // Different nonces should produce different ciphertexts
+        assert_ne!(e1, e2);
+    }
+
+    #[test]
+    fn decrypt_rejects_wrong_key() {
+        let key1 = derive_key("key-a", "test");
+        let key2 = derive_key("key-b", "test");
+        let encrypted = encrypt(b"secret data", &key1).unwrap();
+        assert!(decrypt(&encrypted, &key2).is_err());
+    }
+
+    #[test]
+    fn decrypt_rejects_tampered_data() {
+        let key = derive_key("test-key", "test");
+        let mut encrypted = encrypt(b"secret data", &key).unwrap();
+        // Flip a byte in the ciphertext
+        let last = encrypted.len() - 1;
+        encrypted[last] ^= 0xff;
+        assert!(decrypt(&encrypted, &key).is_err());
+    }
+
+    #[test]
+    fn decrypt_rejects_short_data() {
+        let key = derive_key("test-key", "test");
+        assert!(decrypt(b"short", &key).is_err());
     }
 
     #[test]

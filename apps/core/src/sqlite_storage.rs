@@ -361,6 +361,9 @@ impl StorageAdapter for SqliteStorage {
                     SortDirection::Asc => "ASC",
                     SortDirection::Desc => "DESC",
                 };
+                if !opts.sort_by.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+                    anyhow::bail!("invalid sort_by field name: {}", opts.sort_by);
+                }
                 format!("ORDER BY json_extract(data, '$.{}') {dir}", opts.sort_by)
             }
             None => String::new(),

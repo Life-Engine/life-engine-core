@@ -12,6 +12,7 @@ use crate::storage::{
 };
 
 use axum::extract::State;
+use axum::response::IntoResponse;
 
 use async_graphql::*;
 use chrono::{DateTime, Utc};
@@ -1233,10 +1234,20 @@ pub fn build_schema(
 pub async fn graphql_handler(
     State(state): axum::extract::State<AppState>,
     req: async_graphql_axum::GraphQLRequest,
-) -> async_graphql_axum::GraphQLResponse {
-    let storage = state.storage.expect("storage must be initialized");
+) -> axum::response::Response {
+    let storage = match state.storage {
+        Some(s) => s,
+        None => {
+            return (
+                axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                axum::Json(serde_json::json!({"error": "storage not initialized"})),
+            )
+                .into_response();
+        }
+    };
     let schema = build_schema(storage, state.message_bus);
-    schema.execute(req.into_inner()).await.into()
+    let resp: async_graphql_axum::GraphQLResponse = schema.execute(req.into_inner()).await.into();
+    resp.into_response()
 }
 
 /// Axum handler for GraphQL Playground (GET /api/graphql/playground).

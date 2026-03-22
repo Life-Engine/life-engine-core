@@ -63,18 +63,20 @@ impl SqliteCredentialStore {
         Ok(())
     }
 
-    /// Encrypt a plaintext value using the instance key.
+    /// Encrypt a plaintext value using AES-256-GCM with the instance key.
     fn encrypt(&self, plaintext: &str) -> String {
-        let encrypted = crypto::xor_encrypt(plaintext.as_bytes(), &self.encryption_key);
+        let encrypted = crypto::encrypt(plaintext.as_bytes(), &self.encryption_key)
+            .expect("AES-256-GCM encryption should not fail with valid key");
         base64::engine::general_purpose::STANDARD.encode(encrypted)
     }
 
-    /// Decrypt an encrypted value back to plaintext.
+    /// Decrypt an AES-256-GCM encrypted value back to plaintext.
     fn decrypt(&self, ciphertext: &str) -> Result<String> {
         let decoded = base64::engine::general_purpose::STANDARD
             .decode(ciphertext)
             .context("failed to decode base64 credential value")?;
-        let decrypted = crypto::xor_encrypt(&decoded, &self.encryption_key);
+        let decrypted = crypto::decrypt(&decoded, &self.encryption_key)
+            .map_err(|_| anyhow::anyhow!("failed to decrypt credential value"))?;
         String::from_utf8(decrypted).context("decrypted credential is not valid UTF-8")
     }
 }
@@ -480,11 +482,11 @@ mod tests {
     }
 
     #[test]
-    fn xor_roundtrip() {
+    fn encrypt_decrypt_roundtrip() {
         let key = crypto::derive_key("test-key", crypto::DOMAIN_CREDENTIAL_STORE);
         let plaintext = b"hello world";
-        let encrypted = crypto::xor_encrypt(plaintext, &key);
-        let decrypted = crypto::xor_encrypt(&encrypted, &key);
+        let encrypted = crypto::encrypt(plaintext, &key).unwrap();
+        let decrypted = crypto::decrypt(&encrypted, &key).unwrap();
         assert_eq!(decrypted, plaintext);
     }
 }

@@ -47,6 +47,7 @@ rpassword = "7"
 rand = "0.8"
 sha2 = "0.10"
 hex = "0.4"
+aes-gcm = "0.10"
 argon2 = "0.5"
 tokio-stream = { version = "0.1", features = ["sync"] }
 futures = "0.3"

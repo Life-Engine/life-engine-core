@@ -2,6 +2,11 @@
 
 ## 2026-03-22
 
+- WP 1.1 Critical Fixes: replace XOR cipher with AES-256-GCM across core crypto, identity, credential store, and backup modules
+- Fix SQL injection via unvalidated sort_by field in SQLite and PostgreSQL storage backends
+- Replace expect() panic in GraphQL handler with 503 SERVICE_UNAVAILABLE error response
+- Update Dockerfile Rust version from 1.83 to 1.85 for edition 2024 support
+
 - Replace phase-based planning (phase-0 through phase-4) with QA-driven fix plan from full-project audit
 - Add full-project QA report (196 findings across 170 files) and 76-task fix plan organized by severity
 - Disable dependabot (renamed to .disabled)

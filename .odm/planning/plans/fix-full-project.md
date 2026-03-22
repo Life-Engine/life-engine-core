@@ -19,42 +19,42 @@ Progress: 0 / 4 work packages complete (76 tasks)
 ## 1.1 — Critical Fixes
 > qa-report: .odm/qa/full-project/report.md
 
-- [ ] Replace XOR encryption with AES-256-GCM in core crypto [BLOCKER]
+- [x] Replace XOR encryption with AES-256-GCM in core crypto [BLOCKER]
   <!-- file: apps/core/src/crypto.rs -->
   <!-- purpose: Replace xor_encrypt with aes-gcm crate, unique nonce per encryption -->
   <!-- findings: F-001 -->
   <!-- severity: critical -->
   <!-- impact: Credentials at rest are trivially recoverable with current XOR cipher -->
 
-- [ ] Replace XOR encryption in identity module [BLOCKER]
+- [x] Replace XOR encryption in identity module [BLOCKER]
   <!-- file: apps/core/src/identity.rs -->
   <!-- purpose: Use authenticated encryption for identity documents (passports, licences) -->
   <!-- findings: F-002 -->
   <!-- severity: critical -->
   <!-- impact: Identity documents have no confidentiality or integrity protection -->
 
-- [ ] Fix SQL injection via sort_by in storage backends [BLOCKER]
+- [x] Fix SQL injection via sort_by in storage backends [BLOCKER]
   <!-- file: apps/core/src/sqlite_storage.rs, apps/core/src/pg_storage.rs -->
   <!-- purpose: Validate sort_by against allowlist or restrict to [a-zA-Z0-9_] -->
   <!-- findings: F-003 -->
   <!-- severity: critical -->
   <!-- impact: Attacker can execute arbitrary SQL via crafted sort field name -->
 
-- [ ] Replace fake AES-256-GCM in backup crypto [BLOCKER]
+- [x] Replace fake AES-256-GCM in backup crypto [BLOCKER]
   <!-- file: plugins/engine/backup/src/crypto.rs -->
   <!-- purpose: Implement real AES-256-GCM using aes-gcm crate, remove homebrew XOR cipher -->
   <!-- findings: F-004, F-005, F-006, F-031 -->
   <!-- severity: critical -->
   <!-- impact: Backup encryption provides no meaningful security; nonce reuse and fixed salt compound the issue -->
 
-- [ ] Fix panic in production GraphQL handler [BLOCKER]
+- [x] Fix panic in production GraphQL handler [BLOCKER]
   <!-- file: apps/core/src/routes/graphql.rs -->
   <!-- purpose: Replace expect() with 503 error response matching other handlers -->
   <!-- findings: F-007 -->
   <!-- severity: critical -->
   <!-- impact: Server crashes if storage is not initialized when GraphQL request arrives -->
 
-- [ ] Fix Dockerfile Rust version for edition 2024 [BLOCKER]
+- [x] Fix Dockerfile Rust version for edition 2024 [BLOCKER]
   <!-- file: apps/core/Dockerfile -->
   <!-- purpose: Update FROM rust:1.83-alpine to rust:1.85-alpine or later -->
   <!-- findings: F-008 -->

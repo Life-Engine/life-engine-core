@@ -40,13 +40,13 @@ Progress: 0 / 14 work packages complete
 ## 1.2 — Nx Installation & Base Config
 > depends: 1.1
 
-- [ ] Install Nx and plugins, generate lockfile
+- [x] Install Nx and plugins, generate lockfile
   <!-- file: package.json, pnpm-lock.yaml -->
   <!-- purpose: Run pnpm install to generate lockfile with nx, @nx/js, @nx/vite, @nx/react as devDependencies -->
   <!-- requirements: Nx available in workspace -->
   <!-- leverage: package.json from WP 1.1 -->
 
-- [ ] Create `nx.json` with target defaults, cache inputs, and named inputs
+- [x] Create `nx.json` with target defaults, cache inputs, and named inputs
   <!-- file: nx.json -->
   <!-- purpose: Define targetDefaults for build (dependsOn: ^build), test, lint with cache settings; set namedInputs for Rust and TypeScript -->
   <!-- requirements: task caching, affected detection -->

@@ -8,6 +8,8 @@
   "scripts": {},
   "devDependencies": {
     "nx": "^20.4.0",
-    "@nx/js": "^20.4.0"
+    "@nx/js": "^20.4.0",
+    "@nx/vite": "^20.4.0",
+    "@nx/react": "^20.4.0"
   }
 }

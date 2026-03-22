@@ -1,14 +1,11 @@
 {
   "version": 1,
   "last_updated": "2026-03-23T00:00:00Z",
-  "completed_wps": ["1.1", "1.2", "1.3", "1.4"],
-  "current_wp": "nx:1.1",
+  "completed_wps": ["1.1", "1.2", "1.3", "1.4", "nx:1.1", "nx:1.2"],
+  "current_wp": null,
   "current_wp_tasks": {
-    "total": 2,
-    "completed": [
-      "Create root package.json with project metadata and Nx devDependencies",
-      "Create pnpm-workspace.yaml listing all workspace members"
-    ],
+    "total": 0,
+    "completed": [],
     "deferred": [],
     "remaining": [],
     "failed": []
@@ -44,6 +41,22 @@
       "completed_at": "2026-03-22T00:00:00Z",
       "commit": "b405818",
       "tasks_completed": 7,
+      "tasks_deferred": 0
+    },
+    {
+      "wp": "nx:1.1",
+      "title": "Root Package & pnpm Workspace",
+      "completed_at": "2026-03-23T00:00:00Z",
+      "commit": "61ab499",
+      "tasks_completed": 2,
+      "tasks_deferred": 0
+    },
+    {
+      "wp": "nx:1.2",
+      "title": "Nx Installation & Base Config",
+      "completed_at": "2026-03-23T00:00:00Z",
+      "commit": "pending",
+      "tasks_completed": 2,
       "tasks_deferred": 0
     }
   ]

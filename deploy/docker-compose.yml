@@ -1,0 +1,24 @@
+services:
+  core:
+    build:
+      context: ../
+      dockerfile: apps/core/Dockerfile
+    ports:
+      - "3750:3750"
+    environment:
+      LIFE_ENGINE_CORE_HOST: "0.0.0.0"
+      LIFE_ENGINE_CORE_PORT: "3750"
+      LIFE_ENGINE_CORE_LOG_LEVEL: "info"
+      LIFE_ENGINE_CORE_DATA_DIR: "/data"
+      LIFE_ENGINE_AUTH_PROVIDER: "local-token"
+    volumes:
+      - core-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3750/api/system/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  core-data:

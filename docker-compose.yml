@@ -1,0 +1,43 @@
+services:
+  pocket-id:
+    image: ghcr.io/pocket-id/pocket-id:latest
+    ports:
+      - "3751:80"
+    environment:
+      - TRUST_PROXY=true
+      - PUBLIC_APP_URL=http://localhost:3751
+    volumes:
+      - pocket-id-data:/data
+
+  greenmail:
+    image: greenmail/standalone:2.0.1
+    ports:
+      - "3025:3025"   # SMTP
+      - "3143:3143"   # IMAP
+      - "3993:3993"   # IMAPS
+    environment:
+      - GREENMAIL_OPTS=-Dgreenmail.setup.test.all -Dgreenmail.users=test:test@life-engine.local
+
+  radicale:
+    image: tomsquest/docker-radicale:latest
+    ports:
+      - "5232:5232"
+    volumes:
+      - radicale-data:/data
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    volumes:
+      - minio-data:/data
+
+volumes:
+  pocket-id-data:
+  radicale-data:
+  minio-data:

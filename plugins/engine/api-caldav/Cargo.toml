@@ -1,0 +1,29 @@
+[package]
+name = "api-caldav"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "CalDAV server API plugin for Life Engine Core — exposes events as CalDAV calendars"
+
+[lib]
+name = "api_caldav"
+path = "src/lib.rs"
+
+[dependencies]
+life-engine-plugin-sdk = { path = "../../../packages/plugin-sdk-rs" }
+life-engine-types = { path = "../../../packages/types" }
+dav-utils = { path = "../../../packages/dav-utils" }
+async-trait = { workspace = true }
+anyhow = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+tracing = { workspace = true }
+ical = "0.11"
+
+[dev-dependencies]
+life-engine-test-utils = { path = "../../../packages/test-utils" }
+tokio = { workspace = true }
+uuid = { workspace = true }

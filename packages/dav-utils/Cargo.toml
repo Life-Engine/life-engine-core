@@ -1,0 +1,20 @@
+[package]
+name = "dav-utils"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Shared vCard/iCal parsing and DAV sync utilities for Life Engine connectors"
+
+[lib]
+name = "dav_utils"
+path = "src/lib.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+base64 = "0.22"
+chrono = { workspace = true }
+serde = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

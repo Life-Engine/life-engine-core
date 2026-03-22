@@ -1,0 +1,38 @@
+[package]
+name = "connector-email"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "IMAP/SMTP email connector plugin for Life Engine Core"
+
+[lib]
+name = "connector_email"
+path = "src/lib.rs"
+
+[features]
+integration = ["async-imap", "async-native-tls", "async-std", "futures"]
+
+[dependencies]
+life-engine-plugin-sdk = { path = "../../../packages/plugin-sdk-rs" }
+life-engine-types = { path = "../../../packages/types" }
+async-trait = { workspace = true }
+anyhow = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+tracing = { workspace = true }
+lettre = { version = "0.11", features = ["tokio1-native-tls", "builder"] }
+mail-parser = "0.9"
+
+# Optional deps — only needed for actual IMAP connections (integration tests)
+async-imap = { version = "0.10", optional = true }
+async-native-tls = { version = "0.5", optional = true }
+async-std = { version = "1", optional = true }
+futures = { version = "0.3", optional = true }
+
+[dev-dependencies]
+life-engine-test-utils = { path = "../../../packages/test-utils" }
+tokio = { workspace = true }
+uuid = { workspace = true }

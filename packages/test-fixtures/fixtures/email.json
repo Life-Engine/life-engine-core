@@ -1,0 +1,25 @@
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "from": "notifications@github.com",
+  "to": ["developer@company.com"],
+  "cc": ["team-leads@company.com"],
+  "bcc": ["archive@company.com"],
+  "subject": "Re: Plugin SDK API review — feedback requested",
+  "body_text": "The latest SDK changes look good. I have a few minor suggestions on the type definitions.",
+  "body_html": "<p>The latest SDK changes look good. I have a few minor suggestions on the type definitions.</p>",
+  "thread_id": "thread-sdk-review-2026",
+  "labels": ["inbox", "development"],
+  "attachments": [
+    {
+      "file_id": "660e8400-e29b-41d4-a716-446655440001",
+      "filename": "sdk-review-notes.pdf",
+      "mime_type": "application/pdf",
+      "size": 128000
+    }
+  ],
+  "source": "imap",
+  "source_id": "fixture-email-001",
+  "extensions": {},
+  "created_at": "2026-01-15T10:30:00Z",
+  "updated_at": "2026-01-15T10:30:00Z"
+}

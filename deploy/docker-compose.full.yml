@@ -1,0 +1,43 @@
+services:
+  core:
+    build:
+      context: ../
+      dockerfile: apps/core/Dockerfile
+    ports:
+      - "3750:3750"
+    environment:
+      LIFE_ENGINE_CORE_HOST: "0.0.0.0"
+      LIFE_ENGINE_AUTH_PROVIDER: "oidc"
+      LIFE_ENGINE_OIDC_ISSUER_URL: "http://pocket-id:3751"
+      LIFE_ENGINE_OIDC_CLIENT_ID: "life-engine"
+      LIFE_ENGINE_CORE_DATA_DIR: "/data"
+    volumes:
+      - core-data:/data
+    depends_on:
+      pocket-id:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3750/api/system/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  pocket-id:
+    image: stonith404/pocket-id:latest
+    ports:
+      - "3751:3751"
+    environment:
+      PUBLIC_APP_URL: "http://localhost:3751"
+    volumes:
+      - pocket-id-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3751/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  core-data:
+  pocket-id-data:

@@ -1,0 +1,38 @@
+[package]
+name = "connector-filesystem"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Local filesystem and S3-compatible cloud storage connector for Life Engine Core"
+
+[lib]
+name = "connector_filesystem"
+path = "src/lib.rs"
+
+[features]
+integration = ["aws-sdk-s3", "aws-config"]
+
+[dependencies]
+life-engine-plugin-sdk = { path = "../../../packages/plugin-sdk-rs" }
+life-engine-types = { path = "../../../packages/types" }
+async-trait = { workspace = true }
+anyhow = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+tracing = { workspace = true }
+notify = { version = "7", features = ["serde"] }
+sha2 = { workspace = true }
+hex = { workspace = true }
+glob = "0.3"
+mime_guess = "2"
+aws-sdk-s3 = { version = "1", optional = true }
+aws-config = { version = "1", optional = true }
+
+[dev-dependencies]
+life-engine-test-utils = { path = "../../../packages/test-utils" }
+tempfile = "3"
+tokio = { workspace = true }
+uuid = { workspace = true }

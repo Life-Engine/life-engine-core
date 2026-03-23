@@ -15,7 +15,7 @@ This phase depends on Phase 3 (traits, capabilities), Phase 4 (plugin SDK), Phas
 
 > spec: .odm/spec/plugin-system/brief.md, .odm/spec/capability-enforcement/brief.md
 
-Progress: 10 / 22 work packages complete
+Progress: 11 / 22 work packages complete
 
 ---
 
@@ -249,7 +249,7 @@ Progress: 10 / 22 work packages complete
 ## 8.14 — Manifest Capability Parsing Extension
 > spec: .odm/spec/capability-enforcement/brief.md
 
-- [ ] Parse and validate capabilities from manifest.toml [capabilities] section
+- [x] Parse and validate capabilities from manifest.toml [capabilities] section
   <!-- file: packages/plugin-system/src/manifest.rs -->
   <!-- purpose: Extend the manifest parser to handle the [capabilities] section more robustly. The required array contains capability strings like ["storage:read", "storage:write", "http:outbound"]. Parse each string using Capability::from_str. If any string doesn't match a known Capability variant, reject the entire manifest with a clear error: "Unknown capability 'xxx' in manifest for plugin 'yyy'. Valid capabilities: storage:read, storage:write, http:outbound, events:emit, events:subscribe, config:read". If the [capabilities] section is missing entirely, treat as empty (plugin declares no capabilities). Add tests: valid capabilities parse, unknown capability string causes rejection, missing section gives empty set. -->
   <!-- requirements: from capability-enforcement spec 1.1, 6.1, 6.2 -->

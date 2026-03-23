@@ -124,14 +124,14 @@
     "7.17",
     "8.11",
     "8.12",
-    "8.13"
+    "8.13",
+    "8.14"
   ],
   "current_wp": null,
   "current_wp_tasks": {
-    "total": 2,
+    "total": 1,
     "completed": [
-      "Extend Core config to parse plugin-specific sections",
-      "Add plugin config parsing tests"
+      "Parse and validate capabilities from manifest.toml [capabilities] section"
     ],
     "deferred": [],
     "remaining": [],
@@ -1118,8 +1118,16 @@
       "wp": "8.13",
       "title": "Plugin Config Section Parser",
       "completed_at": "2026-03-23T00:00:00Z",
-      "commit": "pending",
+      "commit": "3d03c81",
       "tasks_completed": 2,
+      "tasks_deferred": 0
+    },
+    {
+      "wp": "8.14",
+      "title": "Manifest Capability Parsing Extension",
+      "completed_at": "2026-03-23T00:00:00Z",
+      "commit": "d9fb27c",
+      "tasks_completed": 1,
       "tasks_deferred": 0
     }
   ]

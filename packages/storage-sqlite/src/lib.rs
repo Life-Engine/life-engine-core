@@ -18,6 +18,7 @@ pub mod validation;
 use rusqlite::Connection;
 
 pub use error::StorageError;
+pub use validation::PrivateSchemaRegistry;
 
 /// SQLite/SQLCipher storage backend.
 ///
@@ -25,6 +26,7 @@ pub use error::StorageError;
 /// and WAL journal mode. Created via the `init` constructor.
 pub struct SqliteStorage {
     conn: Connection,
+    private_schemas: PrivateSchemaRegistry,
 }
 
 impl std::fmt::Debug for SqliteStorage {
@@ -100,12 +102,28 @@ impl SqliteStorage {
             conn.execute_batch(ddl).map_err(StorageError::Database)?;
         }
 
-        Ok(SqliteStorage { conn })
+        Ok(SqliteStorage {
+            conn,
+            private_schemas: PrivateSchemaRegistry::new(),
+        })
     }
 
     /// Returns a reference to the underlying database connection.
     pub fn connection(&self) -> &Connection {
         &self.conn
+    }
+
+    /// Returns a mutable reference to the private schema registry.
+    ///
+    /// Use this to register private collection schemas from plugin manifests
+    /// before performing write operations on private collections.
+    pub fn private_schemas_mut(&mut self) -> &mut PrivateSchemaRegistry {
+        &mut self.private_schemas
+    }
+
+    /// Returns a reference to the private schema registry.
+    pub fn private_schemas(&self) -> &PrivateSchemaRegistry {
+        &self.private_schemas
     }
 }
 

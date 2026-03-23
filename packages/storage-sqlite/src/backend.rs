@@ -229,7 +229,16 @@ impl SqliteStorage {
                 let now = Utc::now().to_rfc3339();
                 let data_json = serialize_payload(&data.payload)?;
 
-                validation::validate_canonical(&collection, &data_json)?;
+                if validation::is_canonical(&collection) {
+                    validation::validate_canonical(&collection, &data_json)?;
+                } else {
+                    validation::validate_private(
+                        &self.private_schemas,
+                        &plugin_id,
+                        &collection,
+                        &data_json,
+                    )?;
+                }
 
                 self.conn.execute(
                     "INSERT INTO plugin_data \
@@ -250,7 +259,16 @@ impl SqliteStorage {
                 let now = Utc::now().to_rfc3339();
                 let data_json = serialize_payload(&data.payload)?;
 
-                validation::validate_canonical(&collection, &data_json)?;
+                if validation::is_canonical(&collection) {
+                    validation::validate_canonical(&collection, &data_json)?;
+                } else {
+                    validation::validate_private(
+                        &self.private_schemas,
+                        &plugin_id,
+                        &collection,
+                        &data_json,
+                    )?;
+                }
 
                 let id_str = id.to_string();
                 let version_i64 = expected_version as i64;
@@ -355,7 +373,10 @@ mod tests {
         for ddl in schema::ALL_DDL {
             conn.execute_batch(ddl).unwrap();
         }
-        SqliteStorage { conn }
+        SqliteStorage {
+            conn,
+            private_schemas: crate::validation::PrivateSchemaRegistry::new(),
+        }
     }
 
     fn insert_row(storage: &SqliteStorage, id: &str, plugin_id: &str, collection: &str, data: &str) {

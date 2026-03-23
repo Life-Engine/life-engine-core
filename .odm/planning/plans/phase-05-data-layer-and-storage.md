@@ -105,7 +105,7 @@ Progress: 0 / 16 work packages complete
 > depends: 5.6
 > spec: .odm/spec/data-layer/brief.md
 
-- [ ] Implement schema validation for plugin private collections
+- [x] Implement schema validation for plugin private collections
   <!-- file: packages/storage-sqlite/src/validation.rs -->
   <!-- purpose: Accept a registry of private collection schemas loaded from plugin manifests. Each plugin can declare private collections in its manifest.toml under [collections.private] with a JSON Schema definition. Before any write to a private collection, look up the schema by the composite key (plugin_id, collection_name) and validate. If no schema is registered for the collection, reject the write with an error. Private collections are namespaced by plugin_id — plugin "com.example.weather" can write to "com.example.weather:forecasts" but not to "com.example.maps:locations". Add tests: write with valid schema passes, write violating schema fails, write to unregistered collection fails, cross-plugin write rejected. -->
   <!-- requirements: 4.2, 4.3 -->

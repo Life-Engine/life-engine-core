@@ -351,6 +351,18 @@ pub struct PluginSettings {
 /// Network, TLS, CORS, and rate limiting settings.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct NetworkSettings {
+    /// Whether Core is running behind a reverse proxy (e.g. Caddy, nginx).
+    ///
+    /// When `true`: TLS requirement is skipped for non-localhost bind addresses
+    /// (the reverse proxy handles TLS), `X-Forwarded-For` headers are trusted
+    /// for client IP extraction, and `X-Forwarded-Proto` is trusted for
+    /// protocol detection.
+    ///
+    /// When `false` (default) and the bind address is not localhost, TLS must
+    /// be configured or Core will refuse to start.
+    #[serde(default)]
+    pub behind_proxy: bool,
+
     /// TLS configuration.
     #[serde(default)]
     pub tls: TlsSettings,
@@ -686,6 +698,12 @@ impl CoreConfig {
         {
             self.network.rate_limit.requests_per_minute = r;
         }
+        // Behind-proxy env var override.
+        if let Ok(val) = std::env::var("LIFE_ENGINE_BEHIND_PROXY")
+            && let Ok(b) = val.parse::<bool>()
+        {
+            self.network.behind_proxy = b;
+        }
         // TLS env var overrides.
         if let Ok(val) = std::env::var("LIFE_ENGINE_TLS_ENABLED")
             && let Ok(b) = val.parse::<bool>()
@@ -776,6 +794,20 @@ impl CoreConfig {
                     CoreError::Config("TLS enabled but key_path is empty".into()).into(),
                 );
             }
+        }
+
+        // Enforce TLS for non-localhost addresses unless behind a reverse proxy.
+        let is_localhost = self.core.host == "127.0.0.1"
+            || self.core.host == "localhost"
+            || self.core.host == "::1";
+        if !is_localhost && !self.network.behind_proxy && !self.network.tls.enabled {
+            return Err(CoreError::Config(
+                "TLS is required for non-localhost bind addresses; \
+                 configure [network.tls] with cert_path and key_path, \
+                 or set network.behind_proxy = true if behind a reverse proxy"
+                    .into(),
+            )
+            .into());
         }
 
         // CORS allowed_origins must not be empty.

@@ -105,7 +105,7 @@ Progress: 4 / 24 work packages complete
 ## 10.8 — Behind-Proxy Support
 > spec: .odm/spec/deployment-modes/brief.md
 
-- [ ] Add LE_BEHIND_PROXY flag support to Core startup
+- [x] Add LE_BEHIND_PROXY flag support to Core startup
   <!-- file: apps/core/src/config.rs -->
   <!-- purpose: Add behind_proxy (bool, default false) field to CoreConfig. When behind_proxy is true or LIFE_ENGINE_BEHIND_PROXY=true env var is set: (1) skip the TLS requirement for non-localhost bind addresses (the reverse proxy handles TLS), (2) trust X-Forwarded-For headers for client IP extraction (used by rate limiter), (3) trust X-Forwarded-Proto for protocol detection. When behind_proxy is false and bind address is not localhost: enforce TLS configuration — refuse to start without [transports.rest.tls] config containing cert_path and key_path. Log whether behind_proxy mode is active at startup. -->
   <!-- requirements: 4.4, 5.2 -->

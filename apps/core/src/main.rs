@@ -165,6 +165,7 @@ async fn main() -> anyhow::Result<()> {
         deployment_mode = %deployment_mode,
         bind = %format!("{}:{}", config.core.host, config.core.port),
         tls = %tls_status,
+        behind_proxy = %config.network.behind_proxy,
         auth_provider = %config.auth.provider,
         database_path = %config.core.data_dir,
         plugins_dir = %plugins_dir,
@@ -173,8 +174,19 @@ async fn main() -> anyhow::Result<()> {
         "startup configuration summary"
     );
 
+    if config.network.behind_proxy {
+        tracing::info!(
+            "behind-proxy mode active: trusting X-Forwarded-For and X-Forwarded-Proto headers"
+        );
+    }
+
     // Warn about potentially insecure configurations.
-    if !config.network.tls.enabled && config.core.host != "127.0.0.1" && config.core.host != "localhost" && config.core.host != "::1" {
+    if !config.network.tls.enabled
+        && !config.network.behind_proxy
+        && config.core.host != "127.0.0.1"
+        && config.core.host != "localhost"
+        && config.core.host != "::1"
+    {
         tracing::warn!(
             host = %config.core.host,
             "running without TLS on non-localhost address"

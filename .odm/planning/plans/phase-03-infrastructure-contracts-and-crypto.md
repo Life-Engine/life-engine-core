@@ -105,7 +105,7 @@ Progress: 0 / 10 work packages complete
 ## 3.8 — AES-256-GCM Encryption Primitives
 > spec: .odm/spec/binary-and-startup/brief.md
 
-- [ ] Implement AES-256-GCM encrypt and decrypt functions
+- [x] Implement AES-256-GCM encrypt and decrypt functions
   <!-- file: packages/crypto/src/encryption.rs -->
   <!-- purpose: Implement pub fn encrypt(key: &[u8; 32], plaintext: &[u8]) -> Result<Vec<u8>> that generates a random 12-byte nonce, encrypts using AES-256-GCM, and prepends the nonce to the ciphertext (output format: nonce || ciphertext || tag). Implement pub fn decrypt(key: &[u8; 32], ciphertext: &[u8]) -> Result<Vec<u8>> that splits the nonce from the ciphertext and decrypts. Use the aes-gcm crate. Never reuse nonces — always generate fresh random nonces via OsRng. Define CryptoError enum with variants: EncryptionFailed, DecryptionFailed, InvalidKeyLength, InvalidCiphertext. Implement std::error::Error for CryptoError. Re-export encrypt and decrypt from lib.rs. -->
   <!-- requirements: from data-layer spec 6.1 -->

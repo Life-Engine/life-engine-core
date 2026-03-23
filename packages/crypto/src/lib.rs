@@ -8,5 +8,8 @@ pub mod hmac;
 pub mod kdf;
 pub mod types;
 
+pub use encryption::{decrypt, encrypt};
+pub use error::CryptoError;
+
 #[cfg(test)]
 mod tests;

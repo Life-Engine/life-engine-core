@@ -1,16 +1,21 @@
 //! Workflow step executor.
 //!
 //! Provides the `PipelineExecutor` which runs workflow steps sequentially,
-//! passing each step's output as input to the next step.
+//! passing each step's output as input to the next step. Supports both
+//! sync (blocking) and async (background) execution modes.
 
 use async_trait::async_trait;
+use chrono::Utc;
 use life_engine_traits::EngineError;
-use life_engine_types::PipelineMessage;
+use life_engine_types::{MessageMetadata, PipelineMessage, SchemaValidated, TypedPayload};
+use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::info;
+use tokio::sync::RwLock;
+use tracing::{error, info};
+use uuid::Uuid;
 
 use crate::error::WorkflowError;
-use crate::types::WorkflowDef;
+use crate::types::{ExecutionMode, WorkflowDef};
 
 /// Trait for executing a single plugin action.
 ///
@@ -27,23 +32,200 @@ pub trait PluginExecutor: Send + Sync {
     ) -> Result<PipelineMessage, Box<dyn EngineError>>;
 }
 
+/// Status of an async workflow job.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum JobStatus {
+    /// Job is currently running.
+    Running,
+    /// Job completed successfully.
+    Completed,
+    /// Job failed with an error message.
+    Failed(String),
+}
+
+/// Trait for emitting workflow events (completion, failure).
+///
+/// The event bus (WP 7.14) will provide a concrete implementation.
+#[async_trait]
+pub trait WorkflowEventEmitter: Send + Sync {
+    /// Emit a workflow event.
+    async fn emit(&self, event_name: &str, payload: serde_json::Value);
+}
+
+/// A no-op event emitter used when no event bus is configured.
+pub struct NoOpEventEmitter;
+
+#[async_trait]
+impl WorkflowEventEmitter for NoOpEventEmitter {
+    async fn emit(&self, _event_name: &str, _payload: serde_json::Value) {}
+}
+
 /// Executes workflow steps sequentially, passing each step's output
-/// as input to the next step.
+/// as input to the next step. Supports sync and async execution modes.
 pub struct PipelineExecutor {
     plugin_executor: Arc<dyn PluginExecutor>,
+    jobs: Arc<RwLock<HashMap<Uuid, JobStatus>>>,
+    event_emitter: Arc<dyn WorkflowEventEmitter>,
 }
 
 impl PipelineExecutor {
     /// Create a new pipeline executor with the given plugin executor.
     pub fn new(plugin_executor: Arc<dyn PluginExecutor>) -> Self {
-        Self { plugin_executor }
+        Self {
+            plugin_executor,
+            jobs: Arc::new(RwLock::new(HashMap::new())),
+            event_emitter: Arc::new(NoOpEventEmitter),
+        }
     }
 
-    /// Execute a workflow's steps sequentially.
+    /// Create a new pipeline executor with a plugin executor and event emitter.
+    pub fn with_event_emitter(
+        plugin_executor: Arc<dyn PluginExecutor>,
+        event_emitter: Arc<dyn WorkflowEventEmitter>,
+    ) -> Self {
+        Self {
+            plugin_executor,
+            jobs: Arc::new(RwLock::new(HashMap::new())),
+            event_emitter,
+        }
+    }
+
+    /// Query the status of an async job by its ID.
+    pub async fn job_status(&self, job_id: &Uuid) -> Option<JobStatus> {
+        self.jobs.read().await.get(job_id).cloned()
+    }
+
+    /// Execute a workflow respecting its execution mode.
     ///
-    /// Starts with `initial_message` and passes each step's output as
-    /// input to the next step. Returns the final step's output.
+    /// For `Sync` mode: runs all steps sequentially and returns the final result.
+    /// For `Async` mode: spawns execution in a background task and returns immediately
+    /// with a `PipelineMessage` containing the job ID in metadata.
     pub async fn execute_workflow(
+        &self,
+        workflow: &WorkflowDef,
+        initial_message: PipelineMessage,
+    ) -> Result<PipelineMessage, WorkflowError> {
+        match workflow.mode {
+            ExecutionMode::Sync => self.execute_sync(workflow, initial_message).await,
+            ExecutionMode::Async => self.execute_async(workflow, initial_message).await,
+        }
+    }
+
+    /// Execute a workflow synchronously — all steps run sequentially and the
+    /// final result is returned directly.
+    async fn execute_sync(
+        &self,
+        workflow: &WorkflowDef,
+        initial_message: PipelineMessage,
+    ) -> Result<PipelineMessage, WorkflowError> {
+        self.run_steps(workflow, initial_message).await
+    }
+
+    /// Execute a workflow asynchronously — spawn a background task and return
+    /// a PipelineMessage containing the job ID immediately.
+    async fn execute_async(
+        &self,
+        workflow: &WorkflowDef,
+        initial_message: PipelineMessage,
+    ) -> Result<PipelineMessage, WorkflowError> {
+        let job_id = Uuid::new_v4();
+        let workflow_id = workflow.id.clone();
+
+        info!(
+            workflow_id = %workflow_id,
+            job_id = %job_id,
+            "starting async workflow execution"
+        );
+
+        // Mark the job as running
+        self.jobs.write().await.insert(job_id, JobStatus::Running);
+
+        // Clone what the background task needs
+        let jobs = Arc::clone(&self.jobs);
+        let event_emitter = Arc::clone(&self.event_emitter);
+        let plugin_executor = Arc::clone(&self.plugin_executor);
+        let workflow = workflow.clone();
+        let correlation_id = initial_message.metadata.correlation_id;
+        let auth_context = initial_message.metadata.auth_context.clone();
+
+        tokio::spawn(async move {
+            let bg_executor = PipelineExecutor {
+                plugin_executor,
+                jobs: Arc::clone(&jobs),
+                event_emitter: Arc::clone(&event_emitter),
+            };
+
+            match bg_executor.run_steps(&workflow, initial_message).await {
+                Ok(_result) => {
+                    jobs.write().await.insert(job_id, JobStatus::Completed);
+                    event_emitter
+                        .emit(
+                            "workflow.completed",
+                            serde_json::json!({
+                                "job_id": job_id.to_string(),
+                                "workflow_id": workflow.id,
+                            }),
+                        )
+                        .await;
+                    info!(
+                        workflow_id = %workflow.id,
+                        job_id = %job_id,
+                        "async workflow completed"
+                    );
+                }
+                Err(err) => {
+                    let err_msg = err.to_string();
+                    jobs.write()
+                        .await
+                        .insert(job_id, JobStatus::Failed(err_msg.clone()));
+                    event_emitter
+                        .emit(
+                            "workflow.failed",
+                            serde_json::json!({
+                                "job_id": job_id.to_string(),
+                                "workflow_id": workflow.id,
+                                "error": err_msg,
+                            }),
+                        )
+                        .await;
+                    error!(
+                        workflow_id = %workflow.id,
+                        job_id = %job_id,
+                        error = %err,
+                        "async workflow failed"
+                    );
+                }
+            }
+        });
+
+        // Return immediately with a message containing the job_id
+        let schema = serde_json::json!({"type": "object"});
+        let payload = serde_json::json!({
+            "job_id": job_id.to_string(),
+            "workflow_id": workflow_id,
+            "status": "accepted",
+        });
+        let response = PipelineMessage {
+            metadata: MessageMetadata {
+                correlation_id,
+                source: format!("workflow-engine:async:{workflow_id}"),
+                timestamp: Utc::now(),
+                auth_context,
+            },
+            payload: TypedPayload::Custom(
+                SchemaValidated::new(payload, &schema)
+                    .map_err(|e| WorkflowError::PluginExecutionError {
+                        plugin: "workflow-engine".into(),
+                        cause: e.to_string(),
+                    })?,
+            ),
+        };
+
+        Ok(response)
+    }
+
+    /// Run the steps of a workflow sequentially.
+    async fn run_steps(
         &self,
         workflow: &WorkflowDef,
         initial_message: PipelineMessage,
@@ -90,10 +272,9 @@ impl PipelineExecutor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::Utc;
     use life_engine_types::{MessageMetadata, SchemaValidated, TypedPayload};
     use std::sync::atomic::{AtomicUsize, Ordering};
-    use uuid::Uuid;
+    use tokio::sync::Notify;
 
     use crate::types::{StepDef, TriggerDef};
 
@@ -194,6 +375,67 @@ mod tests {
         }
     }
 
+    /// A mock plugin executor that waits on a Notify before completing.
+    struct SlowPluginExecutor {
+        notify: Arc<Notify>,
+        call_count: AtomicUsize,
+    }
+
+    impl SlowPluginExecutor {
+        fn new(notify: Arc<Notify>) -> Self {
+            Self {
+                notify,
+                call_count: AtomicUsize::new(0),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl PluginExecutor for SlowPluginExecutor {
+        async fn execute(
+            &self,
+            plugin_id: &str,
+            action: &str,
+            mut input: PipelineMessage,
+        ) -> Result<PipelineMessage, Box<dyn EngineError>> {
+            self.call_count.fetch_add(1, Ordering::SeqCst);
+            // Wait until notified — simulates a slow plugin
+            self.notify.notified().await;
+            let schema = serde_json::json!({"type": "object"});
+            let transformed = serde_json::json!({"executed_by": format!("{plugin_id}.{action}")});
+            input.payload =
+                TypedPayload::Custom(SchemaValidated::new(transformed, &schema).unwrap());
+            Ok(input)
+        }
+    }
+
+    /// A mock event emitter that records emitted events.
+    struct RecordingEventEmitter {
+        events: Arc<RwLock<Vec<(String, serde_json::Value)>>>,
+    }
+
+    impl RecordingEventEmitter {
+        fn new() -> Self {
+            Self {
+                events: Arc::new(RwLock::new(Vec::new())),
+            }
+        }
+
+        fn events(&self) -> Arc<RwLock<Vec<(String, serde_json::Value)>>> {
+            Arc::clone(&self.events)
+        }
+    }
+
+    #[async_trait]
+    impl WorkflowEventEmitter for RecordingEventEmitter {
+        async fn emit(&self, event_name: &str, payload: serde_json::Value) {
+            self.events
+                .write()
+                .await
+                .push((event_name.to_string(), payload));
+        }
+    }
+
     fn make_test_message() -> PipelineMessage {
         let schema = serde_json::json!({"type": "object"});
         PipelineMessage {
@@ -222,7 +464,7 @@ mod tests {
         WorkflowDef {
             id: "test-workflow".into(),
             name: "Test Workflow".into(),
-            mode: crate::types::ExecutionMode::Sync,
+            mode: ExecutionMode::Sync,
             validate: crate::types::ValidationLevel::None,
             trigger: TriggerDef {
                 endpoint: Some("POST /test".into()),
@@ -232,6 +474,23 @@ mod tests {
             steps,
         }
     }
+
+    fn make_async_workflow(steps: Vec<StepDef>) -> WorkflowDef {
+        WorkflowDef {
+            id: "async-test-workflow".into(),
+            name: "Async Test Workflow".into(),
+            mode: ExecutionMode::Async,
+            validate: crate::types::ValidationLevel::None,
+            trigger: TriggerDef {
+                endpoint: Some("POST /async-test".into()),
+                event: None,
+                schedule: None,
+            },
+            steps,
+        }
+    }
+
+    // --- Sync mode tests (existing) ---
 
     #[tokio::test]
     async fn executes_single_step() {
@@ -348,5 +607,139 @@ mod tests {
         let result = executor.execute_workflow(&workflow, msg).await.unwrap();
         assert_eq!(result.metadata.correlation_id, expected_id);
         assert_eq!(mock.call_count.load(Ordering::SeqCst), 0);
+    }
+
+    // --- Async mode tests ---
+
+    #[tokio::test]
+    async fn async_mode_returns_job_id_immediately() {
+        let notify = Arc::new(Notify::new());
+        let mock = Arc::new(SlowPluginExecutor::new(Arc::clone(&notify)));
+        let executor = PipelineExecutor::new(mock.clone());
+        let workflow = make_async_workflow(vec![make_step("slow-plugin", "process")]);
+        let msg = make_test_message();
+        let correlation_id = msg.metadata.correlation_id;
+
+        let result = executor
+            .execute_workflow(&workflow, msg)
+            .await
+            .unwrap();
+
+        // Should get back immediately with a job_id
+        let payload_json = serde_json::to_value(&result.payload).unwrap();
+        let data = &payload_json["data"];
+        assert_eq!(data["status"], "accepted");
+        assert!(data["job_id"].is_string());
+        assert_eq!(data["workflow_id"], "async-test-workflow");
+        assert_eq!(result.metadata.correlation_id, correlation_id);
+
+        // The plugin hasn't been released yet — job should be Running
+        let job_id: Uuid = data["job_id"].as_str().unwrap().parse().unwrap();
+        let status = executor.job_status(&job_id).await;
+        assert_eq!(status, Some(JobStatus::Running));
+
+        // Release the slow plugin
+        notify.notify_one();
+        // Give the background task time to complete
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+        let status = executor.job_status(&job_id).await;
+        assert_eq!(status, Some(JobStatus::Completed));
+    }
+
+    #[tokio::test]
+    async fn async_mode_emits_completed_event() {
+        let emitter = RecordingEventEmitter::new();
+        let events = emitter.events();
+        let mock = Arc::new(MockPluginExecutor::new());
+        let executor =
+            PipelineExecutor::with_event_emitter(mock, Arc::new(emitter));
+        let workflow = make_async_workflow(vec![make_step("fast-plugin", "act")]);
+
+        let result = executor
+            .execute_workflow(&workflow, make_test_message())
+            .await
+            .unwrap();
+
+        let payload_json = serde_json::to_value(&result.payload).unwrap();
+        let job_id = payload_json["data"]["job_id"].as_str().unwrap().to_string();
+
+        // Wait for background task
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+        let recorded = events.read().await;
+        assert_eq!(recorded.len(), 1);
+        assert_eq!(recorded[0].0, "workflow.completed");
+        assert_eq!(recorded[0].1["job_id"], job_id);
+        assert_eq!(recorded[0].1["workflow_id"], "async-test-workflow");
+    }
+
+    #[tokio::test]
+    async fn async_mode_emits_failed_event_on_error() {
+        let emitter = RecordingEventEmitter::new();
+        let events = emitter.events();
+        let mock = Arc::new(FailingPluginExecutor::new(0)); // fail immediately
+        let executor =
+            PipelineExecutor::with_event_emitter(mock, Arc::new(emitter));
+        let workflow = make_async_workflow(vec![make_step("bad-plugin", "crash")]);
+
+        let result = executor
+            .execute_workflow(&workflow, make_test_message())
+            .await
+            .unwrap();
+
+        let payload_json = serde_json::to_value(&result.payload).unwrap();
+        let job_id_str = payload_json["data"]["job_id"].as_str().unwrap();
+        let job_id: Uuid = job_id_str.parse().unwrap();
+
+        // Wait for background task
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+        // Job status should be Failed
+        let status = executor.job_status(&job_id).await;
+        assert!(matches!(status, Some(JobStatus::Failed(_))));
+
+        // Event should have been emitted
+        let recorded = events.read().await;
+        assert_eq!(recorded.len(), 1);
+        assert_eq!(recorded[0].0, "workflow.failed");
+        assert_eq!(recorded[0].1["job_id"], job_id_str);
+        assert!(recorded[0].1["error"].is_string());
+    }
+
+    #[tokio::test]
+    async fn sync_mode_returns_result_after_all_steps() {
+        let mock = Arc::new(MockPluginExecutor::new());
+        let executor = PipelineExecutor::new(mock.clone());
+        let workflow = make_workflow(vec![
+            make_step("a", "act"),
+            make_step("b", "act"),
+        ]);
+
+        let result = executor
+            .execute_workflow(&workflow, make_test_message())
+            .await
+            .unwrap();
+
+        // All steps should have executed
+        assert_eq!(mock.call_count.load(Ordering::SeqCst), 2);
+
+        // Result should be the final step's output, not a job_id
+        let payload_json = serde_json::to_value(&result.payload).unwrap();
+        let data = &payload_json["data"];
+        assert_eq!(data["executed_by"], "b.act");
+        assert!(data.get("job_id").is_none());
+    }
+
+    #[tokio::test]
+    async fn async_preserves_correlation_id() {
+        let mock = Arc::new(MockPluginExecutor::new());
+        let executor = PipelineExecutor::new(mock);
+        let workflow = make_async_workflow(vec![make_step("p", "a")]);
+        let msg = make_test_message();
+        let expected_id = msg.metadata.correlation_id;
+
+        let result = executor.execute_workflow(&workflow, msg).await.unwrap();
+        assert_eq!(result.metadata.correlation_id, expected_id);
     }
 }

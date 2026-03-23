@@ -83,7 +83,7 @@ Progress: 0 / 17 work packages complete
 > depends: 7.5
 > spec: .odm/spec/workflow-engine/brief.md
 
-- [ ] Implement sync and async execution mode handling
+- [x] Implement sync and async execution mode handling
   <!-- file: packages/workflow-engine/src/executor.rs -->
   <!-- purpose: Extend execute_workflow to handle ExecutionMode. For ExecutionMode::Sync: await all steps sequentially and return the final PipelineMessage result directly — the transport blocks until completion. For ExecutionMode::Async: generate a UUID job_id, spawn the pipeline execution on a tokio background task using tokio::spawn, return immediately with a PipelineMessage containing the job_id in metadata. When the background task completes, emit a system event "workflow.completed" or "workflow.failed" with the job_id, workflow_id, and result/error via the event bus. Define JobStatus enum: Running, Completed, Failed. Store job status in an in-memory HashMap<Uuid, JobStatus> wrapped in Arc<RwLock> for status queries. Add tests: sync mode returns result after all steps, async mode returns job_id immediately, async completion emits event. -->
   <!-- requirements: from workflow-engine spec 3.2 -->

@@ -11,7 +11,9 @@ pub mod types;
 pub use config::WorkflowConfig;
 pub use error::WorkflowError;
 pub use loader::{load_workflows, HttpMethod, TriggerRegistry};
-pub use executor::{PipelineExecutor, PluginExecutor};
+pub use executor::{
+    JobStatus, NoOpEventEmitter, PipelineExecutor, PluginExecutor, WorkflowEventEmitter,
+};
 pub use types::{
     ConditionDef, ErrorStrategy, ErrorStrategyType, ExecutionMode, StepDef, TriggerDef,
     ValidationLevel, WorkflowDef,

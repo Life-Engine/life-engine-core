@@ -136,13 +136,15 @@
     "10.2",
     "10.3",
     "10.4",
-    "10.5"
+    "10.5",
+    "10.6",
+    "10.7"
   ],
   "current_wp": null,
   "current_wp_tasks": {
     "total": 1,
     "completed": [
-      "Create launchd plist for macOS"
+      "Create Caddy reverse proxy configuration for internet-facing deployment"
     ],
     "deferred": [],
     "remaining": [],
@@ -1226,6 +1228,22 @@
       "title": "Launchd Plist",
       "completed_at": "2026-03-23T00:00:01Z",
       "commit": "abb92d4",
+      "tasks_completed": 1,
+      "tasks_deferred": 0
+    },
+    {
+      "wp": "10.6",
+      "title": "Install-Service CLI Subcommand",
+      "completed_at": "2026-03-23T00:00:02Z",
+      "commit": "ffae148",
+      "tasks_completed": 1,
+      "tasks_deferred": 0
+    },
+    {
+      "wp": "10.7",
+      "title": "Caddy Reverse Proxy Configuration",
+      "completed_at": "2026-03-23T00:00:03Z",
+      "commit": "cef292f",
       "tasks_completed": 1,
       "tasks_deferred": 0
     }

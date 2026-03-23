@@ -94,7 +94,7 @@ Progress: 4 / 24 work packages complete
 ## 10.7 — Caddy Reverse Proxy Configuration
 > spec: .odm/spec/deployment-modes/brief.md
 
-- [ ] Create Caddy reverse proxy configuration for internet-facing deployment
+- [x] Create Caddy reverse proxy configuration for internet-facing deployment
   <!-- file: deploy/caddy/Caddyfile -->
   <!-- purpose: Define a Caddyfile: site block with the user's domain, automatic HTTPS via Let's Encrypt (Caddy's default), reverse_proxy directive pointing to localhost:3000 (Core's REST transport), header directives for security headers (Strict-Transport-Security, X-Content-Type-Options, X-Frame-Options), request_body max size limit (10 MB default), encode gzip for response compression, log directive for access logging. Include comments explaining how to configure the domain name and any required DNS setup. Add a separate section for CalDAV/CardDAV paths (/.well-known/caldav, /.well-known/carddav) that proxy to the appropriate transport ports. -->
   <!-- requirements: 4.3 -->

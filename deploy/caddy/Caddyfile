@@ -1,3 +1,56 @@
+# Life Engine Core — Caddy Reverse Proxy Configuration
+#
+# Usage:
+#   1. Replace "life-engine.example.com" with your actual domain name
+#   2. Ensure DNS A/AAAA records point to this server's IP address
+#   3. Caddy automatically obtains and renews TLS certificates via Let's Encrypt
+#   4. Run: caddy run --config /path/to/Caddyfile
+#
+# Core must be started with LE_BEHIND_PROXY=true (or behind_proxy = true in
+# config.toml) so it accepts plain HTTP from Caddy on localhost.
+
 life-engine.example.com {
-    reverse_proxy localhost:3750
+	# Reverse proxy to Core's REST transport on localhost
+	reverse_proxy localhost:3750
+
+	# Security headers
+	header {
+		Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	# Limit request body size (10 MB default)
+	request_body {
+		max_size 10MB
+	}
+
+	# Response compression
+	encode gzip
+
+	# Access logging
+	log {
+		output file /var/log/caddy/life-engine-access.log {
+			roll_size 100MiB
+			roll_keep 5
+		}
+	}
 }
+
+# CalDAV / CardDAV well-known redirects
+#
+# These paths allow calendar and contacts clients to auto-discover the
+# CalDAV/CardDAV endpoints when they query the well-known URIs.
+# Uncomment and adjust the port if you enable the CalDAV/CardDAV transport.
+#
+# life-engine.example.com {
+# 	handle /.well-known/caldav {
+# 		redir /caldav/
+# 	}
+#
+# 	handle /.well-known/carddav {
+# 		redir /carddav/
+# 	}
+# }

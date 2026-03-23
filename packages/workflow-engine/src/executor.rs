@@ -15,7 +15,7 @@ use tracing::{error, info};
 use uuid::Uuid;
 
 use crate::error::WorkflowError;
-use crate::types::{ExecutionMode, TriggerContext, WorkflowDef};
+use crate::types::{ErrorStrategyType, ExecutionMode, TriggerContext, WorkflowDef};
 
 /// Trait for executing a single plugin action.
 ///
@@ -277,7 +277,7 @@ impl PipelineExecutor {
         Ok(response)
     }
 
-    /// Run the steps of a workflow sequentially.
+    /// Run the steps of a workflow sequentially, respecting each step's error strategy.
     async fn run_steps(
         &self,
         workflow: &WorkflowDef,
@@ -301,16 +301,61 @@ impl PipelineExecutor {
                 "executing step"
             );
 
-            current_message = self
+            match self
                 .plugin_executor
-                .execute(&step.plugin, &step.action, current_message)
+                .execute(&step.plugin, &step.action, current_message.clone())
                 .await
-                .map_err(|e| WorkflowError::StepHalted {
-                    step_index: index,
-                    plugin: step.plugin.clone(),
-                    action: step.action.clone(),
-                    cause: e.to_string(),
-                })?;
+            {
+                Ok(output) => {
+                    current_message = output;
+                }
+                Err(plugin_error) => {
+                    let strategy = step
+                        .on_error
+                        .as_ref()
+                        .map(|s| &s.strategy)
+                        .unwrap_or(&ErrorStrategyType::Halt);
+
+                    match strategy {
+                        ErrorStrategyType::Halt => {
+                            error!(
+                                workflow_id = %workflow.id,
+                                step_index = index,
+                                plugin = %step.plugin,
+                                action = %step.action,
+                                error = %plugin_error,
+                                "step failed with halt strategy — stopping workflow"
+                            );
+                            return Err(WorkflowError::StepHalted {
+                                step_index: index,
+                                plugin: step.plugin.clone(),
+                                action: step.action.clone(),
+                                cause: plugin_error.to_string(),
+                            });
+                        }
+                        ErrorStrategyType::Skip => {
+                            // Skip strategy will be implemented in WP 7.9.
+                            // For now, fall through to halt behavior.
+                            return Err(WorkflowError::StepHalted {
+                                step_index: index,
+                                plugin: step.plugin.clone(),
+                                action: step.action.clone(),
+                                cause: plugin_error.to_string(),
+                            });
+                        }
+                        ErrorStrategyType::Retry => {
+                            // Retry strategy will be implemented in WP 7.10.
+                            // For now, fall through to halt behavior.
+                            return Err(WorkflowError::StepHalted {
+                                step_index: index,
+                                plugin: step.plugin.clone(),
+                                action: step.action.clone(),
+                                cause: plugin_error.to_string(),
+                            });
+                        }
+                    }
+                }
+            }
         }
 
         info!(
@@ -886,5 +931,138 @@ mod tests {
         let msg2 = build_initial_message(ctx2).unwrap();
 
         assert_ne!(msg1.metadata.correlation_id, msg2.metadata.correlation_id);
+    }
+
+    // --- Halt error strategy tests (WP 7.8) ---
+
+    use crate::types::{ErrorStrategy, ErrorStrategyType};
+    use life_engine_traits::Severity;
+
+    fn make_step_with_strategy(plugin: &str, action: &str, strategy: ErrorStrategyType) -> StepDef {
+        StepDef {
+            plugin: plugin.into(),
+            action: action.into(),
+            on_error: Some(ErrorStrategy {
+                strategy,
+                max_retries: None,
+                fallback: None,
+            }),
+            condition: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn halt_strategy_stops_pipeline_on_failure() {
+        // Step 2 of 3 fails with halt strategy → step 3 must not execute
+        let mock = Arc::new(FailingPluginExecutor::new(1)); // fail on second call
+        let executor = PipelineExecutor::new(mock.clone());
+        let workflow = make_workflow(vec![
+            make_step("step-a", "act"),
+            make_step_with_strategy("step-b", "act", ErrorStrategyType::Halt),
+            make_step("step-c", "act"),
+        ]);
+
+        let result = executor
+            .execute_workflow(&workflow, make_test_message())
+            .await;
+
+        assert!(result.is_err());
+        // step-c should NOT have been called (only step-a and step-b)
+        assert_eq!(mock.call_count.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn halt_error_includes_step_index_and_plugin_info() {
+        let mock = Arc::new(FailingPluginExecutor::new(1));
+        let executor = PipelineExecutor::new(mock);
+        let workflow = make_workflow(vec![
+            make_step("step-a", "act"),
+            make_step_with_strategy("failing-plugin", "do-thing", ErrorStrategyType::Halt),
+            make_step("step-c", "act"),
+        ]);
+
+        let err = executor
+            .execute_workflow(&workflow, make_test_message())
+            .await
+            .unwrap_err();
+
+        match &err {
+            WorkflowError::StepHalted {
+                step_index,
+                plugin,
+                action,
+                cause,
+            } => {
+                assert_eq!(*step_index, 1);
+                assert_eq!(plugin, "failing-plugin");
+                assert_eq!(action, "do-thing");
+                assert!(!cause.is_empty());
+            }
+            other => panic!("expected StepHalted, got: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn halt_error_has_fatal_severity() {
+        let mock = Arc::new(FailingPluginExecutor::new(0));
+        let executor = PipelineExecutor::new(mock);
+        let workflow = make_workflow(vec![make_step_with_strategy(
+            "bad-plugin",
+            "crash",
+            ErrorStrategyType::Halt,
+        )]);
+
+        let err = executor
+            .execute_workflow(&workflow, make_test_message())
+            .await
+            .unwrap_err();
+
+        assert_eq!(err.code(), "WORKFLOW_003");
+        assert_eq!(err.severity(), Severity::Fatal);
+    }
+
+    #[tokio::test]
+    async fn default_strategy_is_halt_when_on_error_is_none() {
+        // Steps with no on_error should behave identically to explicit halt
+        let mock = Arc::new(FailingPluginExecutor::new(1));
+        let executor = PipelineExecutor::new(mock.clone());
+        let workflow = make_workflow(vec![
+            make_step("step-a", "act"),
+            make_step("step-b", "act"), // no on_error → defaults to halt
+            make_step("step-c", "act"),
+        ]);
+
+        let result = executor
+            .execute_workflow(&workflow, make_test_message())
+            .await;
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            WorkflowError::StepHalted { step_index, .. } => {
+                assert_eq!(step_index, 1);
+            }
+            other => panic!("expected StepHalted, got: {other:?}"),
+        }
+        // step-c should not have been called
+        assert_eq!(mock.call_count.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn halt_on_first_step_skips_all_remaining() {
+        let mock = Arc::new(FailingPluginExecutor::new(0)); // fail immediately
+        let executor = PipelineExecutor::new(mock.clone());
+        let workflow = make_workflow(vec![
+            make_step_with_strategy("bad-plugin", "crash", ErrorStrategyType::Halt),
+            make_step("step-b", "act"),
+            make_step("step-c", "act"),
+        ]);
+
+        let result = executor
+            .execute_workflow(&workflow, make_test_message())
+            .await;
+
+        assert!(result.is_err());
+        // Only the first step should have been called
+        assert_eq!(mock.call_count.load(Ordering::SeqCst), 1);
     }
 }

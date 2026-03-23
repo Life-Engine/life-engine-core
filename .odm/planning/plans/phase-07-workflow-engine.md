@@ -107,7 +107,7 @@ Progress: 0 / 17 work packages complete
 > depends: 7.5
 > spec: .odm/spec/workflow-engine/brief.md
 
-- [ ] Implement halt error strategy (default behavior)
+- [x] Implement halt error strategy (default behavior)
   <!-- file: packages/workflow-engine/src/executor.rs -->
   <!-- file: packages/workflow-engine/src/error.rs -->
   <!-- purpose: When a step fails and its on_error strategy is Halt (or on_error is None, which defaults to Halt): immediately stop the workflow, do not execute any subsequent steps, construct a WorkflowError with code "WORKFLOW_003" and Severity::Fatal including context: failed step index, plugin ID, action name, and the underlying error message. Return this error from execute_workflow. Define WorkflowStepError struct with fields: step_index (usize), plugin_id (String), action (String), cause (Box<dyn EngineError>). Add tests: step 2 of 3 fails with halt → step 3 does not execute, error includes step index and plugin ID, severity is Fatal. -->

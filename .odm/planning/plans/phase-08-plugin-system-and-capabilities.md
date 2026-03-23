@@ -15,7 +15,7 @@ This phase depends on Phase 3 (traits, capabilities), Phase 4 (plugin SDK), Phas
 
 > spec: .odm/spec/plugin-system/brief.md, .odm/spec/capability-enforcement/brief.md
 
-Progress: 6 / 22 work packages complete
+Progress: 7 / 22 work packages complete
 
 ---
 
@@ -130,13 +130,13 @@ Progress: 6 / 22 work packages complete
 > depends: 8.4, 8.3
 > spec: .odm/spec/plugin-system/brief.md
 
-- [ ] Implement events emit and subscribe host functions
+- [x] Implement events emit and subscribe host functions
   <!-- file: packages/plugin-system/src/host_functions/events.rs -->
   <!-- purpose: Implement host_events_emit: (1) check events:emit capability, (2) deserialize event name and payload from WASM memory, (3) emit the event via the workflow engine's EventBus, (4) return success. Implement host_events_subscribe: (1) check events:subscribe capability, (2) register the plugin as a listener for the specified event name, (3) when the event fires, the workflow engine will route it through any matching workflow that includes this plugin. Note: subscribe is declarative — it registers interest, but actual delivery happens through workflow triggers, not direct callbacks into WASM. -->
   <!-- requirements: from plugin-system spec 5.6, 5.7, 6.6 -->
   <!-- leverage: EventBus from Phase 7 -->
 
-- [ ] Add events host function tests
+- [x] Add events host function tests
   <!-- file: packages/plugin-system/src/host_functions/events.rs -->
   <!-- purpose: Test cases: (1) emit succeeds with events:emit capability, (2) subscribe succeeds with events:subscribe capability, (3) emit without events:emit returns CAP_002 error, (4) subscribe without events:subscribe returns CAP_002 error, (5) emitted event is received by EventBus. -->
   <!-- requirements: from plugin-system spec 5.6, 5.7, 5.9, 6.6 -->

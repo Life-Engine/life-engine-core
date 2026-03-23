@@ -3955,9 +3955,12 @@ dependencies = [
 name = "life-engine-plugin-system"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "chrono",
  "extism",
  "life-engine-traits",
  "life-engine-types",
+ "life-engine-workflow-engine",
  "semver",
  "serde",
  "serde_json",
@@ -3966,6 +3969,7 @@ dependencies = [
  "tokio",
  "toml 0.8.23",
  "tracing",
+ "uuid",
  "wat",
 ]
 

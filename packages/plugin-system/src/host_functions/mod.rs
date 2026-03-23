@@ -4,4 +4,5 @@
 //! corresponding capability approved before the function will execute.
 
 pub mod config;
+pub mod events;
 pub mod storage;

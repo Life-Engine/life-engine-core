@@ -152,13 +152,14 @@
     "10.18",
     "10.19",
     "10.20",
-    "10.21"
+    "10.21",
+    "10.22"
   ],
   "current_wp": null,
   "current_wp_tasks": {
     "total": 1,
     "completed": [
-      "Implement post-transform version stamping"
+      "Verify end-to-end migration behavior"
     ],
     "deferred": [],
     "remaining": [],
@@ -1369,6 +1370,14 @@
       "wp": "10.21",
       "title": "Version Column Update",
       "completed_at": "2026-03-23T18:00:00Z",
+      "commit": "cab0b86",
+      "tasks_completed": 1,
+      "tasks_deferred": 0
+    },
+    {
+      "wp": "10.22",
+      "title": "Migration Integration Tests",
+      "completed_at": "2026-03-23T19:00:00Z",
       "commit": "pending",
       "tasks_completed": 1,
       "tasks_deferred": 0

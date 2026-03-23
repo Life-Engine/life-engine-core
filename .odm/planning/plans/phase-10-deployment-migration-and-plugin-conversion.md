@@ -274,7 +274,7 @@ Progress: 5 / 24 work packages complete
 > depends: 10.20, 10.21
 > spec: .odm/spec/migration-format/brief.md
 
-- [ ] Verify end-to-end migration behavior
+- [x] Verify end-to-end migration behavior
   <!-- file: packages/workflow-engine/tests/migration_test.rs -->
   <!-- purpose: Create test WASM transforms and run full migration scenarios. Test cases: (1) Simple migration: WASM transform that renames a field (e.g., "title" -> "name") and adds a default value for a new field. Insert test records at v1, run migration, verify records are at v2 with renamed field and new default. (2) Quarantine: WASM transform that fails on records where a field exceeds a length limit. Insert valid and invalid records, run migration, verify valid records migrated and invalid records quarantined with error messages. (3) Chain migration: three migrations in sequence (v1->v2, v2->v3, v3->v4). Insert records at v1, run all migrations in a single invocation, verify records end up at v4 with all transforms applied. (4) Schema validation: WASM transform that produces output violating the target schema. Verify the record is quarantined (not stored with invalid data). (5) Backup: verify backup is created before migration and can be restored. (6) Idempotency: run the same migration twice, verify no duplicate transforms. -->
   <!-- requirements: 2.1, 2.2, 2.3, 4.1, 4.3, 5.1, 5.2, 9.1 -->

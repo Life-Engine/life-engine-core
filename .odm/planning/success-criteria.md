@@ -14,7 +14,7 @@ Each phase has measurable criteria that must be met before moving to the next. E
 ## Phase 0 — Foundations
 
 - **Monorepo builds on CI for all platforms** — Verification: CI pipeline reports green on macOS, Linux, and Windows runners.
-- **All 13 ADRs published in .odm/docs/adrs/** — Verification: file count matches 13, each file follows the Context/Decision/Consequences format. ADR-013 covers the adoption of the 11 governing Design Principles.
+- **All 14 ADRs published in .odm/doc/adrs/** — Verification: file count matches 14, each file follows the Context/Decision/Consequences format. ADR-013 covers the adoption of the 11 governing Design Principles.
 - **CDM JSON Schema files validate against test fixtures** — Verification: JSON Schema validation passes for all 7 canonical collections.
 - **Both plugin SDKs have type definitions** — Verification: `plugin-sdk-rs` compiles without errors, `plugin-sdk-js` passes type-checking.
 - **Dev environment works in under 5 minutes** — Verification: timed test from clean clone to running dev server completes within 5 minutes.
@@ -82,7 +82,7 @@ These gates apply to every phase and every work package. A work package cannot b
 
 ## Design Principles Compliance Gates
 
-These gates enforce the [[03 - Projects/Life Engine/Design/Principles|Design Principles]] on every work package. Each gate includes a verification method.
+These gates enforce the Design Principles on every work package. Each gate includes a verification method.
 
 - **Separation of Concerns** — Each new module or component has a single, stated responsibility. No module mixes orchestration with business logic. Verification: code review confirms each module's responsibility can be stated in one sentence
 - **ADR required for architectural changes** — Any change that introduces a new dependency, replaces a core component, or changes a plugin contract has a corresponding ADR in `.odm/docs/adrs/`. Verification: ADR file exists and follows Context/Decision/Consequences/Alternatives format

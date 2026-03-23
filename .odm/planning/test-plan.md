@@ -173,7 +173,7 @@ export class EmailListPage {
 ## Performance Testing
 
 - **Benchmarks** — Core startup time, query latency, sync throughput, and plugin load time. Measured using Criterion (Rust) and browser performance APIs (JS)
-- **CI integration** — Benchmarks run in CI and results compared against targets in [[03 - Projects/Life Engine/Planning/Success Criteria]]. Regressions beyond 10% trigger a warning
+- **CI integration** — Benchmarks run in CI and results compared against targets in the [Success Criteria](success-criteria.md). Regressions beyond 10% trigger a warning
 - **Load testing** — Concurrent API requests, large dataset queries (10,000+ records), and rapid sync cycles
 
 ## Review Gate Checklist
@@ -191,7 +191,7 @@ Every work package ends with this review. No work package is complete until the 
 - [ ] Accessibility audit passes (axe-core + keyboard nav)
 - [ ] Performance within targets defined in Success Criteria
 - [ ] Documentation updated if public API changed
-- [ ] **Design Principles compliance** — reviewed against [[03 - Projects/Life Engine/Design/Principles]]:
+- [ ] **Design Principles compliance** — reviewed against the Design Principles:
   - [ ] Each new module has a single responsibility *(Separation of Concerns)*
   - [ ] Architectural changes have a corresponding ADR *(ADRs)*
   - [ ] Invalid data rejected at boundaries with descriptive errors *(Fail-Fast)*

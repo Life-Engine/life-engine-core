@@ -1,0 +1,21 @@
+# Cross-compilation configuration for Life Engine Core.
+#
+# Native builds (cargo build --release) require no special setup.
+# Cross-compiling to Linux ARM64 for Raspberry Pi / home server deployments
+# requires either the `cross` tool or an appropriate linker.
+#
+# Using cross (recommended):
+#   cargo install cross --git https://github.com/cross-rs/cross
+#   cross build --release --package life-engine-core --target aarch64-unknown-linux-gnu
+#
+# Using cargo with a system linker (requires aarch64 toolchain):
+#   # On macOS: brew install messense/macos-cross-toolchains/aarch64-unknown-linux-gnu
+#   # On Ubuntu: apt install gcc-aarch64-linux-gnu
+#   rustup target add aarch64-unknown-linux-gnu
+#   cargo build --release --package life-engine-core --target aarch64-unknown-linux-gnu
+
+[target.aarch64-unknown-linux-gnu]
+linker = "aarch64-linux-gnu-gcc"
+
+[target.aarch64-unknown-linux-musl]
+linker = "aarch64-linux-musl-gcc"

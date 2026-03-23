@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "last_updated": "2026-03-23T12:00:00Z",
+  "last_updated": "2026-03-23T21:00:00Z",
   "completed_wps": [
     "1.1",
     "1.2",
@@ -154,14 +154,14 @@
     "10.20",
     "10.21",
     "10.22",
-    "10.23"
+    "10.23",
+    "10.24"
   ],
   "current_wp": null,
   "current_wp_tasks": {
-    "total": 2,
+    "total": 1,
     "completed": [
-      "Convert connector-email plugin from native Rust to WASM module",
-      "Convert remaining 6 first-party plugins to WASM modules"
+      "Implement private collection registration from plugin manifests"
     ],
     "deferred": [],
     "remaining": [],
@@ -1390,6 +1390,14 @@
       "completed_at": "2026-03-23T20:00:00Z",
       "commit": "10cf9ba",
       "tasks_completed": 2,
+      "tasks_deferred": 0
+    },
+    {
+      "wp": "10.24",
+      "title": "Private Collection Support Registration",
+      "completed_at": "2026-03-23T21:00:00Z",
+      "commit": "0fd6577",
+      "tasks_completed": 1,
       "tasks_deferred": 0
     }
   ]

@@ -5,15 +5,18 @@ tags:
   - planning
   - index
 created: 2026-03-21
+updated: 2026-03-23
 ---
 
 # Life Engine — Planning Overview
 
-Life Engine is a personal data sovereignty platform with two components: **Core** (Rust backend) and **App** (Tauri v2 client). This directory contains all planning documents that guide the project from architecture decisions through to delivery.
+Life Engine is a personal data sovereignty platform. Core is the self-hosted Rust backend — a thin orchestrator that wires together independent modules. All features are provided by WASM plugins, data flows through declarative workflows, and clients connect via configurable transports. A Tauri v2 App client is planned as the user-facing interface.
+
+This directory contains all planning documents that guide the project from architecture decisions through to delivery.
 
 ## Design Principles
 
-All architecture and implementation decisions are governed by the [[03 - Projects/Life Engine/Design/Principles|Design Principles]]. These are not aspirational — every design document demonstrates how it applies the relevant principles, and every review gate checks for compliance.
+All architecture and implementation decisions are governed by the Design Principles. These are not aspirational — every design document demonstrates how it applies the relevant principles, and every review gate checks for compliance.
 
 The 11 principles:
 
@@ -31,93 +34,97 @@ The 11 principles:
 
 ## Methodology
 
-All implementation follows these core practices. See [[03 - Projects/Life Engine/Planning/Test Plan]] for the full testing methodology.
+All implementation follows these core practices. See the [Test Plan](test-plan.md) for the full testing methodology.
 
 - **TDD (Test-Driven Development)** — Every feature begins with a failing test. Red-Green-Refactor cycle: write the test, make it pass, then refactor. No implementation without a test first
-- **DRY (Don't Repeat Yourself)** — Shared test fixtures, factory functions, page objects, and utility packages prevent duplication across tests and production code. Every work package includes a DRY audit during review
-- **Google Stitch** — UI components are prototyped in Stitch, adapted to the shell design system, then validated with automated tests. Stitch output is a starting point — always refactor to use shared tokens and components
-- **Playwright CLI** — All user-facing interactions are E2E tested with Playwright. Page Object Model pattern keeps tests maintainable. `npx playwright test` runs on every PR in CI
-- **Design Principles Compliance** — Every work package is reviewed against the [[03 - Projects/Life Engine/Design/Principles|Design Principles]]. New modules must demonstrate Separation of Concerns. New data types must follow Parse, Don't Validate. New plugin interfaces must follow The Pit of Success. Architectural changes require an ADR.
+- **DRY (Don't Repeat Yourself)** — Shared test fixtures, factory functions, and utility packages prevent duplication across tests and production code. Every work package includes a DRY audit during review
+- **Google Stitch** — UI components are prototyped in Stitch, adapted to the design system, then validated with automated tests. Stitch output is a starting point — always refactor to use shared tokens and components
+- **Playwright** — All user-facing interactions are E2E tested with Playwright. Page Object Model pattern keeps tests maintainable
+- **Design Principles Compliance** — Every work package is reviewed against the Design Principles. New modules must demonstrate Separation of Concerns. New data types must follow Parse, Don't Validate. New plugin interfaces must follow The Pit of Success. Architectural changes require an ADR
 - **Review Gates** — Every work package ends with a review: test coverage (80% target), DRY audit, spec compliance, design principles compliance, accessibility check, and performance verification. No work package is complete until the review passes
 
-## Specs
+## Design Documents
 
-Detailed specifications for each major subsystem.
+Architecture documentation for each Core subsystem in `.odm/doc/Design/Core/`:
+
+- [Core Overview](../doc/Design/Core/Overview.md) — Four-layer architecture, tech stack, startup flow, deployment modes
+- [Transport Layer](../doc/Design/Core/Transports.md) — Protocol-specific entry points (REST, GraphQL, CalDAV, CardDAV, Webhook)
+- [Data Layer](../doc/Design/Core/Data.md) — StorageBackend trait, document model, canonical/private collections, encryption
+- [Plugin System](../doc/Design/Core/Plugins.md) — WASM isolation via Extism, plugin lifecycle, capabilities, SDK contract
+- [Workflow Engine](../doc/Design/Core/Workflow.md) — Declarative YAML pipelines, triggers, event bus, cron scheduler
+- [Schema Versioning Rules](../doc/Design/Core/Schema%20Versioning%20Rules.md) — Versioning policy for canonical schemas
+
+## Specs (Planned)
+
+Detailed specifications to be written for each major subsystem.
 
 ### Core
 
-- [[03 - Projects/Life Engine/Planning/specs/core/Binary and Startup]]
-- [[03 - Projects/Life Engine/Planning/specs/core/REST API]]
-- [[03 - Projects/Life Engine/Planning/specs/core/Data Layer]]
-- [[03 - Projects/Life Engine/Planning/specs/core/Plugin System]]
-- [[03 - Projects/Life Engine/Planning/specs/core/Workflow Engine]]
-- [[03 - Projects/Life Engine/Planning/specs/core/Connector Architecture]]
-- [[03 - Projects/Life Engine/Planning/specs/core/Auth and Pocket ID]]
-- [[03 - Projects/Life Engine/Planning/specs/core/Background Scheduler]]
+- Binary and Startup
+- Transport Layer
+- Data Layer
+- Plugin System
+- Workflow Engine
+- Auth and Pocket ID
 
 ### App
 
-- [[03 - Projects/Life Engine/Planning/specs/app/Shell Framework]]
-- [[03 - Projects/Life Engine/Planning/specs/app/Plugin Loader]]
-- [[03 - Projects/Life Engine/Planning/specs/app/Shell Data API]]
-- [[03 - Projects/Life Engine/Planning/specs/app/Design System]]
-- [[03 - Projects/Life Engine/Planning/specs/app/Capability Enforcement]]
-- [[03 - Projects/Life Engine/Planning/specs/app/Sync Layer]]
-- [[03 - Projects/Life Engine/Planning/specs/app/Tauri Integration]]
+- Shell Framework
+- Plugin Loader
+- Shell Data API
+- Design System
+- Capability Enforcement
+- Sync Layer
+- Tauri Integration
 
 ### SDK
 
-- [[03 - Projects/Life Engine/Planning/specs/sdk/Plugin SDK RS]]
-- [[03 - Projects/Life Engine/Planning/specs/sdk/Plugin SDK JS]]
-- [[03 - Projects/Life Engine/Planning/specs/sdk/Canonical Data Models]]
+- Plugin SDK (Rust)
+- Plugin SDK (JS)
+- Canonical Data Models
 
 ### Infrastructure
 
-- [[03 - Projects/Life Engine/Planning/specs/infrastructure/Monorepo and Tooling]]
-- [[03 - Projects/Life Engine/Planning/specs/infrastructure/CI and CD]]
-- [[03 - Projects/Life Engine/Planning/specs/infrastructure/Deployment Modes]]
-- [[03 - Projects/Life Engine/Planning/specs/infrastructure/Website]] — Marketing site, documentation, SDK reference, blog, and downloads
+- Monorepo and Tooling
+- CI and CD
+- Deployment Modes
+- Website — Marketing site, documentation, SDK reference, blog, and downloads
 
 ### Plugins (Development Targets)
 
-- [[03 - Projects/Life Engine/Planning/specs/plugins/Todo List]] — Full-featured task management (Todoist-class), exercises canonical collections and most plugin capabilities
-- [[03 - Projects/Life Engine/Planning/specs/plugins/Expense Tracker]] — Personal finance tracker, exercises private-only collections, charting, and file attachments
+- **Todo List** — Full-featured task management (Todoist-class), exercises canonical collections and most plugin capabilities
+- **Expense Tracker** — Personal finance tracker, exercises private-only collections, charting, and file attachments
 
 ## Phases
 
 Phased delivery plan from foundations through to federation and mobile.
 
-- [[03 - Projects/Life Engine/Planning/phases/Phase 0 — Foundation]]
-- [[03 - Projects/Life Engine/Planning/phases/Phase 1 — Core and Shell]]
-- [[03 - Projects/Life Engine/Planning/phases/Phase 2 — Connectors and Features]]
-- [[03 - Projects/Life Engine/Planning/phases/Phase 3 — Ecosystem and Polish]]
-- [[03 - Projects/Life Engine/Planning/phases/Phase 4 — WASM and Advanced]]
+- Phase 0 — Foundation
+- Phase 1 — Core and Shell
+- Phase 2 — Data Platform
+- Phase 3 — Ecosystem and Polish
+- Phase 4 — WASM and Advanced
 
 ## Tasks
 
 Granular task breakdowns organised by phase and plugin.
 
-- [[03 - Projects/Life Engine/Planning/tasks/Phase 0 Tasks]]
-- [[03 - Projects/Life Engine/Planning/tasks/Phase 1 Tasks]]
-- [[03 - Projects/Life Engine/Planning/tasks/Phase 2 Tasks]]
-- [[03 - Projects/Life Engine/Planning/tasks/Phase 3 Tasks]]
-- [[03 - Projects/Life Engine/Planning/tasks/Phase 4 Tasks]]
-- [[03 - Projects/Life Engine/Planning/tasks/Plugin — Todo List Tasks]] — 17 work packages, buildable after Phase 1 shell completes
-- [[03 - Projects/Life Engine/Planning/tasks/Plugin — Expense Tracker Tasks]] — 19 work packages, buildable after Phase 1 shell completes
-- [[03 - Projects/Life Engine/Planning/tasks/Website Tasks]] — Marketing site, documentation, SDK reference, and release pages across all phases
+- Phase 0 Tasks
+- Phase 1 Tasks
+- Phase 2 Tasks
+- Phase 3 Tasks
+- Phase 4 Tasks
+- Plugin — Todo List Tasks — 17 work packages, buildable after Phase 1 shell completes
+- Plugin — Expense Tracker Tasks — 19 work packages, buildable after Phase 1 shell completes
+- Website Tasks — Marketing site, documentation, SDK reference, and release pages across all phases
 
 ## Supporting Documents
 
-- [[03 - Projects/Life Engine/Planning/Success Criteria]] — Measurable pass/fail criteria for each phase
-- [[03 - Projects/Life Engine/Planning/Test Plan]] — Testing strategy across all layers
-- [[03 - Projects/Life Engine/Planning/Risk Register]] — Categorised risks with mitigations
+- [Success Criteria](success-criteria.md) — Measurable pass/fail criteria for each phase
+- [Test Plan](test-plan.md) — Testing strategy across all layers
+- [Risk Register](risk-register.md) — Categorised risks with mitigations
 
 ## Related
 
-Design documentation that underpins these plans:
-
-- [[03 - Projects/Life Engine/Design/Principles]] — The 11 governing design principles
-- [[03 - Projects/Life Engine/Design/Core/Overview]]
-- [[03 - Projects/Life Engine/Design/App/Architecture]]
-- [[03 - Projects/Life Engine/Design/Website/Architecture]]
-- [[03 - Projects/Life Engine/Design/MonoRepo Tooling/Technical Overview]]
+- ADRs — Architecture Decision Records in `.odm/doc/adrs/`
+- [Core Overview](../doc/Design/Core/Overview.md) — Primary architecture reference

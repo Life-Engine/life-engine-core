@@ -116,7 +116,7 @@ Progress: 5 / 7 work packages complete
 > depends: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6
 > spec: .odm/spec/plugin-sdk-rs/brief.md
 
-- [ ] Create minimal example plugin and smoke test
+- [x] Create minimal example plugin and smoke test
   <!-- file: packages/plugin-sdk/examples/hello_plugin.rs -->
   <!-- file: packages/plugin-sdk/tests/smoke_test.rs -->
   <!-- purpose: Create an example plugin in examples/hello_plugin.rs that: (1) defines a HelloPlugin struct, (2) implements Plugin trait with id "hello-plugin", display_name "Hello Plugin", version "0.1.0", (3) declares one action "greet" that takes a PipelineMessage with a Contact payload and returns a PipelineMessage with a Note payload containing a greeting, (4) uses register_plugin!(HelloPlugin) macro. Write a test in tests/smoke_test.rs that: (1) creates a MockStorageContext, (2) creates a MockMessageBuilder with a Contact CDM payload, (3) calls HelloPlugin.execute("greet", message), (4) asserts the output is a PipelineMessage with a Note payload, (5) asserts unknown action returns an error. Verify the example compiles to wasm32-wasi (cargo build --target wasm32-wasi --example hello_plugin). Verify plugin authors need only life-engine-plugin-sdk in their Cargo.toml. -->

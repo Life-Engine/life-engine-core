@@ -440,6 +440,13 @@ async fn main() -> anyhow::Result<()> {
     let listener = tokio::net::TcpListener::bind(&bind_addr).await.unwrap_or_else(|e| {
         fail_step!(9, TOTAL_STEPS, "Start active transports", e);
     });
+
+    // Instantiate configured transports from the new-architecture TOML config.
+    // The built-in REST transport (axum router above) is always active via the
+    // legacy config's host/port. Additional transports configured in the
+    // [transports.*] TOML sections are instantiated here using the Transport trait.
+    let transport_handles = instantiate_transports(&cli).await;
+
     log_step!(9, TOTAL_STEPS, "Start active transports", step_start);
 
     // ── Step 10/10: Wait for shutdown signal ─────────────────────────
@@ -463,10 +470,98 @@ async fn main() -> anyhow::Result<()> {
         .await?;
     }
 
-    // Graceful shutdown sequence.
+    // Graceful shutdown sequence — stop transports first (reverse startup order).
+    for transport in &transport_handles {
+        if let Err(e) = transport.stop().await {
+            tracing::warn!(transport = transport.name(), error = %e, "transport stop error");
+        }
+    }
     graceful_shutdown(plugin_loader).await;
 
     Ok(())
+}
+
+/// Instantiate configured transports from the new-architecture TOML config.
+///
+/// Reads the `[transports.*]` sections from `config.toml` and creates a
+/// `Transport` trait object for each configured transport. If a transport
+/// fails to start, the error is logged but other transports continue
+/// starting — one failed transport should not prevent others from starting.
+async fn instantiate_transports(cli: &CliArgs) -> Vec<Box<dyn life_engine_traits::Transport>> {
+    let toml_config_path = if cli.config.is_empty() {
+        None
+    } else {
+        Some(cli.config.as_str())
+    };
+
+    let transports_map = match crate::config::startup::load_config(toml_config_path) {
+        Ok(cfg) => cfg.transports,
+        Err(_) => {
+            tracing::debug!("no new-architecture config available, skipping transport instantiation");
+            return Vec::new();
+        }
+    };
+
+    if transports_map.is_empty() {
+        tracing::debug!("no transports configured in [transports] section");
+        return Vec::new();
+    }
+
+    let mut handles: Vec<Box<dyn life_engine_traits::Transport>> = Vec::new();
+
+    for (name, config_value) in &transports_map {
+        let result: Result<Box<dyn life_engine_traits::Transport>, _> = match name.as_str() {
+            "rest" => life_engine_transport_rest::RestTransport::from_config(config_value)
+                .map(|t| Box::new(t) as Box<dyn life_engine_traits::Transport>),
+            "graphql" => life_engine_transport_graphql::GraphqlTransport::from_config(config_value)
+                .map(|t| Box::new(t) as Box<dyn life_engine_traits::Transport>),
+            "caldav" => life_engine_transport_caldav::CaldavTransport::from_config(config_value)
+                .map(|t| Box::new(t) as Box<dyn life_engine_traits::Transport>),
+            "carddav" => life_engine_transport_carddav::CarddavTransport::from_config(config_value)
+                .map(|t| Box::new(t) as Box<dyn life_engine_traits::Transport>),
+            "webhook" => life_engine_transport_webhook::WebhookTransport::from_config(config_value)
+                .map(|t| Box::new(t) as Box<dyn life_engine_traits::Transport>),
+            unknown => {
+                tracing::warn!(transport = unknown, "unknown transport configured, skipping");
+                continue;
+            }
+        };
+
+        match result {
+            Ok(transport) => {
+                // Call start() — log errors but continue with other transports.
+                let transport_name = transport.name().to_string();
+                let config_clone = config_value.clone();
+                match transport.start(config_clone).await {
+                    Ok(()) => {
+                        handles.push(transport);
+                    }
+                    Err(e) => {
+                        tracing::error!(
+                            transport = %transport_name,
+                            error = %e,
+                            "transport failed to start, continuing with remaining transports"
+                        );
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::error!(
+                    transport = %name,
+                    error = %e,
+                    "failed to create transport from config, continuing with remaining transports"
+                );
+            }
+        }
+    }
+
+    tracing::info!(
+        count = handles.len(),
+        configured = transports_map.len(),
+        "transport instantiation complete"
+    );
+
+    handles
 }
 
 /// No-op plugin executor used during startup before plugins are loaded.

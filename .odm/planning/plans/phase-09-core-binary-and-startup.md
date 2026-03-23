@@ -106,7 +106,7 @@ Progress: 7 / 11 work packages complete
 > depends: 9.7
 > spec: .odm/spec/binary-and-startup/brief.md
 
-- [ ] Instantiate and start configured transports during startup
+- [x] Instantiate and start configured transports during startup
   <!-- file: apps/core/src/main.rs -->
   <!-- purpose: During startup step 9, iterate the transports section of CoreConfig. For each configured transport (e.g., "rest", "graphql", "caldav", "carddav", "webhook"): (1) match the transport name to the corresponding crate (transport-rest, transport-graphql, etc.), (2) instantiate the Transport implementation with the workflow engine reference, auth provider reference, and transport-specific config, (3) call transport.start() which binds to the configured address and port, (4) store the transport handle for shutdown. Only configured transports are started — if [transports.graphql] is not in config.toml, the GraphQL transport is not started. Log each transport: "Transport rest started on 127.0.0.1:3000". If a transport fails to start (e.g., port already in use), log the error but continue starting other transports — one failed transport should not prevent others from starting. -->
   <!-- requirements: from binary-and-startup spec -->

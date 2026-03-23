@@ -18,6 +18,11 @@ life-engine-storage-sqlite = { path = "../../packages/storage-sqlite" }
 life-engine-auth = { path = "../../packages/auth" }
 life-engine-workflow-engine = { path = "../../packages/workflow-engine" }
 life-engine-plugin-system = { path = "../../packages/plugin-system" }
+life-engine-transport-rest = { path = "../../packages/transport-rest" }
+life-engine-transport-graphql = { path = "../../packages/transport-graphql" }
+life-engine-transport-caldav = { path = "../../packages/transport-caldav" }
+life-engine-transport-carddav = { path = "../../packages/transport-carddav" }
+life-engine-transport-webhook = { path = "../../packages/transport-webhook" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 toml = { workspace = true }

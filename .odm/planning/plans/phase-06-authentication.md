@@ -117,13 +117,13 @@ Progress: 0 / 12 work packages complete
 ## 6.9 — Rate Limiting
 > spec: .odm/spec/auth-and-pocket-id/brief.md
 
-- [ ] Implement per-IP sliding window rate limiter
+- [x] Implement per-IP sliding window rate limiter
   <!-- file: packages/auth/src/handlers/rate_limit.rs -->
   <!-- purpose: Define RateLimiter struct with an internal HashMap<String, Vec<Instant>> tracking failure timestamps per IP address. Implement record_failure(ip: &str) that appends the current timestamp to the IP's failure list. Implement is_rate_limited(ip: &str) -> Option<u64> that: (1) removes entries older than 60 seconds from the IP's list (sliding window), (2) if remaining entries >= 5, return Some(seconds_until_oldest_entry_expires) as retry_after, (3) otherwise return None. Use RwLock for concurrent access from multiple transport tasks. The rate limiter is created during auth module initialization and shared via Arc. Add a cleanup method that periodically removes IPs with no recent failures to prevent memory growth. -->
   <!-- requirements: 5.1, 5.2, 5.3 -->
   <!-- leverage: none -->
 
-- [ ] Add rate limiter tests
+- [x] Add rate limiter tests
   <!-- file: packages/auth/src/tests/rate_limit_test.rs -->
   <!-- purpose: Test scenarios: (1) first 4 failures from same IP do not trigger rate limit, (2) 5th failure triggers rate limit with retry_after > 0, (3) after waiting for the window to expire (mock time), IP is no longer rate-limited, (4) failures from different IPs are tracked independently, (5) retry_after value decreases as the window slides, (6) cleanup removes stale IP entries. Use controlled time injection for deterministic tests rather than real sleeps. -->
   <!-- requirements: 5.1, 5.2, 5.3 -->

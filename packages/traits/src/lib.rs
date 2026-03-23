@@ -9,5 +9,7 @@ pub mod storage;
 pub mod transport;
 pub mod types;
 
+pub use error::{EngineError, Severity};
+
 #[cfg(test)]
 mod tests;

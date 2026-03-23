@@ -22,7 +22,7 @@ Progress: 0 / 10 work packages complete
 ## 3.1 — Traits Crate Foundation
 > spec: .odm/spec/plugin-sdk-rs/brief.md
 
-- [ ] Define EngineError trait with code, severity, and source_module
+- [x] Define EngineError trait with code, severity, and source_module
   <!-- file: packages/traits/src/error.rs -->
   <!-- purpose: Define the EngineError trait that all module error types must implement. Methods: fn code(&self) -> &str (structured error code like "STORAGE_001", "AUTH_002", "WORKFLOW_003"), fn severity(&self) -> Severity (Fatal, Retryable, Warning), fn source_module(&self) -> &str (module name like "storage-sqlite", "auth", "workflow-engine"). Define Severity enum with three variants: Fatal (abort pipeline, run error handler), Retryable (retry up to configured limit, then fail), Warning (log and continue). EngineError must extend std::error::Error + Send + Sync + 'static. Add Display impl for Severity. Add is_fatal(), is_retryable(), is_warning() convenience methods on Severity. Re-export from lib.rs. -->
   <!-- requirements: from plugin-sdk-rs spec 1.1 -->

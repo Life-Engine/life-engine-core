@@ -73,7 +73,7 @@ Progress: 0 / 12 work packages complete
 ## 6.5 — Pocket ID Provider Implementation
 > spec: .odm/spec/auth-and-pocket-id/brief.md
 
-- [ ] Implement PocketIdProvider with JWT validation and JWKS key caching
+- [x] Implement PocketIdProvider with JWT validation and JWKS key caching
   <!-- file: packages/auth/src/handlers/validate.rs -->
   <!-- purpose: Define PocketIdProvider struct holding: issuer URL, cached JWKS keys (RwLock<Vec<DecodingKey>>), last refresh timestamp, refresh interval. Implement AuthProvider::validate_token: (1) decode JWT header to get kid (key ID), (2) look up the matching public key from cached JWKS, (3) if key not found, attempt JWKS refresh from issuer's .well-known/openid-configuration -> jwks_uri endpoint, (4) validate JWT signature using Ed25519 (RS256 as fallback), (5) check exp claim — reject if expired, (6) check iss claim — must match configured issuer, (7) check aud claim — must match configured audience if set, (8) extract sub claim as user_id, (9) extract scope claim as scopes, (10) return AuthIdentity. Handle token refresh: JWT access tokens have 15-minute expiry, refresh tokens have 7-day expiry. If the token is a refresh token, exchange it at the issuer's token endpoint for a new access token. Cache JWKS keys for the configured interval (default 1 hour). Use reqwest for HTTP calls to the issuer. -->
   <!-- requirements: 3.1, 3.2, 3.3, 3.4, 3.5 -->

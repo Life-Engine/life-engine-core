@@ -6,4 +6,5 @@
 pub mod config;
 pub mod events;
 pub mod http;
+pub mod logging;
 pub mod storage;

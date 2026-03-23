@@ -15,7 +15,7 @@ This phase depends on Phase 3 (traits, capabilities), Phase 4 (plugin SDK), Phas
 
 > spec: .odm/spec/plugin-system/brief.md, .odm/spec/capability-enforcement/brief.md
 
-Progress: 8 / 22 work packages complete
+Progress: 9 / 22 work packages complete
 
 ---
 
@@ -166,7 +166,7 @@ Progress: 8 / 22 work packages complete
 > depends: 8.4
 > spec: .odm/spec/plugin-system/brief.md
 
-- [ ] Implement logging host function (no capability required)
+- [x] Implement logging host function (no capability required)
   <!-- file: packages/plugin-system/src/host_functions/logging.rs -->
   <!-- purpose: Implement host_log: (1) deserialize log entry from WASM memory (level: "trace"/"debug"/"info"/"warn"/"error", message: String), (2) tag the log entry with the calling plugin's ID using tracing structured fields, (3) forward to the tracing subscriber at the appropriate level. This host function does NOT require any capability — all plugins can log. Log format: [plugin:connector-email] INFO: Fetched 42 new emails. Rate limit plugin logging: max 100 log entries per second per plugin to prevent log flooding from buggy plugins. Drop excess entries with a single warning. -->
   <!-- requirements: from plugin-system spec 6.4 -->

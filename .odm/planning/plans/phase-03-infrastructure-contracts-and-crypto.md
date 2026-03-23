@@ -93,7 +93,7 @@ Progress: 0 / 10 work packages complete
 > depends: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6
 > spec: .odm/spec/plugin-sdk-rs/brief.md
 
-- [ ] Finalize traits crate public API and add comprehensive tests
+- [x] Finalize traits crate public API and add comprehensive tests
   <!-- file: packages/traits/src/lib.rs -->
   <!-- file: packages/traits/src/tests/mod.rs -->
   <!-- purpose: Ensure lib.rs re-exports all public types: EngineError, Severity, StorageBackend, StorageQuery, StorageMutation (from types), Transport, TransportConfig, Plugin, Action, Capability, CapabilityViolation. Write unit tests verifying: Severity display formatting, EngineError trait is object-safe, Capability FromStr/Display round-trip for all 6 variants, CapabilityViolation error codes are correct, Action struct serialization/deserialization. Ensure the crate compiles with no warnings under clippy -D warnings. -->

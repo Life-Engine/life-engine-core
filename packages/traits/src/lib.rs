@@ -13,6 +13,7 @@ pub mod types;
 
 pub use capability::{Capability, CapabilityViolation};
 pub use error::{EngineError, Severity};
+pub use life_engine_types::{StorageMutation, StorageQuery};
 pub use plugin::{Action, Plugin};
 pub use storage::StorageBackend;
 pub use transport::{TlsConfig, Transport, TransportConfig};

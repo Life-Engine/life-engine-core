@@ -4,10 +4,12 @@
 //! manifest parsing, WASM loading via Extism, host function injection,
 //! lifecycle management, and two-layer capability enforcement.
 
+pub mod capability;
 pub mod discovery;
 pub mod error;
 pub mod manifest;
 
+pub use capability::{check_capability_approval, ApprovedCapabilities};
 pub use discovery::{scan_plugins_directory, DiscoveredPlugin};
 pub use error::PluginError;
 pub use manifest::{parse_manifest, ActionDef, CapabilitySet, ConfigSchema, PluginManifest, PluginMeta};

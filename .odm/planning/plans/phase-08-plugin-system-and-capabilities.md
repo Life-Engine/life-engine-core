@@ -15,7 +15,7 @@ This phase depends on Phase 3 (traits, capabilities), Phase 4 (plugin SDK), Phas
 
 > spec: .odm/spec/plugin-system/brief.md, .odm/spec/capability-enforcement/brief.md
 
-Progress: 2 / 22 work packages complete
+Progress: 3 / 22 work packages complete
 
 ---
 
@@ -58,13 +58,13 @@ Progress: 2 / 22 work packages complete
 > depends: 8.2
 > spec: .odm/spec/capability-enforcement/brief.md
 
-- [ ] Implement first-party detection and third-party approval checking
+- [x] Implement first-party detection and third-party approval checking
   <!-- file: packages/plugin-system/src/capability.rs -->
   <!-- purpose: Define pub fn check_capability_approval(manifest: &PluginManifest, plugin_path: &Path, plugins_dir: &Path, config: &PluginConfig) -> Result<ApprovedCapabilities, CapabilityViolation>. Logic: (1) determine if plugin is first-party by checking if plugin_path is a child of the monorepo's plugins/ directory (canonical_path comparison), (2) if first-party, auto-grant all declared capabilities — return ApprovedCapabilities with the full declared set, (3) if third-party, read [plugins.<id>].approved_capabilities from the config, (4) compare manifest's declared capabilities against approved list, (5) if any declared capability is not in the approved list, return CapabilityViolation with code "CAP_001" listing the unapproved capabilities, (6) if all declared capabilities are approved, return ApprovedCapabilities with the intersection. Define ApprovedCapabilities struct wrapping a HashSet<Capability> with a has(cap: Capability) -> bool method. -->
   <!-- requirements: from capability-enforcement spec 1.2, 1.3, 1.4, 1.5, 5.1, 5.2, 5.3, 5.4 -->
   <!-- leverage: Capability types from Phase 3 -->
 
-- [ ] Add capability approval tests
+- [x] Add capability approval tests
   <!-- file: packages/plugin-system/src/capability.rs -->
   <!-- purpose: Test cases: (1) first-party plugin in plugins/ directory auto-granted all capabilities, (2) third-party plugin with fully approved capabilities passes, (3) third-party plugin declaring storage:write but only approved for storage:read returns CAP_001 error, (4) third-party plugin with no config entry refuses to load, (5) plugin with empty approved_capabilities loads but gets no host functions, (6) Display/FromStr round-trip for all 6 capability variants. -->
   <!-- requirements: from capability-enforcement spec 1.2, 1.3, 5.2, 5.4 -->

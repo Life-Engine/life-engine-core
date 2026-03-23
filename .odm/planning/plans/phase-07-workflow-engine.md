@@ -132,7 +132,7 @@ Progress: 0 / 17 work packages complete
 > depends: 7.5
 > spec: .odm/spec/workflow-engine/brief.md
 
-- [ ] Implement retry error strategy with exponential backoff and fallback
+- [x] Implement retry error strategy with exponential backoff and fallback
   <!-- file: packages/workflow-engine/src/executor.rs -->
   <!-- purpose: When a step fails and its on_error strategy is Retry: retry the step with exponential backoff delays (1s, 2s, 4s, 8s...) up to max_retries attempts (default 3). On each retry, call the same plugin action with the same input PipelineMessage. If any retry succeeds, continue the workflow with the successful output. If all retries are exhausted: if a fallback StepDef is declared, execute the fallback step with the original input and continue the pipeline with its output; if no fallback is declared, halt the workflow with a WorkflowError including the retry count and all error messages. Use tokio::time::sleep for backoff delays. Add tests: (1) retry succeeds on second attempt → pipeline continues, (2) all retries fail with fallback → fallback executes, (3) all retries fail without fallback → pipeline halts, (4) exponential backoff timing is correct, (5) retry count is configurable per step. -->
   <!-- requirements: from workflow-engine spec 4.3 -->

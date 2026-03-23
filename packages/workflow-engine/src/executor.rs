@@ -346,14 +346,111 @@ impl PipelineExecutor {
                             // current_message is unchanged — the failed step's output is discarded.
                         }
                         ErrorStrategyType::Retry => {
-                            // Retry strategy will be implemented in WP 7.10.
-                            // For now, fall through to halt behavior.
-                            return Err(WorkflowError::StepHalted {
-                                step_index: index,
-                                plugin: step.plugin.clone(),
-                                action: step.action.clone(),
-                                cause: plugin_error.to_string(),
-                            });
+                            let max_retries = step
+                                .on_error
+                                .as_ref()
+                                .and_then(|s| s.max_retries)
+                                .unwrap_or(3);
+
+                            let mut last_error = plugin_error;
+                            let mut succeeded = false;
+
+                            for attempt in 1..=max_retries {
+                                let backoff = std::time::Duration::from_secs(1 << (attempt - 1));
+                                warn!(
+                                    workflow_id = %workflow.id,
+                                    step_index = index,
+                                    plugin = %step.plugin,
+                                    action = %step.action,
+                                    attempt = attempt,
+                                    max_retries = max_retries,
+                                    backoff_ms = backoff.as_millis() as u64,
+                                    "retrying failed step"
+                                );
+                                tokio::time::sleep(backoff).await;
+
+                                match self
+                                    .plugin_executor
+                                    .execute(
+                                        &step.plugin,
+                                        &step.action,
+                                        current_message.clone(),
+                                    )
+                                    .await
+                                {
+                                    Ok(output) => {
+                                        info!(
+                                            workflow_id = %workflow.id,
+                                            step_index = index,
+                                            plugin = %step.plugin,
+                                            action = %step.action,
+                                            attempt = attempt,
+                                            "retry succeeded"
+                                        );
+                                        current_message = output;
+                                        succeeded = true;
+                                        break;
+                                    }
+                                    Err(retry_error) => {
+                                        last_error = retry_error;
+                                    }
+                                }
+                            }
+
+                            if !succeeded {
+                                // Check for fallback step
+                                let fallback = step
+                                    .on_error
+                                    .as_ref()
+                                    .and_then(|s| s.fallback.as_ref());
+
+                                if let Some(fallback_step) = fallback {
+                                    warn!(
+                                        workflow_id = %workflow.id,
+                                        step_index = index,
+                                        plugin = %step.plugin,
+                                        action = %step.action,
+                                        retries = max_retries,
+                                        fallback_plugin = %fallback_step.plugin,
+                                        fallback_action = %fallback_step.action,
+                                        "all retries exhausted — executing fallback step"
+                                    );
+
+                                    match self
+                                        .plugin_executor
+                                        .execute(
+                                            &fallback_step.plugin,
+                                            &fallback_step.action,
+                                            current_message.clone(),
+                                        )
+                                        .await
+                                    {
+                                        Ok(output) => {
+                                            current_message = output;
+                                        }
+                                        Err(fallback_error) => {
+                                            return Err(WorkflowError::RetryExhausted {
+                                                step_index: index,
+                                                plugin: step.plugin.clone(),
+                                                action: step.action.clone(),
+                                                retries: max_retries,
+                                                cause: format!(
+                                                    "retries failed: {}; fallback also failed: {}",
+                                                    last_error, fallback_error
+                                                ),
+                                            });
+                                        }
+                                    }
+                                } else {
+                                    return Err(WorkflowError::RetryExhausted {
+                                        step_index: index,
+                                        plugin: step.plugin.clone(),
+                                        action: step.action.clone(),
+                                        retries: max_retries,
+                                        cause: last_error.to_string(),
+                                    });
+                                }
+                            }
                         }
                     }
                 }
@@ -1163,5 +1260,218 @@ mod tests {
         assert!(result.is_err());
         // Only the first step should have been called
         assert_eq!(mock.call_count.load(Ordering::SeqCst), 1);
+    }
+
+    // --- Retry error strategy tests (WP 7.10) ---
+
+    /// A mock plugin executor that fails for the first N calls, then succeeds.
+    struct RetryablePluginExecutor {
+        fail_count: usize,
+        call_count: AtomicUsize,
+    }
+
+    impl RetryablePluginExecutor {
+        fn new(fail_count: usize) -> Self {
+            Self {
+                fail_count,
+                call_count: AtomicUsize::new(0),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl PluginExecutor for RetryablePluginExecutor {
+        async fn execute(
+            &self,
+            plugin_id: &str,
+            action: &str,
+            mut input: PipelineMessage,
+        ) -> Result<PipelineMessage, Box<dyn EngineError>> {
+            let call = self.call_count.fetch_add(1, Ordering::SeqCst);
+            if call < self.fail_count {
+                return Err(Box::new(MockPluginError(format!(
+                    "attempt {call} failed for {plugin_id}.{action}"
+                ))));
+            }
+            let schema = serde_json::json!({"type": "object"});
+            let transformed =
+                serde_json::json!({"executed_by": format!("{plugin_id}.{action}"), "attempt": call});
+            input.payload =
+                TypedPayload::Custom(SchemaValidated::new(transformed, &schema).unwrap());
+            Ok(input)
+        }
+    }
+
+    fn make_retry_step(plugin: &str, action: &str, max_retries: u32) -> StepDef {
+        StepDef {
+            plugin: plugin.into(),
+            action: action.into(),
+            on_error: Some(ErrorStrategy {
+                strategy: ErrorStrategyType::Retry,
+                max_retries: Some(max_retries),
+                fallback: None,
+            }),
+            condition: None,
+        }
+    }
+
+    fn make_retry_step_with_fallback(
+        plugin: &str,
+        action: &str,
+        max_retries: u32,
+        fallback_plugin: &str,
+        fallback_action: &str,
+    ) -> StepDef {
+        StepDef {
+            plugin: plugin.into(),
+            action: action.into(),
+            on_error: Some(ErrorStrategy {
+                strategy: ErrorStrategyType::Retry,
+                max_retries: Some(max_retries),
+                fallback: Some(Box::new(StepDef {
+                    plugin: fallback_plugin.into(),
+                    action: fallback_action.into(),
+                    on_error: None,
+                    condition: None,
+                })),
+            }),
+            condition: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn retry_succeeds_on_second_attempt() {
+        // Fails on first call (call 0), succeeds on retry (call 1)
+        let mock = Arc::new(RetryablePluginExecutor::new(1));
+        let executor = PipelineExecutor::new(mock.clone());
+        let workflow = make_workflow(vec![make_retry_step("flaky-plugin", "act", 3)]);
+
+        let result = executor
+            .execute_workflow(&workflow, make_test_message())
+            .await;
+
+        assert!(result.is_ok());
+        // call 0 = initial fail, call 1 = first retry succeeds
+        assert_eq!(mock.call_count.load(Ordering::SeqCst), 2);
+
+        let payload_json = serde_json::to_value(&result.unwrap().payload).unwrap();
+        assert_eq!(payload_json["data"]["executed_by"], "flaky-plugin.act");
+    }
+
+    #[tokio::test]
+    async fn retry_all_fail_without_fallback_halts_pipeline() {
+        // Fails on all calls (more than max_retries + 1)
+        let mock = Arc::new(RetryablePluginExecutor::new(100));
+        let executor = PipelineExecutor::new(mock.clone());
+        let workflow = make_workflow(vec![make_retry_step("bad-plugin", "crash", 2)]);
+
+        let result = executor
+            .execute_workflow(&workflow, make_test_message())
+            .await;
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        match &err {
+            WorkflowError::RetryExhausted {
+                step_index,
+                plugin,
+                action,
+                retries,
+                ..
+            } => {
+                assert_eq!(*step_index, 0);
+                assert_eq!(plugin, "bad-plugin");
+                assert_eq!(action, "crash");
+                assert_eq!(*retries, 2);
+            }
+            other => panic!("expected RetryExhausted, got: {other:?}"),
+        }
+        // 1 initial + 2 retries = 3 total calls
+        assert_eq!(mock.call_count.load(Ordering::SeqCst), 3);
+    }
+
+    #[tokio::test]
+    async fn retry_all_fail_with_fallback_executes_fallback() {
+        // The retryable executor will fail for calls 0..2 (initial + 1 retry),
+        // then succeed on call 2 which is the fallback.
+        // We use fail_count=2 so calls 0,1 fail and call 2 (fallback) succeeds.
+        let mock = Arc::new(RetryablePluginExecutor::new(2));
+        let executor = PipelineExecutor::new(mock.clone());
+        let workflow = make_workflow(vec![make_retry_step_with_fallback(
+            "flaky-plugin",
+            "act",
+            1, // only 1 retry
+            "fallback-plugin",
+            "recover",
+        )]);
+
+        let result = executor
+            .execute_workflow(&workflow, make_test_message())
+            .await;
+
+        assert!(result.is_ok());
+        // call 0: initial fail, call 1: retry fail, call 2: fallback succeeds
+        assert_eq!(mock.call_count.load(Ordering::SeqCst), 3);
+
+        let payload_json = serde_json::to_value(&result.unwrap().payload).unwrap();
+        assert_eq!(
+            payload_json["data"]["executed_by"],
+            "fallback-plugin.recover"
+        );
+    }
+
+    #[tokio::test]
+    async fn retry_default_max_retries_is_3() {
+        // Use a step with retry strategy but no explicit max_retries
+        let mock = Arc::new(RetryablePluginExecutor::new(100));
+        let executor = PipelineExecutor::new(mock.clone());
+        let step = StepDef {
+            plugin: "bad-plugin".into(),
+            action: "crash".into(),
+            on_error: Some(ErrorStrategy {
+                strategy: ErrorStrategyType::Retry,
+                max_retries: None, // should default to 3
+                fallback: None,
+            }),
+            condition: None,
+        };
+        let workflow = make_workflow(vec![step]);
+
+        let result = executor
+            .execute_workflow(&workflow, make_test_message())
+            .await;
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            WorkflowError::RetryExhausted { retries, .. } => {
+                assert_eq!(retries, 3);
+            }
+            other => panic!("expected RetryExhausted, got: {other:?}"),
+        }
+        // 1 initial + 3 retries = 4 total
+        assert_eq!(mock.call_count.load(Ordering::SeqCst), 4);
+    }
+
+    #[tokio::test]
+    async fn retry_continues_pipeline_after_success() {
+        // Step 1 is retryable and fails once, then step 2 runs normally
+        // RetryablePluginExecutor: fails on call 0, succeeds on calls 1+
+        let mock = Arc::new(RetryablePluginExecutor::new(1));
+        let executor = PipelineExecutor::new(mock.clone());
+        let workflow = make_workflow(vec![
+            make_retry_step("flaky-plugin", "act", 3),
+            make_step("next-plugin", "process"),
+        ]);
+
+        let result = executor
+            .execute_workflow(&workflow, make_test_message())
+            .await;
+
+        assert!(result.is_ok());
+        // call 0: flaky initial fail, call 1: flaky retry success, call 2: next-plugin
+        assert_eq!(mock.call_count.load(Ordering::SeqCst), 3);
+
+        let payload_json = serde_json::to_value(&result.unwrap().payload).unwrap();
+        assert_eq!(payload_json["data"]["executed_by"], "next-plugin.process");
     }
 }

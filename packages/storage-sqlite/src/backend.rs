@@ -16,6 +16,22 @@ use crate::SqliteStorage;
 /// Maximum number of records a single query may return.
 const MAX_LIMIT: u32 = 1000;
 
+/// Canonical CDM collection names shared across all plugins.
+const CANONICAL_COLLECTIONS: &[&str] = &[
+    "events",
+    "tasks",
+    "contacts",
+    "notes",
+    "emails",
+    "files",
+    "credentials",
+];
+
+/// Returns `true` if the collection is a canonical CDM collection.
+fn is_canonical(collection: &str) -> bool {
+    CANONICAL_COLLECTIONS.contains(&collection)
+}
+
 /// Parse a JSON `data` column value into a `CdmType` based on collection name.
 ///
 /// For canonical collections the JSON is deserialized into the appropriate
@@ -64,18 +80,34 @@ fn parse_payload(collection: &str, data_json: &str) -> Result<TypedPayload, Stor
 
 impl SqliteStorage {
     /// Execute a read query, translating `StorageQuery` into SQL.
+    ///
+    /// Canonical collections (events, tasks, contacts, notes, emails, files,
+    /// credentials) are shared data — reads span all plugins. Private
+    /// collections are strictly scoped by `plugin_id`.
     pub fn execute_query(&self, query: StorageQuery) -> Result<Vec<PipelineMessage>, StorageError> {
-        let mut sql = String::from(
-            "SELECT id, plugin_id, collection, data, version, created_at, updated_at \
-             FROM plugin_data WHERE plugin_id = ?1 AND collection = ?2",
-        );
+        let canonical = is_canonical(&query.collection);
 
-        // Collect bind parameters. The first two are always plugin_id and collection.
+        // Canonical collections allow cross-plugin reads; private collections
+        // are strictly scoped by plugin_id.
         let mut bind_values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
-        bind_values.push(Box::new(query.plugin_id.clone()));
-        bind_values.push(Box::new(query.collection.clone()));
+        let mut param_idx: u32;
 
-        let mut param_idx = 3u32;
+        let mut sql = if canonical {
+            bind_values.push(Box::new(query.collection.clone()));
+            param_idx = 2;
+            String::from(
+                "SELECT id, plugin_id, collection, data, version, created_at, updated_at \
+                 FROM plugin_data WHERE collection = ?1",
+            )
+        } else {
+            bind_values.push(Box::new(query.plugin_id.clone()));
+            bind_values.push(Box::new(query.collection.clone()));
+            param_idx = 3;
+            String::from(
+                "SELECT id, plugin_id, collection, data, version, created_at, updated_at \
+                 FROM plugin_data WHERE plugin_id = ?1 AND collection = ?2",
+            )
+        };
 
         // Translate filters to SQL WHERE clauses.
         for filter in &query.filters {
@@ -374,30 +406,14 @@ mod tests {
     }
 
     #[test]
-    fn execute_filters_by_plugin_id() {
+    fn execute_private_collection_filters_by_plugin_id() {
         let storage = setup_db();
-        let task_json = serde_json::json!({
-            "id": "00000000-0000-0000-0000-000000000001",
-            "title": "Task A",
-            "description": null,
-            "status": "pending",
-            "priority": "medium",
-            "due_date": null,
-            "completed_at": null,
-            "tags": [],
-            "assignee": null,
-            "parent_id": null,
-            "source": "test",
-            "source_id": "t-1",
-            "extensions": null,
-            "created_at": "2026-01-01T00:00:00Z",
-            "updated_at": "2026-01-01T00:00:00Z"
-        });
-        insert_row(&storage, "id-1", "plugin-a", "tasks", &task_json.to_string());
-        insert_row(&storage, "id-2", "plugin-b", "tasks", &task_json.to_string());
+        let data = serde_json::json!({"key": "value"});
+        insert_row(&storage, "id-1", "plugin-a", "com.example:private", &data.to_string());
+        insert_row(&storage, "id-2", "plugin-b", "com.example:private", &data.to_string());
 
         let query = StorageQuery {
-            collection: "tasks".into(),
+            collection: "com.example:private".into(),
             plugin_id: "plugin-a".into(),
             filters: vec![],
             sort: vec![],
@@ -406,7 +422,7 @@ mod tests {
         };
 
         let results = storage.execute_query(query).unwrap();
-        assert_eq!(results.len(), 1);
+        assert_eq!(results.len(), 1, "private collection should filter by plugin_id");
     }
 
     #[test]
@@ -895,5 +911,137 @@ mod tests {
             .query_row("SELECT count(*) FROM plugin_data", [], |row| row.get(0))
             .unwrap();
         assert_eq!(count, 1, "record should not be deleted by wrong plugin_id");
+    }
+
+    // --- Plugin data isolation tests ---
+
+    #[test]
+    fn canonical_read_is_cross_plugin() {
+        let storage = setup_db();
+        let task_a = serde_json::json!({
+            "id": "00000000-0000-0000-0000-000000000001",
+            "title": "Task from A",
+            "description": null,
+            "status": "pending",
+            "priority": "medium",
+            "due_date": null,
+            "completed_at": null,
+            "tags": [],
+            "assignee": null,
+            "parent_id": null,
+            "source": "test",
+            "source_id": "t-1",
+            "extensions": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z"
+        });
+        insert_row(&storage, "id-1", "plugin-a", "tasks", &task_a.to_string());
+        insert_row(&storage, "id-2", "plugin-b", "tasks", &task_a.to_string());
+
+        // Reading a canonical collection as plugin-a should see records from both plugins.
+        let query = StorageQuery {
+            collection: "tasks".into(),
+            plugin_id: "plugin-a".into(),
+            filters: vec![],
+            sort: vec![],
+            limit: None,
+            offset: None,
+        };
+        let results = storage.execute_query(query).unwrap();
+        assert_eq!(results.len(), 2, "canonical reads should span all plugins");
+    }
+
+    #[test]
+    fn private_read_is_scoped_by_plugin_id() {
+        let storage = setup_db();
+        let data = serde_json::json!({"key": "value"});
+        insert_row(&storage, "id-1", "plugin-a", "com.example.weather:forecasts", &data.to_string());
+        insert_row(&storage, "id-2", "plugin-b", "com.example.weather:forecasts", &data.to_string());
+
+        // Plugin-a should only see its own private data.
+        let query = StorageQuery {
+            collection: "com.example.weather:forecasts".into(),
+            plugin_id: "plugin-a".into(),
+            filters: vec![],
+            sort: vec![],
+            limit: None,
+            offset: None,
+        };
+        let results = storage.execute_query(query).unwrap();
+        assert_eq!(results.len(), 1, "private collection reads must be scoped by plugin_id");
+    }
+
+    #[test]
+    fn cross_plugin_update_fails() {
+        let storage = setup_db();
+        let id = "00000000-0000-0000-0000-eeeeeeeeeeee";
+        let task_json = serde_json::json!({
+            "id": id,
+            "title": "Owned by A",
+            "description": null,
+            "status": "pending",
+            "priority": "medium",
+            "due_date": null,
+            "completed_at": null,
+            "tags": [],
+            "assignee": null,
+            "parent_id": null,
+            "source": "test",
+            "source_id": "t-1",
+            "extensions": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z"
+        });
+        insert_row(&storage, id, "plugin-a", "tasks", &task_json.to_string());
+
+        let msg = make_pipeline_message("Attempted update by B");
+
+        // Plugin-b tries to update plugin-a's record — should fail with ConcurrencyConflict
+        // because the WHERE plugin_id clause won't match.
+        let result = storage.execute_mutation(StorageMutation::Update {
+            plugin_id: "plugin-b".into(),
+            collection: "tasks".into(),
+            id: Uuid::parse_str(id).unwrap(),
+            data: msg,
+            expected_version: 1,
+        });
+        assert!(result.is_err(), "cross-plugin update must fail");
+    }
+
+    #[test]
+    fn cross_plugin_delete_is_noop() {
+        let storage = setup_db();
+        let id = "00000000-0000-0000-0000-ffffffffffff";
+        let task_json = serde_json::json!({
+            "id": id,
+            "title": "Owned by A",
+            "description": null,
+            "status": "pending",
+            "priority": "medium",
+            "due_date": null,
+            "completed_at": null,
+            "tags": [],
+            "assignee": null,
+            "parent_id": null,
+            "source": "test",
+            "source_id": "t-1",
+            "extensions": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z"
+        });
+        insert_row(&storage, id, "plugin-a", "tasks", &task_json.to_string());
+
+        // Plugin-b tries to delete plugin-a's record — should not remove it.
+        storage.execute_mutation(StorageMutation::Delete {
+            plugin_id: "plugin-b".into(),
+            collection: "tasks".into(),
+            id: Uuid::parse_str(id).unwrap(),
+        }).unwrap();
+
+        let count: i64 = storage
+            .conn
+            .query_row("SELECT count(*) FROM plugin_data", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 1, "cross-plugin delete must not remove the record");
     }
 }

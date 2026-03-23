@@ -75,13 +75,13 @@ Progress: 0 / 16 work packages complete
 > depends: 5.3, 5.4
 > spec: .odm/spec/data-layer/brief.md
 
-- [ ] Enforce plugin_id scoping on all storage operations
+- [x] Enforce plugin_id scoping on all storage operations
   <!-- file: packages/storage-sqlite/src/backend.rs -->
   <!-- purpose: Audit all execute and mutate code paths to ensure every SQL query includes WHERE plugin_id = ? with the requesting plugin's ID. For canonical collections (events, tasks, contacts, notes, emails, files, credentials): allow read access across all plugins (canonical data is shared), but write access only for the owning plugin. For private collections: enforce strict plugin_id isolation on both reads and writes — a plugin cannot read or write another plugin's private collection data. Add a test that creates data with plugin_id "plugin-a", then attempts to read/update/delete it with plugin_id "plugin-b" and verifies the operation fails or returns empty results. -->
   <!-- requirements: 3.1, 3.2 -->
   <!-- leverage: backend.rs implementation -->
 
-- [ ] Add capability check for canonical collection storage access
+- [x] Add capability check for canonical collection storage access
   <!-- file: packages/plugin-sdk/src/storage.rs -->
   <!-- purpose: Before executing any StorageContext operation, verify the calling plugin has the required capability: storage:read for query/read operations, storage:write for insert/update/delete operations. If the capability is not in the plugin's approved set, return a CapabilityViolation error with CAP_002 code and Severity::Fatal. The capability set is passed to StorageContext at construction time. Add tests: read with storage:read succeeds, read without storage:read returns CAP_002 error, write with storage:write succeeds, write without storage:write returns CAP_002 error. -->
   <!-- requirements: 3.3 -->

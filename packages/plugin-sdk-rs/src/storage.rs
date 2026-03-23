@@ -3,7 +3,9 @@
 //! Provides an ergonomic API for reading and writing collections
 //! without importing database crates directly.
 
-use life_engine_traits::{EngineError, StorageBackend};
+use std::collections::HashSet;
+
+use life_engine_traits::{Capability, CapabilityViolation, EngineError, StorageBackend};
 use life_engine_types::{
     FilterOp, PipelineMessage, QueryFilter, SortDirection, SortField, StorageMutation, StorageQuery,
 };
@@ -11,8 +13,9 @@ use uuid::Uuid;
 
 /// Context for storage operations scoped to a specific plugin.
 ///
-/// `StorageContext` holds a reference to a [`StorageBackend`] and the
-/// calling plugin's ID, ensuring all operations are properly scoped.
+/// `StorageContext` holds a reference to a [`StorageBackend`], the
+/// calling plugin's ID, and its approved capabilities. All operations
+/// are capability-checked before execution.
 ///
 /// # Example
 ///
@@ -27,18 +30,41 @@ use uuid::Uuid;
 pub struct StorageContext<S: StorageBackend> {
     backend: S,
     plugin_id: String,
+    capabilities: HashSet<Capability>,
 }
 
 impl<S: StorageBackend> StorageContext<S> {
     /// Create a new `StorageContext` for the given backend and plugin.
-    pub fn new(backend: S, plugin_id: impl Into<String>) -> Self {
+    pub fn new(
+        backend: S,
+        plugin_id: impl Into<String>,
+        capabilities: HashSet<Capability>,
+    ) -> Self {
         Self {
             backend,
             plugin_id: plugin_id.into(),
+            capabilities,
+        }
+    }
+
+    /// Check that the plugin has the required capability, returning a
+    /// `CapabilityViolation` error if not.
+    fn require(&self, cap: Capability, context: &str) -> Result<(), Box<dyn EngineError>> {
+        if self.capabilities.contains(&cap) {
+            Ok(())
+        } else {
+            Err(Box::new(CapabilityViolation {
+                capability: cap,
+                plugin_id: self.plugin_id.clone(),
+                context: context.to_string(),
+                at_load_time: false,
+            }))
         }
     }
 
     /// Start building a read query against the given collection.
+    ///
+    /// The `storage:read` capability is checked when the query is executed.
     pub fn query(&self, collection: &str) -> QueryBuilder<'_, S> {
         QueryBuilder {
             ctx: self,
@@ -51,11 +77,14 @@ impl<S: StorageBackend> StorageContext<S> {
     }
 
     /// Insert a new record into a collection.
+    ///
+    /// Requires the `storage:write` capability.
     pub async fn insert(
         &self,
         collection: &str,
         message: PipelineMessage,
     ) -> Result<(), Box<dyn EngineError>> {
+        self.require(Capability::StorageWrite, "insert into storage")?;
         self.backend
             .mutate(StorageMutation::Insert {
                 plugin_id: self.plugin_id.clone(),
@@ -66,6 +95,8 @@ impl<S: StorageBackend> StorageContext<S> {
     }
 
     /// Update an existing record with optimistic concurrency control.
+    ///
+    /// Requires the `storage:write` capability.
     pub async fn update(
         &self,
         collection: &str,
@@ -73,6 +104,7 @@ impl<S: StorageBackend> StorageContext<S> {
         message: PipelineMessage,
         expected_version: u64,
     ) -> Result<(), Box<dyn EngineError>> {
+        self.require(Capability::StorageWrite, "update storage record")?;
         self.backend
             .mutate(StorageMutation::Update {
                 plugin_id: self.plugin_id.clone(),
@@ -85,11 +117,14 @@ impl<S: StorageBackend> StorageContext<S> {
     }
 
     /// Delete a record from a collection.
+    ///
+    /// Requires the `storage:write` capability.
     pub async fn delete(
         &self,
         collection: &str,
         id: Uuid,
     ) -> Result<(), Box<dyn EngineError>> {
+        self.require(Capability::StorageWrite, "delete storage record")?;
         self.backend
             .mutate(StorageMutation::Delete {
                 plugin_id: self.plugin_id.clone(),
@@ -186,7 +221,11 @@ impl<'a, S: StorageBackend> QueryBuilder<'a, S> {
     }
 
     /// Execute the query and return matching records.
+    ///
+    /// Requires the `storage:read` capability.
     pub async fn execute(self) -> Result<Vec<PipelineMessage>, Box<dyn EngineError>> {
+        self.ctx
+            .require(Capability::StorageRead, "query storage")?;
         let query = StorageQuery {
             collection: self.collection,
             plugin_id: self.ctx.plugin_id.clone(),
@@ -208,6 +247,22 @@ mod tests {
         CdmType, MessageMetadata, Note, NoteFormat, TypedPayload,
     };
     use std::sync::{Arc, Mutex};
+
+    fn all_caps() -> HashSet<Capability> {
+        HashSet::from([Capability::StorageRead, Capability::StorageWrite])
+    }
+
+    fn read_only() -> HashSet<Capability> {
+        HashSet::from([Capability::StorageRead])
+    }
+
+    fn write_only() -> HashSet<Capability> {
+        HashSet::from([Capability::StorageWrite])
+    }
+
+    fn no_caps() -> HashSet<Capability> {
+        HashSet::new()
+    }
 
     fn test_message() -> PipelineMessage {
         PipelineMessage {
@@ -275,7 +330,7 @@ mod tests {
     async fn query_builder_constructs_correct_query() {
         let backend = MockBackend::new();
         let queries = backend.queries.clone();
-        let ctx = StorageContext::new(backend, "test-plugin");
+        let ctx = StorageContext::new(backend, "test-plugin", all_caps());
 
         let _results = ctx
             .query("contacts")
@@ -309,7 +364,7 @@ mod tests {
     async fn limit_capped_at_1000() {
         let backend = MockBackend::new();
         let queries = backend.queries.clone();
-        let ctx = StorageContext::new(backend, "test-plugin");
+        let ctx = StorageContext::new(backend, "test-plugin", all_caps());
 
         ctx.query("events").limit(5000).execute().await.unwrap();
 
@@ -321,7 +376,7 @@ mod tests {
     async fn insert_creates_correct_mutation() {
         let backend = MockBackend::new();
         let mutations = backend.mutations.clone();
-        let ctx = StorageContext::new(backend, "test-plugin");
+        let ctx = StorageContext::new(backend, "test-plugin", all_caps());
 
         let msg = test_message();
         ctx.insert("events", msg).await.unwrap();
@@ -345,7 +400,7 @@ mod tests {
     async fn update_creates_correct_mutation() {
         let backend = MockBackend::new();
         let mutations = backend.mutations.clone();
-        let ctx = StorageContext::new(backend, "test-plugin");
+        let ctx = StorageContext::new(backend, "test-plugin", all_caps());
 
         let id = Uuid::new_v4();
         let msg = test_message();
@@ -373,7 +428,7 @@ mod tests {
     async fn delete_creates_correct_mutation() {
         let backend = MockBackend::new();
         let mutations = backend.mutations.clone();
-        let ctx = StorageContext::new(backend, "test-plugin");
+        let ctx = StorageContext::new(backend, "test-plugin", all_caps());
 
         let id = Uuid::new_v4();
         ctx.delete("events", id).await.unwrap();
@@ -397,7 +452,7 @@ mod tests {
     async fn query_with_contains_and_desc_sort() {
         let backend = MockBackend::new();
         let queries = backend.queries.clone();
-        let ctx = StorageContext::new(backend, "test-plugin");
+        let ctx = StorageContext::new(backend, "test-plugin", all_caps());
 
         ctx.query("notes")
             .where_contains("title", "meeting")
@@ -415,5 +470,70 @@ mod tests {
         assert_eq!(q.filters[1].operator, FilterOp::Lte);
         assert_eq!(q.sort[0].direction, SortDirection::Desc);
         assert_eq!(q.limit, Some(25));
+    }
+
+    // --- Capability check tests ---
+
+    #[tokio::test]
+    async fn read_with_storage_read_succeeds() {
+        let backend = MockBackend::new();
+        let ctx = StorageContext::new(backend, "test-plugin", read_only());
+
+        let result = ctx.query("events").execute().await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn read_without_storage_read_returns_cap_002() {
+        let backend = MockBackend::new();
+        let ctx = StorageContext::new(backend, "test-plugin", no_caps());
+
+        let result = ctx.query("events").execute().await;
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert_eq!(err.code(), "CAP_002");
+    }
+
+    #[tokio::test]
+    async fn write_with_storage_write_succeeds() {
+        let backend = MockBackend::new();
+        let ctx = StorageContext::new(backend, "test-plugin", write_only());
+
+        let msg = test_message();
+        let result = ctx.insert("events", msg).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn write_without_storage_write_returns_cap_002() {
+        let backend = MockBackend::new();
+        let ctx = StorageContext::new(backend, "test-plugin", read_only());
+
+        let msg = test_message();
+        let result = ctx.insert("events", msg).await;
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert_eq!(err.code(), "CAP_002");
+    }
+
+    #[tokio::test]
+    async fn update_without_storage_write_returns_cap_002() {
+        let backend = MockBackend::new();
+        let ctx = StorageContext::new(backend, "test-plugin", read_only());
+
+        let msg = test_message();
+        let result = ctx.update("events", Uuid::new_v4(), msg, 1).await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code(), "CAP_002");
+    }
+
+    #[tokio::test]
+    async fn delete_without_storage_write_returns_cap_002() {
+        let backend = MockBackend::new();
+        let ctx = StorageContext::new(backend, "test-plugin", read_only());
+
+        let result = ctx.delete("events", Uuid::new_v4()).await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code(), "CAP_002");
     }
 }

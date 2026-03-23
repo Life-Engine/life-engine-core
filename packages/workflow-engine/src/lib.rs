@@ -5,6 +5,7 @@ pub mod error;
 pub mod event_bus;
 pub mod executor;
 pub mod loader;
+pub mod migration;
 pub mod scheduler;
 pub mod types;
 

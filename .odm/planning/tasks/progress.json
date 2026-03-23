@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "last_updated": "2026-03-23T00:00:07Z",
+  "last_updated": "2026-03-23T00:00:08Z",
   "completed_wps": [
     "1.1",
     "1.2",
@@ -142,13 +142,14 @@
     "10.8",
     "10.9",
     "10.10",
-    "10.11"
+    "10.11",
+    "10.12"
   ],
   "current_wp": null,
   "current_wp_tasks": {
     "total": 1,
     "completed": [
-      "Implement non-localhost startup validation"
+      "Implement manifest.toml migration entry parsing and validation"
     ],
     "deferred": [],
     "remaining": [],
@@ -1279,6 +1280,14 @@
       "wp": "10.11",
       "title": "Network Security Enforcement",
       "completed_at": "2026-03-23T00:00:07Z",
+      "commit": "2208ee7",
+      "tasks_completed": 1,
+      "tasks_deferred": 0
+    },
+    {
+      "wp": "10.12",
+      "title": "Migration Manifest Validation",
+      "completed_at": "2026-03-23T00:00:08Z",
       "commit": "pending",
       "tasks_completed": 1,
       "tasks_deferred": 0

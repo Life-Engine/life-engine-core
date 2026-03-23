@@ -157,7 +157,7 @@ Progress: 4 / 24 work packages complete
 ## 10.12 — Migration Manifest Validation
 > spec: .odm/spec/migration-format/brief.md
 
-- [ ] Implement manifest.toml migration entry parsing and validation
+- [x] Implement manifest.toml migration entry parsing and validation
   <!-- file: packages/workflow-engine/src/migration/manifest.rs -->
   <!-- purpose: Parse the [[migrations]] array from a plugin's manifest.toml. Each migration entry has fields: from (String — semver range like "1.0.x" or "1.x"), to (String — exact semver like "2.0.0"), transform (String — name of the WASM export function that performs the transform), description (String — human-readable description of what the migration does), collection (String — which collection this migration applies to). Validation rules: (1) from must be a valid simplified semver range (major.x, major.minor.x, or exact major.minor.patch), (2) to must be an exact semver version, (3) to version must be greater than any version matching the from range, (4) transform name must be a valid Rust identifier (matches [a-zA-Z_][a-zA-Z0-9_]*), (5) the migration chain must be contiguous — if migrations go 1.x->2.0.0 and 2.x->3.0.0, there must be no gap, (6) collection must be a valid collection name. Return a Vec<MigrationEntry> or a clear validation error. -->
   <!-- requirements: 1.1, 1.2, 1.3, 1.5, 1.6 -->

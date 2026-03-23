@@ -10,6 +10,7 @@ pub mod transport;
 pub mod types;
 
 pub use error::{EngineError, Severity};
+pub use plugin::{Action, Plugin};
 pub use storage::StorageBackend;
 pub use transport::{TlsConfig, Transport, TransportConfig};
 

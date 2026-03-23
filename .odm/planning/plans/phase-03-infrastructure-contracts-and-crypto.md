@@ -69,7 +69,7 @@ Progress: 0 / 10 work packages complete
 > depends: 3.1
 > spec: .odm/spec/plugin-system/brief.md
 
-- [ ] Define Plugin trait for WASM plugin contracts
+- [x] Define Plugin trait for WASM plugin contracts
   <!-- file: packages/traits/src/plugin.rs -->
   <!-- purpose: Define the Plugin trait with methods: fn id(&self) -> &str (unique plugin identifier), fn display_name(&self) -> &str (human-readable name), fn version(&self) -> &str (semver version string), fn actions(&self) -> Vec<Action> (list of declared actions), fn execute(&self, action: &str, input: PipelineMessage) -> Result<PipelineMessage, Box<dyn EngineError>> (execute a named action). Define Action struct with fields: name (String), description (String), input_schema (Option<String> — JSON Schema for input validation), output_schema (Option<String> — JSON Schema for output validation). Add serde derives on Action. The Plugin trait is what WASM modules implement via the SDK. Re-export Plugin and Action from lib.rs. -->
   <!-- requirements: from plugin-system spec, plugin-sdk-rs spec 1.6 -->

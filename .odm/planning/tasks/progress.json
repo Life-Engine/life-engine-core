@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "last_updated": "2026-03-23T00:00:04Z",
+  "last_updated": "2026-03-23T00:00:06Z",
   "completed_wps": [
     "1.1",
     "1.2",
@@ -140,13 +140,15 @@
     "10.6",
     "10.7",
     "10.8",
-    "10.9"
+    "10.9",
+    "10.10"
   ],
   "current_wp": null,
   "current_wp_tasks": {
-    "total": 1,
+    "total": 2,
     "completed": [
-      "Verify ARM64 binary builds and runs correctly"
+      "Configure Tauri sidecar to spawn and manage Core process lifecycle",
+      "Configure platform-standard data directory for bundled mode"
     ],
     "deferred": [],
     "remaining": [],
@@ -1254,6 +1256,14 @@
       "title": "Behind-Proxy Support",
       "completed_at": "2026-03-23T00:00:04Z",
       "commit": "d60b709",
+      "tasks_completed": 1,
+      "tasks_deferred": 0
+    },
+    {
+      "wp": "10.9",
+      "title": "ARM64 Build Verification",
+      "completed_at": "2026-03-23T00:00:05Z",
+      "commit": "404e762",
       "tasks_completed": 1,
       "tasks_deferred": 0
     }

@@ -127,14 +127,14 @@ Progress: 4 / 24 work packages complete
 ## 10.10 — Tauri Sidecar Integration
 > spec: .odm/spec/deployment-modes/brief.md
 
-- [ ] Configure Tauri sidecar to spawn and manage Core process lifecycle
+- [x] Configure Tauri sidecar to spawn and manage Core process lifecycle
   <!-- file: apps/app/src-tauri/tauri.conf.json -->
   <!-- file: apps/app/src-tauri/src/main.rs -->
   <!-- purpose: In tauri.conf.json: add Core binary as a sidecar in the bundle.externalBin array, configure the sidecar path for each platform (x86_64 and aarch64). In the Tauri main.rs: (1) spawn Core as a sidecar process on App launch using tauri::api::process::Command::new_sidecar(), (2) pass a bundled-mode config: storage in platform App data directory (dirs::data_dir()/life-engine/), plugins from bundled resources, auto-generated passphrase stored in platform keychain, (3) wait for Core's health endpoint to respond before showing the App UI, (4) on App close, send SIGTERM to the sidecar process, wait up to 5 seconds for graceful shutdown, then SIGKILL if still running. Include the plugins/ directory in the Tauri resource bundle so first-party plugins are available in bundled mode. -->
   <!-- requirements: 1.1, 1.2, 1.4, 1.6 -->
   <!-- leverage: existing apps/app/ Tauri configuration -->
 
-- [ ] Configure platform-standard data directory for bundled mode
+- [x] Configure platform-standard data directory for bundled mode
   <!-- file: apps/core/src/config.rs -->
   <!-- purpose: Detect bundled mode: check for LIFE_ENGINE_BUNDLED=true env var (set by Tauri sidecar). When in bundled mode: (1) use platform App data directory for database storage: macOS ~/Library/Application Support/life-engine/, Linux $XDG_DATA_HOME/life-engine/ or ~/.local/share/life-engine/, Windows %APPDATA%/life-engine/, (2) use bundled plugins directory from the app resources, (3) generate a passphrase on first run and store it in the platform keychain (macOS Keychain, Linux secret-tool, Windows Credential Manager) — the user never needs to manage the passphrase in bundled mode, (4) default to REST transport on localhost:0 (random port) with no TLS (localhost-only). -->
   <!-- requirements: 1.3, 1.5 -->

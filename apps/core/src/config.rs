@@ -520,6 +520,11 @@ impl CoreConfig {
         // 1. Start with defaults.
         let mut config = CoreConfig::default();
 
+        // 1b. Apply bundled-mode overrides if running as a Tauri sidecar.
+        if Self::is_bundled_mode() {
+            config.apply_bundled_defaults();
+        }
+
         // 2. Load from YAML file if it exists.
         let config_path = if cli.config.is_empty() {
             Self::default_config_path()
@@ -743,6 +748,50 @@ impl CoreConfig {
         if let Some(ref dir) = cli.data_dir {
             self.core.data_dir.clone_from(dir);
         }
+    }
+
+    /// Detect bundled mode: `LIFE_ENGINE_BUNDLED=true` (set by Tauri sidecar).
+    pub fn is_bundled_mode() -> bool {
+        std::env::var("LIFE_ENGINE_BUNDLED")
+            .map(|v| v == "true" || v == "1")
+            .unwrap_or(false)
+    }
+
+    /// Apply bundled-mode defaults optimised for desktop usage.
+    ///
+    /// When running as a Tauri sidecar:
+    /// - Use platform App data directory for storage
+    /// - Bind to localhost only (no TLS needed)
+    /// - Default to JSON log format for structured sidecar piping
+    fn apply_bundled_defaults(&mut self) {
+        // Use platform-standard data directory.
+        let data_dir = Self::bundled_data_dir();
+        self.core.data_dir = data_dir.to_string_lossy().into_owned();
+
+        // Bind to localhost only — the Tauri App connects locally.
+        self.core.host = "127.0.0.1".into();
+
+        // JSON logs for structured output to the Tauri process.
+        self.core.log_format = "json".into();
+
+        // Encryption enabled by default in bundled mode — passphrase is managed
+        // by the Tauri App (auto-generated and stored in platform keychain).
+        self.storage.encryption = true;
+    }
+
+    /// Resolve the platform-standard data directory for bundled mode.
+    ///
+    /// - macOS: `~/Library/Application Support/life-engine/`
+    /// - Linux: `$XDG_DATA_HOME/life-engine/` or `~/.local/share/life-engine/`
+    /// - Windows: `%APPDATA%/life-engine/`
+    fn bundled_data_dir() -> PathBuf {
+        directories::ProjectDirs::from("com", "life-engine", "Life Engine")
+            .map(|dirs| dirs.data_dir().to_path_buf())
+            .unwrap_or_else(|| {
+                directories::BaseDirs::new()
+                    .map(|dirs| dirs.home_dir().join(".life-engine").join("data"))
+                    .unwrap_or_else(|| PathBuf::from(".life-engine/data"))
+            })
     }
 
     /// Validate the configuration, rejecting insecure or invalid values.

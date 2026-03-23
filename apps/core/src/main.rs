@@ -897,8 +897,11 @@ fn detect_deployment_mode() -> &'static str {
         return "docker";
     }
 
-    // Tauri sidecar: check for Tauri-specific env vars.
-    if std::env::var("TAURI_ENV").is_ok() || std::env::var("TAURI").is_ok() {
+    // Tauri sidecar: check for bundled-mode env var (set by Tauri App) or Tauri-specific vars.
+    if CoreConfig::is_bundled_mode()
+        || std::env::var("TAURI_ENV").is_ok()
+        || std::env::var("TAURI").is_ok()
+    {
         return "bundled";
     }
 

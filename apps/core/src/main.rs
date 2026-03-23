@@ -1,7 +1,8 @@
 //! Life Engine Core — self-hosted personal data sovereignty backend.
 //!
-//! Entry point: loads config, initialises subsystems, starts the HTTP
-//! server, and handles graceful shutdown.
+//! Entry point: 10-step startup orchestrator that loads config, initialises
+//! subsystems in dependency order, starts transports, and coordinates
+//! graceful shutdown.
 
 mod auth;
 mod config;
@@ -75,17 +76,72 @@ use tokio::sync::Mutex;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::EnvFilter;
 
+/// Log a startup step completion with duration.
+macro_rules! log_step {
+    ($step:expr, $total:expr, $name:expr, $start:expr) => {
+        tracing::info!(
+            step = $step,
+            total_steps = $total,
+            duration_ms = $start.elapsed().as_millis() as u64,
+            concat!("Step {}/{}: ", $name, "... done"),
+            $step, $total
+        );
+    };
+}
+
+/// Log a startup step failure and exit.
+macro_rules! fail_step {
+    ($step:expr, $total:expr, $name:expr, $err:expr) => {{
+        tracing::error!(
+            step = $step,
+            total_steps = $total,
+            error = %$err,
+            concat!("Step {}/{}: ", $name, "... FAILED"),
+            $step, $total
+        );
+        std::process::exit(1);
+    }};
+}
+
+const TOTAL_STEPS: u32 = 10;
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // 1. Parse CLI arguments.
+    let total_start = Instant::now();
+
+    // ── Step 1/10: Load configuration ────────────────────────────────
+    let step_start = Instant::now();
     let cli = CliArgs::parse();
+    let config = CoreConfig::load(&cli).unwrap_or_else(|e| {
+        eprintln!("Step 1/{TOTAL_STEPS}: Load configuration... FAILED: {e}");
+        std::process::exit(1);
+    });
+    // Also validate via the new TOML-based config system (Phase 9.2-9.3).
+    let toml_config_path = if cli.config.is_empty() { None } else { Some(cli.config.as_str()) };
+    match crate::config::startup::load_config(toml_config_path) {
+        Ok(startup_cfg) => {
+            if let Err(e) = crate::config::startup::validate_config(&startup_cfg) {
+                tracing::warn!(error = %e, "new-architecture config validation warning");
+            }
+        }
+        Err(e) => {
+            // Non-fatal during transition — the legacy config system is still primary.
+            tracing::debug!(error = %e, "new-architecture config not loaded (expected during transition)");
+        }
+    }
+    let step1_duration = step_start.elapsed();
 
-    // 2. Load configuration (YAML < env < CLI).
-    let config = CoreConfig::load(&cli)?;
-
-    // 3. Initialise structured logging (returns a handle for hot-reloading log level).
+    // ── Step 2/10: Initialize logging ────────────────────────────────
+    let step_start = Instant::now();
     let log_reload_handle = init_logging(&config);
-
+    log_step!(2, TOTAL_STEPS, "Initialize logging", step_start);
+    // Log step 1 retroactively now that the logger is available.
+    tracing::info!(
+        step = 1,
+        total_steps = TOTAL_STEPS,
+        duration_ms = step1_duration.as_millis() as u64,
+        "Step 1/{TOTAL_STEPS}: Load configuration... done"
+    );
     tracing::info!("Life Engine Core starting");
     tracing::info!(
         host = %config.core.host,
@@ -94,25 +150,28 @@ async fn main() -> anyhow::Result<()> {
         "configuration loaded"
     );
 
-    // 4. Initialise subsystems.
+    // ── Step 3/10: Derive database key ───────────────────────────────
+    let step_start = Instant::now();
     let start_time = Instant::now();
-    let message_bus = Arc::new(MessageBus::new());
-
-    // 4a. Derive database encryption key (when encryption is enabled with a passphrase).
     let data_dir_path = std::path::Path::new(&config.core.data_dir);
-    std::fs::create_dir_all(data_dir_path)?;
+    std::fs::create_dir_all(data_dir_path).unwrap_or_else(|e| {
+        fail_step!(3, TOTAL_STEPS, "Derive database key", e);
+    });
     let db_path = data_dir_path.join("life-engine.db");
     let derived_key = if config.storage.encryption {
         if let Some(passphrase) = config.storage.resolve_passphrase() {
             let salt_path = data_dir_path.join("salt.bin");
             let salt = if salt_path.exists() {
-                let salt_bytes = std::fs::read(&salt_path)?;
+                let salt_bytes = std::fs::read(&salt_path).unwrap_or_else(|e| {
+                    fail_step!(3, TOTAL_STEPS, "Derive database key", e);
+                });
                 if salt_bytes.len() != 16 {
-                    anyhow::bail!(
-                        "salt file {} has invalid length {} (expected 16 bytes)",
-                        salt_path.display(),
-                        salt_bytes.len()
+                    tracing::error!(
+                        path = %salt_path.display(),
+                        actual_len = salt_bytes.len(),
+                        "salt file has invalid length (expected 16 bytes)"
                     );
+                    std::process::exit(1);
                 }
                 let mut salt = [0u8; 16];
                 salt.copy_from_slice(&salt_bytes);
@@ -120,13 +179,16 @@ async fn main() -> anyhow::Result<()> {
                 salt
             } else {
                 let salt = life_engine_crypto::generate_salt();
-                std::fs::write(&salt_path, &salt)?;
+                std::fs::write(&salt_path, &salt).unwrap_or_else(|e| {
+                    fail_step!(3, TOTAL_STEPS, "Derive database key", e);
+                });
                 tracing::info!(path = %salt_path.display(), "generated and saved new salt");
                 salt
             };
 
-            let key = life_engine_crypto::derive_key(&passphrase, &salt)
-                .map_err(|e| anyhow::anyhow!("key derivation failed: {e}"))?;
+            let key = life_engine_crypto::derive_key(&passphrase, &salt).unwrap_or_else(|e| {
+                fail_step!(3, TOTAL_STEPS, "Derive database key", e);
+            });
             tracing::info!("Database key derived");
             Some(key)
         } else {
@@ -136,8 +198,11 @@ async fn main() -> anyhow::Result<()> {
     } else {
         None
     };
+    log_step!(3, TOTAL_STEPS, "Derive database key", step_start);
 
-    // 4b. Initialise storage (file-backed when data_dir is configured).
+    // ── Step 4/10: Initialize storage ────────────────────────────────
+    let step_start = Instant::now();
+    let message_bus = Arc::new(MessageBus::new());
     let storage = match derived_key {
         Some(ref key) => {
             tracing::info!(path = %db_path.display(), "opening encrypted storage with derived key");
@@ -150,42 +215,42 @@ async fn main() -> anyhow::Result<()> {
                             path = %db_path.display(),
                             "storage initialization failed — check passphrase"
                         );
-                        anyhow::bail!(
-                            "Cannot open encrypted database at {}: {}. \
-                             Verify LIFE_ENGINE_STORAGE_PASSPHRASE or storage.passphrase is correct.",
-                            db_path.display(),
-                            msg
+                        fail_step!(4, TOTAL_STEPS, "Initialize storage",
+                            format_args!(
+                                "Cannot open encrypted database at {}: {}. \
+                                 Verify LIFE_ENGINE_STORAGE_PASSPHRASE or storage.passphrase is correct.",
+                                db_path.display(), msg
+                            )
                         );
                     } else if msg.contains("permission denied") || msg.contains("readonly") {
-                        tracing::error!(
-                            path = %db_path.display(),
-                            "insufficient permissions to open database"
-                        );
-                        anyhow::bail!(
-                            "Cannot open database at {}: {}. \
-                             Check file permissions.",
-                            db_path.display(),
-                            msg
+                        fail_step!(4, TOTAL_STEPS, "Initialize storage",
+                            format_args!(
+                                "Cannot open database at {}: {}. Check file permissions.",
+                                db_path.display(), msg
+                            )
                         );
                     } else {
-                        return Err(e);
+                        fail_step!(4, TOTAL_STEPS, "Initialize storage", e);
                     }
                 }
             }
         }
         None if config.storage.encryption => {
             tracing::info!(path = %db_path.display(), "encryption enabled but no passphrase — deferring to /api/storage/init");
-            // Encrypted storage without startup passphrase requires the /api/storage/init endpoint.
-            Arc::new(sqlite_storage::SqliteStorage::open_in_memory()?)
+            Arc::new(sqlite_storage::SqliteStorage::open_in_memory().unwrap_or_else(|e| {
+                fail_step!(4, TOTAL_STEPS, "Initialize storage", e);
+            }))
         }
         None => {
             tracing::info!(path = %db_path.display(), "opening unencrypted storage");
-            Arc::new(sqlite_storage::SqliteStorage::open(&db_path)?)
+            Arc::new(sqlite_storage::SqliteStorage::open(&db_path).unwrap_or_else(|e| {
+                fail_step!(4, TOTAL_STEPS, "Initialize storage", e);
+            }))
         }
     };
-    tracing::info!(path = %db_path.display(), encrypted = config.storage.encryption, "storage initialised");
+    tracing::info!(path = %db_path.display(), encrypted = config.storage.encryption, "storage initialized");
 
-    // 4c. Initialise schema registry (must happen before plugin loading).
+    // Schema registry (part of storage initialization).
     let schema_dir = if let Ok(dir) = std::env::var("LIFE_ENGINE_SCHEMA_DIR") {
         std::path::PathBuf::from(dir)
     } else {
@@ -194,10 +259,7 @@ async fn main() -> anyhow::Result<()> {
     let schema_registry = if schema_dir.exists() {
         match SchemaRegistry::load_from_directory(&schema_dir) {
             Ok(registry) => {
-                tracing::info!(
-                    collections = registry.collections().len(),
-                    "schema registry loaded"
-                );
+                tracing::info!(collections = registry.collections().len(), "schema registry loaded");
                 Arc::new(registry)
             }
             Err(e) => {
@@ -209,26 +271,10 @@ async fn main() -> anyhow::Result<()> {
         tracing::info!("schema directory not found, using empty registry");
         Arc::new(SchemaRegistry::new())
     };
+    log_step!(4, TOTAL_STEPS, "Initialize storage", step_start);
 
-    // 4d. Initialise plugin loader with schema registry and load plugins.
-    let plugin_loader = Arc::new(Mutex::new(
-        PluginLoader::with_schema_registry(Arc::clone(&schema_registry)),
-    ));
-    {
-        let mut loader = plugin_loader.lock().await;
-        let errors = loader.load_all().await;
-        for err in &errors {
-            tracing::warn!(error = %err, "plugin load error (non-fatal)");
-        }
-        tracing::info!(loaded = loader.loaded_count(), "plugins loaded");
-    }
-
-    // 5. Publish a startup event.
-    message_bus.publish(message_bus::BusEvent::SyncComplete {
-        plugin_id: "core".into(),
-    });
-
-    // 6. Initialise auth provider.
+    // ── Step 5/10: Initialize auth ───────────────────────────────────
+    let step_start = Instant::now();
     let oidc_config = config.auth.oidc.as_ref().map(|oidc| {
         crate::auth::oidc::OidcConfig {
             issuer_url: oidc.issuer_url.clone(),
@@ -257,37 +303,87 @@ async fn main() -> anyhow::Result<()> {
         auth_provider: Arc::clone(&auth_provider),
         rate_limiter,
     };
-    tracing::info!(provider = %config.auth.provider, "auth provider initialised");
+    tracing::info!(provider = %config.auth.provider, "auth provider initialized");
     if webauthn_provider.is_some() {
         tracing::info!("WebAuthn passkey provider enabled");
     }
+    log_step!(5, TOTAL_STEPS, "Initialize auth", step_start);
 
-    // 6b. Initialise conflict store.
+    // ── Step 6/10: Create workflow engine ─────────────────────────────
+    let step_start = Instant::now();
+    let _workflow_executor = life_engine_workflow_engine::PipelineExecutor::new(
+        Arc::new(NoOpPluginExecutor),
+    );
+    tracing::info!("workflow engine created");
+    log_step!(6, TOTAL_STEPS, "Create workflow engine", step_start);
+
+    // ── Step 7/10: Load workflows ────────────────────────────────────
+    let step_start = Instant::now();
+    let workflows_path = std::path::Path::new("workflows");
+    if workflows_path.is_dir() {
+        let wf_config = life_engine_workflow_engine::WorkflowConfig {
+            path: "workflows".to_string(),
+        };
+        match life_engine_workflow_engine::load_workflows(&wf_config) {
+            Ok(workflows) => {
+                let count = workflows.len();
+                match life_engine_workflow_engine::TriggerRegistry::build(workflows) {
+                    Ok(_trigger_registry) => {
+                        tracing::info!(count, "workflows loaded and trigger registry built");
+                    }
+                    Err(e) => {
+                        tracing::warn!(error = %e, "failed to build trigger registry");
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "failed to load workflows (non-fatal)");
+            }
+        }
+    } else {
+        tracing::info!("no workflows directory found, skipping workflow loading");
+    }
+    log_step!(7, TOTAL_STEPS, "Load workflows", step_start);
+
+    // ── Step 8/10: Discover and load plugins ─────────────────────────
+    let step_start = Instant::now();
+    let plugin_loader = Arc::new(Mutex::new(
+        PluginLoader::with_schema_registry(Arc::clone(&schema_registry)),
+    ));
+    {
+        let mut loader = plugin_loader.lock().await;
+        let errors = loader.load_all().await;
+        for err in &errors {
+            tracing::warn!(error = %err, "plugin load error (non-fatal)");
+        }
+        tracing::info!(loaded = loader.loaded_count(), "plugins loaded");
+    }
+    // Conflict store, validated storage, and search engine (supporting subsystems).
     let conflict_store = Arc::new(ConflictStore::new());
-    tracing::info!("conflict store initialised (in-memory)");
-
-    // 6c. Initialise validated storage (wraps schema registry + storage).
     let validated_storage = Arc::new(ValidatedStorage::new(
         Arc::clone(&storage),
         Arc::clone(&schema_registry),
     ));
-    tracing::info!("validated storage initialised");
-
-    // 7d. Initialise full-text search engine and search processor.
     let search_engine = match search::SearchEngine::new() {
         Ok(engine) => {
             let engine = Arc::new(engine);
             search_processor::spawn(&message_bus, Arc::clone(&engine));
-            tracing::info!("search engine and processor initialised (in-memory)");
+            tracing::info!("search engine initialized");
             Some(engine)
         }
         Err(e) => {
-            tracing::warn!(error = %e, "failed to initialise search engine");
+            tracing::warn!(error = %e, "failed to initialize search engine");
             None
         }
     };
+    // Publish startup event.
+    message_bus.publish(message_bus::BusEvent::SyncComplete {
+        plugin_id: "core".into(),
+    });
+    log_step!(8, TOTAL_STEPS, "Discover and load plugins", step_start);
 
-    // 8. Build the HTTP router.
+    // ── Step 9/10: Start active transports ───────────────────────────
+    let step_start = Instant::now();
     let config_path = if cli.config.is_empty() {
         CoreConfig::default_config_path()
     } else {
@@ -297,15 +393,7 @@ async fn main() -> anyhow::Result<()> {
 
     let general_rate_limiter =
         GeneralRateLimiter::new(config.network.rate_limit.requests_per_minute);
-    tracing::info!(
-        rpm = config.network.rate_limit.requests_per_minute,
-        "general rate limiter initialised"
-    );
 
-    tracing::info!(
-        origins = ?config.network.cors.allowed_origins,
-        "CORS origins configured (dynamic — changes apply on config reload)"
-    );
     if config.network.cors.allowed_origins.iter().any(|o| o == "*") {
         tracing::warn!("CORS configured with wildcard origin '*' — any domain can make cross-origin requests");
     }
@@ -328,7 +416,6 @@ async fn main() -> anyhow::Result<()> {
         rate_limiter: Some(general_rate_limiter.clone()),
     };
 
-    // Storage init endpoint (no auth required, callable once).
     let data_dir = std::path::PathBuf::from(&config.core.data_dir);
     std::fs::create_dir_all(&data_dir)?;
     let storage_init_state = StorageInitState {
@@ -338,13 +425,75 @@ async fn main() -> anyhow::Result<()> {
         init_attempts: Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new())),
     };
     let storage_init_router = axum::Router::new()
-        .route(
-            "/api/storage/init",
-            axum::routing::post(init_storage),
-        )
+        .route("/api/storage/init", axum::routing::post(init_storage))
         .with_state(storage_init_state);
 
-    let app = axum::Router::new()
+    let app = build_router(state)
+        .merge(auth_router(Arc::clone(&auth_provider), oidc_config, webauthn_provider))
+        .layer(axum::middleware::from_fn_with_state(auth_mw_state, auth_middleware))
+        .layer(axum::middleware::from_fn_with_state(general_rate_limiter, rate_limit_middleware))
+        .merge(storage_init_router)
+        .layer(TraceLayer::new_for_http())
+        .layer(axum::middleware::from_fn_with_state(shared_config, dynamic_cors_middleware));
+
+    let bind_addr = config.bind_address();
+    let listener = tokio::net::TcpListener::bind(&bind_addr).await.unwrap_or_else(|e| {
+        fail_step!(9, TOTAL_STEPS, "Start active transports", e);
+    });
+    log_step!(9, TOTAL_STEPS, "Start active transports", step_start);
+
+    // ── Step 10/10: Wait for shutdown signal ─────────────────────────
+    tracing::info!(
+        total_startup_ms = total_start.elapsed().as_millis() as u64,
+        "Step 10/{TOTAL_STEPS}: Wait for shutdown signal — all systems ready"
+    );
+
+    if config.network.tls.enabled {
+        let tls_acceptor = tls::build_tls_acceptor(&config.network.tls)
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
+        tracing::info!(address = %bind_addr, "listening (TLS)");
+        serve_tls(listener, app, tls_acceptor).await?;
+    } else {
+        tracing::info!(address = %bind_addr, "listening");
+        axum::serve(
+            listener,
+            app.into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .with_graceful_shutdown(shutdown_signal())
+        .await?;
+    }
+
+    // Graceful shutdown sequence.
+    graceful_shutdown(plugin_loader).await;
+
+    Ok(())
+}
+
+/// No-op plugin executor used during startup before plugins are loaded.
+///
+/// The workflow engine requires a `PluginExecutor` at construction time.
+/// This placeholder is replaced when transport-level routing dispatches
+/// to real plugin instances.
+struct NoOpPluginExecutor;
+
+#[async_trait::async_trait]
+impl life_engine_workflow_engine::PluginExecutor for NoOpPluginExecutor {
+    async fn execute(
+        &self,
+        plugin_id: &str,
+        action: &str,
+        _input: life_engine_types::PipelineMessage,
+    ) -> Result<life_engine_types::PipelineMessage, Box<dyn life_engine_traits::EngineError>> {
+        Err(Box::new(life_engine_workflow_engine::WorkflowError::PluginExecutionError {
+            plugin: plugin_id.to_string(),
+            cause: format!("plugin executor not yet initialized (action: {action})"),
+        }))
+    }
+}
+
+/// Build the main HTTP router with all API routes.
+fn build_router(state: AppState) -> axum::Router {
+    axum::Router::new()
         .route("/api/system/health", axum::routing::get(health_check))
         .route("/api/system/info", axum::routing::get(system_info))
         .route("/api/system/plugins", axum::routing::get(system_plugins))
@@ -455,46 +604,6 @@ async fn main() -> anyhow::Result<()> {
                 .patch(plugin_route_stub),
         )
         .with_state(state)
-        .merge(auth_router(Arc::clone(&auth_provider), oidc_config, webauthn_provider))
-        .layer(axum::middleware::from_fn_with_state(
-            auth_mw_state,
-            auth_middleware,
-        ))
-        .layer(axum::middleware::from_fn_with_state(
-            general_rate_limiter,
-            rate_limit_middleware,
-        ))
-        // Public routes (no auth required) merged after auth middleware.
-        .merge(storage_init_router)
-        .layer(TraceLayer::new_for_http())
-        .layer(axum::middleware::from_fn_with_state(
-            shared_config,
-            dynamic_cors_middleware,
-        ));
-
-    // 9. Bind and serve.
-    let bind_addr = config.bind_address();
-    let listener = tokio::net::TcpListener::bind(&bind_addr).await?;
-
-    if config.network.tls.enabled {
-        let tls_acceptor = tls::build_tls_acceptor(&config.network.tls)
-            .map_err(|e| anyhow::anyhow!("{e}"))?;
-        tracing::info!(address = %bind_addr, "listening (TLS)");
-        serve_tls(listener, app, tls_acceptor).await?;
-    } else {
-        tracing::info!(address = %bind_addr, "listening");
-        axum::serve(
-            listener,
-            app.into_make_service_with_connect_info::<SocketAddr>(),
-        )
-        .with_graceful_shutdown(shutdown_signal())
-        .await?;
-    }
-
-    // 10. Graceful shutdown sequence.
-    graceful_shutdown(plugin_loader).await;
-
-    Ok(())
 }
 
 /// Maximum number of concurrent TLS connections to prevent resource exhaustion.

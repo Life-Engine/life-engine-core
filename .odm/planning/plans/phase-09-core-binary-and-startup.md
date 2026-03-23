@@ -15,7 +15,7 @@ This phase depends on all previous phases (types, traits, crypto, SDK, storage, 
 
 > spec: .odm/spec/binary-and-startup/brief.md
 
-Progress: 6 / 11 work packages complete
+Progress: 7 / 11 work packages complete
 
 ---
 
@@ -94,7 +94,7 @@ Progress: 6 / 11 work packages complete
 ## 9.7 — 10-Step Startup Orchestrator
 > spec: .odm/spec/binary-and-startup/brief.md
 
-- [ ] Implement the complete 10-step startup sequence in main
+- [x] Implement the complete 10-step startup sequence in main
   <!-- file: apps/core/src/main.rs -->
   <!-- purpose: Implement the #[tokio::main] async fn main() with the 10 startup steps in dependency order: (1) Load config — call load_config() and validate_config(), (2) Initialize logging — set up tracing subscriber with JSON formatter and configured log level, (3) Derive database key — call derive_key() with passphrase and salt, (4) Initialize storage — call StorageBackend::init() with key and config, (5) Initialize auth — call create_auth_provider() with [auth] config section, (6) Create workflow engine — call WorkflowEngine::new() with [workflows] config and plugin executor, (7) Load workflows — the engine loads and validates YAML workflow files, builds trigger registry, (8) Discover and load plugins — call load_plugins() with config, plugins directory, storage, and event bus, (9) Start active transports — for each configured transport, instantiate and start it with the workflow engine and auth provider, (10) Wait for shutdown signal — call shutdown::wait_for_signal(). Each step logs: step number, step name, and duration (e.g., "Step 4/10: Initialize storage... done (23ms)"). If any step fails, log the error and exit with non-zero code — do not continue with partially initialized system. Log total startup duration after step 10 begins. -->
   <!-- requirements: 5.1, 5.2, 5.3, 5.4 -->

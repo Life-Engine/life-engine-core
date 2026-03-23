@@ -139,13 +139,14 @@
     "10.5",
     "10.6",
     "10.7",
-    "10.8"
+    "10.8",
+    "10.9"
   ],
   "current_wp": null,
   "current_wp_tasks": {
     "total": 1,
     "completed": [
-      "Add LE_BEHIND_PROXY flag support to Core startup"
+      "Verify ARM64 binary builds and runs correctly"
     ],
     "deferred": [],
     "remaining": [],

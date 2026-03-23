@@ -116,7 +116,7 @@ Progress: 4 / 24 work packages complete
 ## 10.9 — ARM64 Build Verification
 > spec: .odm/spec/deployment-modes/brief.md
 
-- [ ] Verify ARM64 binary builds and runs correctly
+- [x] Verify ARM64 binary builds and runs correctly
   <!-- file: Cargo.toml -->
   <!-- purpose: Cross-compile Core for aarch64-unknown-linux-gnu using cross or cargo with the appropriate target. Verify: (1) the build completes without errors, (2) the resulting binary runs on an ARM64 system (or QEMU emulation), (3) Core starts and responds to a health check request, (4) memory usage stays under 128 MB at idle with no plugins loaded, (5) SQLCipher works correctly on ARM64 (encryption/decryption round-trip). Document the cross-compilation command and any required toolchain setup. If cross-compilation requires additional linker configuration, add it to .cargo/config.toml with a target-specific section. -->
   <!-- requirements: 4.1, 4.2 -->

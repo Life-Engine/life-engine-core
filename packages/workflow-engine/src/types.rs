@@ -1,5 +1,6 @@
 //! Workflow definition types for the workflow engine.
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 /// A complete workflow definition loaded from YAML.
@@ -98,6 +99,39 @@ pub enum ErrorStrategyType {
     Skip,
     /// Retry with exponential backoff.
     Retry,
+}
+
+/// Context describing what triggered a workflow execution.
+///
+/// Used by `build_initial_message` to construct the initial `PipelineMessage`
+/// that enters the pipeline.
+#[derive(Debug, Clone)]
+pub enum TriggerContext {
+    /// Triggered by an HTTP endpoint request.
+    Endpoint {
+        /// HTTP method (e.g., "POST").
+        method: String,
+        /// Request path (e.g., "/email/sync").
+        path: String,
+        /// Request body as JSON.
+        body: serde_json::Value,
+        /// Authenticated identity, if available (serialized as JSON value).
+        auth: Option<serde_json::Value>,
+    },
+    /// Triggered by a named event.
+    Event {
+        /// Event name (e.g., "webhook.email.received").
+        name: String,
+        /// Event payload as JSON.
+        payload: serde_json::Value,
+    },
+    /// Triggered by a cron schedule.
+    Schedule {
+        /// The workflow ID being triggered.
+        workflow_id: String,
+        /// When the schedule fired.
+        fired_at: DateTime<Utc>,
+    },
 }
 
 /// Conditional branching definition.

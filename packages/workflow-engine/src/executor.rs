@@ -15,7 +15,7 @@ use tracing::{error, info};
 use uuid::Uuid;
 
 use crate::error::WorkflowError;
-use crate::types::{ExecutionMode, WorkflowDef};
+use crate::types::{ExecutionMode, TriggerContext, WorkflowDef};
 
 /// Trait for executing a single plugin action.
 ///
@@ -58,6 +58,59 @@ pub struct NoOpEventEmitter;
 #[async_trait]
 impl WorkflowEventEmitter for NoOpEventEmitter {
     async fn emit(&self, _event_name: &str, _payload: serde_json::Value) {}
+}
+
+/// Build the initial `PipelineMessage` from a trigger context.
+///
+/// Constructs a new message with a fresh correlation ID, source string
+/// derived from the trigger type, current UTC timestamp, and the
+/// appropriate payload and auth context.
+pub fn build_initial_message(
+    trigger_context: TriggerContext,
+) -> Result<PipelineMessage, WorkflowError> {
+    let correlation_id = Uuid::new_v4();
+    let timestamp = Utc::now();
+    let schema = serde_json::json!({"type": "object"});
+
+    let (source, payload_value, auth_context) = match trigger_context {
+        TriggerContext::Endpoint {
+            method,
+            path,
+            body,
+            auth,
+        } => {
+            let source = format!("endpoint:{method} {path}");
+            (source, body, auth)
+        }
+        TriggerContext::Event { name, payload } => {
+            let source = format!("event:{name}");
+            (source, payload, None)
+        }
+        TriggerContext::Schedule {
+            workflow_id,
+            fired_at: _,
+        } => {
+            let source = format!("schedule:{workflow_id}");
+            (source, serde_json::json!({}), None)
+        }
+    };
+
+    let validated = SchemaValidated::new(payload_value, &schema).map_err(|e| {
+        WorkflowError::PluginExecutionError {
+            plugin: "workflow-engine".into(),
+            cause: e.to_string(),
+        }
+    })?;
+
+    Ok(PipelineMessage {
+        metadata: MessageMetadata {
+            correlation_id,
+            source,
+            timestamp,
+            auth_context,
+        },
+        payload: TypedPayload::Custom(validated),
+    })
 }
 
 /// Executes workflow steps sequentially, passing each step's output
@@ -741,5 +794,97 @@ mod tests {
 
         let result = executor.execute_workflow(&workflow, msg).await.unwrap();
         assert_eq!(result.metadata.correlation_id, expected_id);
+    }
+
+    // --- build_initial_message tests ---
+
+    #[test]
+    fn build_message_from_endpoint_trigger() {
+        let ctx = TriggerContext::Endpoint {
+            method: "POST".into(),
+            path: "/email/sync".into(),
+            body: serde_json::json!({"folder": "inbox"}),
+            auth: Some(serde_json::json!({"user_id": "u-123", "provider": "pocket-id"})),
+        };
+
+        let msg = build_initial_message(ctx).unwrap();
+
+        assert_eq!(msg.metadata.source, "endpoint:POST /email/sync");
+        assert!(msg.metadata.auth_context.is_some());
+        assert_eq!(
+            msg.metadata.auth_context.unwrap()["user_id"],
+            "u-123"
+        );
+
+        let payload_json = serde_json::to_value(&msg.payload).unwrap();
+        assert_eq!(payload_json["data"]["folder"], "inbox");
+    }
+
+    #[test]
+    fn build_message_from_endpoint_trigger_no_auth() {
+        let ctx = TriggerContext::Endpoint {
+            method: "GET".into(),
+            path: "/health".into(),
+            body: serde_json::json!({}),
+            auth: None,
+        };
+
+        let msg = build_initial_message(ctx).unwrap();
+
+        assert_eq!(msg.metadata.source, "endpoint:GET /health");
+        assert!(msg.metadata.auth_context.is_none());
+    }
+
+    #[test]
+    fn build_message_from_event_trigger() {
+        let ctx = TriggerContext::Event {
+            name: "webhook.email.received".into(),
+            payload: serde_json::json!({"sender": "alice@example.com", "subject": "Hello"}),
+        };
+
+        let msg = build_initial_message(ctx).unwrap();
+
+        assert_eq!(msg.metadata.source, "event:webhook.email.received");
+        assert!(msg.metadata.auth_context.is_none());
+
+        let payload_json = serde_json::to_value(&msg.payload).unwrap();
+        assert_eq!(payload_json["data"]["sender"], "alice@example.com");
+    }
+
+    #[test]
+    fn build_message_from_schedule_trigger() {
+        let fired_at = Utc::now();
+        let ctx = TriggerContext::Schedule {
+            workflow_id: "sync-email".into(),
+            fired_at,
+        };
+
+        let msg = build_initial_message(ctx).unwrap();
+
+        assert_eq!(msg.metadata.source, "schedule:sync-email");
+        assert!(msg.metadata.auth_context.is_none());
+
+        // Payload should be an empty object
+        let payload_json = serde_json::to_value(&msg.payload).unwrap();
+        let data = &payload_json["data"];
+        assert!(data.is_object());
+        assert_eq!(data.as_object().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn build_message_generates_unique_correlation_ids() {
+        let ctx1 = TriggerContext::Event {
+            name: "test".into(),
+            payload: serde_json::json!({}),
+        };
+        let ctx2 = TriggerContext::Event {
+            name: "test".into(),
+            payload: serde_json::json!({}),
+        };
+
+        let msg1 = build_initial_message(ctx1).unwrap();
+        let msg2 = build_initial_message(ctx2).unwrap();
+
+        assert_ne!(msg1.metadata.correlation_id, msg2.metadata.correlation_id);
     }
 }

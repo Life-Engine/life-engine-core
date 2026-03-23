@@ -12,11 +12,12 @@ pub use config::WorkflowConfig;
 pub use error::WorkflowError;
 pub use loader::{load_workflows, HttpMethod, TriggerRegistry};
 pub use executor::{
-    JobStatus, NoOpEventEmitter, PipelineExecutor, PluginExecutor, WorkflowEventEmitter,
+    build_initial_message, JobStatus, NoOpEventEmitter, PipelineExecutor, PluginExecutor,
+    WorkflowEventEmitter,
 };
 pub use types::{
-    ConditionDef, ErrorStrategy, ErrorStrategyType, ExecutionMode, StepDef, TriggerDef,
-    ValidationLevel, WorkflowDef,
+    ConditionDef, ErrorStrategy, ErrorStrategyType, ExecutionMode, StepDef, TriggerContext,
+    TriggerDef, ValidationLevel, WorkflowDef,
 };
 
 #[cfg(test)]

@@ -95,7 +95,7 @@ Progress: 0 / 17 work packages complete
 > depends: 7.5
 > spec: .odm/spec/workflow-engine/brief.md
 
-- [ ] Construct initial PipelineMessage from trigger context
+- [x] Construct initial PipelineMessage from trigger context
   <!-- file: packages/workflow-engine/src/executor.rs -->
   <!-- purpose: Implement pub fn build_initial_message(trigger_context: TriggerContext) -> PipelineMessage. Define TriggerContext enum: Endpoint { method: String, path: String, body: serde_json::Value, auth: Option<AuthIdentity> }, Event { name: String, payload: serde_json::Value }, Schedule { workflow_id: String, fired_at: DateTime<Utc> }. Construction logic: (1) generate a new UUID v4 correlation_id, (2) set source string from trigger type: "endpoint:POST /email/sync", "event:webhook.email.received", "schedule:sync-email", (3) set timestamp to current UTC time, (4) for Endpoint: set payload to TypedPayload::Custom with the request body, set auth_context from the AuthIdentity, (5) for Event: set payload to TypedPayload::Custom with the event payload, auth_context is None, (6) for Schedule: set payload to TypedPayload::Custom with empty object {}, auth_context is None. Add tests for each trigger type. -->
   <!-- requirements: from workflow-engine spec 3.3 -->

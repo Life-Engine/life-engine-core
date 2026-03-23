@@ -15,7 +15,7 @@ This phase depends on Phase 3 (traits, capabilities), Phase 4 (plugin SDK), Phas
 
 > spec: .odm/spec/plugin-system/brief.md, .odm/spec/capability-enforcement/brief.md
 
-Progress: 5 / 22 work packages complete
+Progress: 6 / 22 work packages complete
 
 ---
 
@@ -112,13 +112,13 @@ Progress: 5 / 22 work packages complete
 > depends: 8.4, 8.3
 > spec: .odm/spec/plugin-system/brief.md
 
-- [ ] Implement config read host function
+- [x] Implement config read host function
   <!-- file: packages/plugin-system/src/host_functions/config.rs -->
   <!-- purpose: Implement host_config_read host function: (1) check that the calling plugin has config:read capability, (2) if approved, look up the plugin's config section from the loaded config.toml [plugins.<id>] section, (3) serialize the config section as JSON and return to the WASM module, (4) if the plugin has no config section, return an empty JSON object {}. The host function only ever returns the calling plugin's own config — never another plugin's config or global config. -->
   <!-- requirements: from plugin-system spec 5.8, 6.3 -->
   <!-- leverage: none -->
 
-- [ ] Add config host function tests
+- [x] Add config host function tests
   <!-- file: packages/plugin-system/src/host_functions/config.rs -->
   <!-- purpose: Test cases: (1) read returns plugin-specific config section only, (2) without config:read capability returns CAP_002 error, (3) nonexistent config section returns empty {}, (4) config data preserves types (numbers, booleans, nested objects). -->
   <!-- requirements: from plugin-system spec 5.8, 5.9, 6.3 -->

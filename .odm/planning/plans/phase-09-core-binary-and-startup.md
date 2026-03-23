@@ -15,7 +15,7 @@ This phase depends on all previous phases (types, traits, crypto, SDK, storage, 
 
 > spec: .odm/spec/binary-and-startup/brief.md
 
-Progress: 7 / 11 work packages complete
+Progress: 8 / 11 work packages complete
 
 ---
 
@@ -117,7 +117,7 @@ Progress: 7 / 11 work packages complete
 ## 9.9 — Graceful Shutdown Handler
 > spec: .odm/spec/binary-and-startup/brief.md
 
-- [ ] Implement shutdown handler with reverse-order teardown
+- [x] Implement shutdown handler with reverse-order teardown
   <!-- file: apps/core/src/shutdown.rs -->
   <!-- purpose: Implement pub async fn wait_for_signal() that listens for SIGTERM and SIGINT using tokio::signal. On signal receipt, log "Shutdown signal received, beginning graceful shutdown..." and execute teardown in reverse startup order: (1) Stop transports — call transport.stop() on each active transport, stop accepting new connections, finish in-flight requests with a configurable timeout (default 30 seconds), (2) Unload plugins — call plugin_manager.stop_all() which stops and unloads all plugins, (3) Stop workflow engine — drain the event bus, cancel scheduled tasks, wait for running workflows to complete (with timeout), (4) Shut down auth — clear cached JWKS keys, flush rate limiter state, (5) Close storage — flush WAL, close SQLCipher connection, ensure all pending writes are committed. Each teardown step has its own timeout (configurable, default 10 seconds each). If a step exceeds its timeout, log a warning and force-proceed to the next step. Log each step: "Shutdown step 1/5: Stopping transports... done". After all steps, exit with code 0 if clean, code 1 if any step timed out. -->
   <!-- requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7 -->

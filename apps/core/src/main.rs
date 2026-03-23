@@ -66,7 +66,7 @@ use crate::routes::plugins::plugin_route_stub;
 use crate::routes::storage::{init_storage, StorageInitState};
 use crate::routes::system::{get_config, put_config, system_info, system_plugins};
 use crate::schema_registry::{SchemaRegistry, ValidatedStorage};
-use crate::shutdown::{graceful_shutdown, shutdown_signal};
+use crate::shutdown::{graceful_shutdown, shutdown_signal, ShutdownConfig, ShutdownHandles};
 
 use clap::Parser;
 use std::net::SocketAddr;
@@ -470,13 +470,13 @@ async fn main() -> anyhow::Result<()> {
         .await?;
     }
 
-    // Graceful shutdown sequence — stop transports first (reverse startup order).
-    for transport in &transport_handles {
-        if let Err(e) = transport.stop().await {
-            tracing::warn!(transport = transport.name(), error = %e, "transport stop error");
-        }
-    }
-    graceful_shutdown(plugin_loader).await;
+    // Graceful shutdown sequence — reverse startup order with per-step timeouts.
+    let handles = ShutdownHandles {
+        transports: transport_handles,
+        plugin_loader,
+        storage: Some(Arc::clone(&storage)),
+    };
+    graceful_shutdown(handles, ShutdownConfig::default()).await;
 
     Ok(())
 }

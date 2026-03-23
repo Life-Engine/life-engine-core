@@ -153,13 +153,15 @@
     "10.19",
     "10.20",
     "10.21",
-    "10.22"
+    "10.22",
+    "10.23"
   ],
   "current_wp": null,
   "current_wp_tasks": {
-    "total": 1,
+    "total": 2,
     "completed": [
-      "Verify end-to-end migration behavior"
+      "Convert connector-email plugin from native Rust to WASM module",
+      "Convert remaining 6 first-party plugins to WASM modules"
     ],
     "deferred": [],
     "remaining": [],
@@ -1378,8 +1380,16 @@
       "wp": "10.22",
       "title": "Migration Integration Tests",
       "completed_at": "2026-03-23T19:00:00Z",
-      "commit": "pending",
+      "commit": "2f620ec",
       "tasks_completed": 1,
+      "tasks_deferred": 0
+    },
+    {
+      "wp": "10.23",
+      "title": "First-Party Plugin WASM Conversion",
+      "completed_at": "2026-03-23T20:00:00Z",
+      "commit": "10cf9ba",
+      "tasks_completed": 2,
       "tasks_deferred": 0
     }
   ]

@@ -286,14 +286,14 @@ Progress: 5 / 24 work packages complete
 > depends: 10.19
 > spec: .odm/spec/plugin-system/brief.md
 
-- [ ] Convert connector-email plugin from native Rust to WASM module
+- [x] Convert connector-email plugin from native Rust to WASM module
   <!-- file: plugins/connector-email/src/lib.rs -->
   <!-- file: plugins/connector-email/manifest.toml -->
   <!-- purpose: Refactor the connector-email plugin to compile as a WASM module. Steps: (1) update Cargo.toml to use life-engine-plugin-sdk as the only dependency (remove direct tokio, axum, etc.), set crate-type = ["cdylib"], (2) implement the Plugin trait: id() returns "connector-email", actions() returns ["fetch", "send"], execute() routes to fetch or send step handlers, (3) add register_plugin!(ConnectorEmail) macro call, (4) replace direct HTTP calls with the http:outbound host function (IMAP/SMTP via HTTP bridge or host function extension), (5) replace direct database access with StorageContext calls via storage host functions, (6) update manifest.toml with capabilities: ["storage:read", "storage:write", "http:outbound", "config:read"], (7) verify cargo build --target wasm32-wasi produces a valid plugin.wasm, (8) test the WASM plugin loads correctly in Core and can execute its actions. Repeat this pattern for all 6 remaining first-party plugins (connector-calendar, connector-contacts, connector-filesystem, webhook-sender, search-indexer, backup) — each as a sub-task. -->
   <!-- requirements: from plugin-system spec, ARCHITECTURE.md migration path step 11 -->
   <!-- leverage: existing plugin source code -->
 
-- [ ] Convert remaining 6 first-party plugins to WASM modules
+- [x] Convert remaining 6 first-party plugins to WASM modules
   <!-- file: plugins/connector-calendar/src/lib.rs -->
   <!-- file: plugins/connector-contacts/src/lib.rs -->
   <!-- file: plugins/connector-filesystem/src/lib.rs -->

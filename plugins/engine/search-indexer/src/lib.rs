@@ -45,6 +45,43 @@ impl Default for SearchIndexerPlugin {
     }
 }
 
+impl Plugin for SearchIndexerPlugin {
+    fn id(&self) -> &str {
+        "com.life-engine.search-indexer"
+    }
+
+    fn display_name(&self) -> &str {
+        "Search Indexer"
+    }
+
+    fn version(&self) -> &str {
+        "0.1.0"
+    }
+
+    fn actions(&self) -> Vec<Action> {
+        vec![
+            Action::new("search", "Search across all indexed collections"),
+            Action::new("reindex", "Trigger a full reindex of all collections"),
+            Action::new("status", "Get indexer status and statistics"),
+        ]
+    }
+
+    fn execute(
+        &self,
+        action: &str,
+        input: PipelineMessage,
+    ) -> std::result::Result<PipelineMessage, Box<dyn EngineError>> {
+        match action {
+            "search" | "reindex" | "status" => Ok(input),
+            other => Err(Box::new(
+                crate::error::SearchIndexerError::UnknownAction(other.to_string()),
+            )),
+        }
+    }
+}
+
+life_engine_plugin_sdk::register_plugin!(SearchIndexerPlugin);
+
 #[async_trait]
 impl CorePlugin for SearchIndexerPlugin {
     fn id(&self) -> &str {
@@ -106,9 +143,9 @@ mod tests {
     #[test]
     fn plugin_metadata() {
         let plugin = SearchIndexerPlugin::new();
-        assert_eq!(plugin.id(), "com.life-engine.search-indexer");
-        assert_eq!(plugin.display_name(), "Search Indexer");
-        assert_eq!(plugin.version(), "0.1.0");
+        assert_eq!(CorePlugin::id(&plugin), "com.life-engine.search-indexer");
+        assert_eq!(CorePlugin::display_name(&plugin), "Search Indexer");
+        assert_eq!(CorePlugin::version(&plugin), "0.1.0");
     }
 
     #[test]
@@ -134,7 +171,7 @@ mod tests {
     #[tokio::test]
     async fn plugin_lifecycle() {
         let mut plugin = SearchIndexerPlugin::new();
-        let ctx = PluginContext::new(plugin.id());
+        let ctx = PluginContext::new(CorePlugin::id(&plugin));
         plugin.on_load(&ctx).await.expect("on_load should succeed");
         plugin.on_unload().await.expect("on_unload should succeed");
     }
@@ -142,6 +179,88 @@ mod tests {
     #[test]
     fn default_impl() {
         let plugin = SearchIndexerPlugin::default();
-        assert_eq!(plugin.id(), "com.life-engine.search-indexer");
+        assert_eq!(CorePlugin::id(&plugin), "com.life-engine.search-indexer");
+    }
+
+    // --- WASM Plugin trait tests ---
+
+    #[test]
+    fn wasm_plugin_id_matches_core() {
+        let plugin = SearchIndexerPlugin::new();
+        assert_eq!(Plugin::id(&plugin), CorePlugin::id(&plugin));
+    }
+
+    #[test]
+    fn wasm_plugin_actions() {
+        let plugin = SearchIndexerPlugin::new();
+        let actions = Plugin::actions(&plugin);
+        let names: Vec<&str> = actions.iter().map(|a| a.name.as_str()).collect();
+        assert_eq!(names, vec!["search", "reindex", "status"]);
+    }
+
+    #[test]
+    fn wasm_plugin_execute_known_action() {
+        let plugin = SearchIndexerPlugin::new();
+        let msg = PipelineMessage {
+            metadata: MessageMetadata {
+                correlation_id: uuid::Uuid::new_v4(),
+                source: "test".into(),
+                timestamp: chrono::Utc::now(),
+                auth_context: None,
+            },
+            payload: TypedPayload::Cdm(Box::new(CdmType::Task(life_engine_plugin_sdk::Task {
+                    id: uuid::Uuid::new_v4(),
+                    title: "test".into(),
+                    description: None,
+                    status: life_engine_plugin_sdk::TaskStatus::Pending,
+                    priority: life_engine_plugin_sdk::TaskPriority::Medium,
+                    due_date: None,
+                    completed_at: None,
+                    tags: vec![],
+                    assignee: None,
+                    parent_id: None,
+                    source: "test".into(),
+                    source_id: "t-1".into(),
+                    extensions: None,
+                    created_at: chrono::Utc::now(),
+                    updated_at: chrono::Utc::now(),
+                }))),
+        };
+        let result = Plugin::execute(&plugin, "search", msg);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn wasm_plugin_execute_unknown_action() {
+        let plugin = SearchIndexerPlugin::new();
+        let msg = PipelineMessage {
+            metadata: MessageMetadata {
+                correlation_id: uuid::Uuid::new_v4(),
+                source: "test".into(),
+                timestamp: chrono::Utc::now(),
+                auth_context: None,
+            },
+            payload: TypedPayload::Cdm(Box::new(CdmType::Task(life_engine_plugin_sdk::Task {
+                    id: uuid::Uuid::new_v4(),
+                    title: "test".into(),
+                    description: None,
+                    status: life_engine_plugin_sdk::TaskStatus::Pending,
+                    priority: life_engine_plugin_sdk::TaskPriority::Medium,
+                    due_date: None,
+                    completed_at: None,
+                    tags: vec![],
+                    assignee: None,
+                    parent_id: None,
+                    source: "test".into(),
+                    source_id: "t-1".into(),
+                    extensions: None,
+                    created_at: chrono::Utc::now(),
+                    updated_at: chrono::Utc::now(),
+                }))),
+        };
+        let result = Plugin::execute(&plugin, "nonexistent", msg);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert_eq!(err.code(), "SEARCH_004");
     }
 }

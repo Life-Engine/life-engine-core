@@ -160,6 +160,44 @@ impl Default for WebhookSenderPlugin {
     }
 }
 
+impl Plugin for WebhookSenderPlugin {
+    fn id(&self) -> &str {
+        "com.life-engine.webhook-sender"
+    }
+
+    fn display_name(&self) -> &str {
+        "Webhook Sender"
+    }
+
+    fn version(&self) -> &str {
+        "0.1.0"
+    }
+
+    fn actions(&self) -> Vec<Action> {
+        vec![
+            Action::new("subscribe", "Create a new webhook subscription"),
+            Action::new("unsubscribe", "Remove a webhook subscription"),
+            Action::new("subscriptions", "List active webhook subscriptions"),
+            Action::new("deliveries", "List webhook delivery history"),
+        ]
+    }
+
+    fn execute(
+        &self,
+        action: &str,
+        input: PipelineMessage,
+    ) -> std::result::Result<PipelineMessage, Box<dyn EngineError>> {
+        match action {
+            "subscribe" | "unsubscribe" | "subscriptions" | "deliveries" => Ok(input),
+            other => Err(Box::new(
+                crate::error::WebhookSenderError::UnknownAction(other.to_string()),
+            )),
+        }
+    }
+}
+
+life_engine_plugin_sdk::register_plugin!(WebhookSenderPlugin);
+
 #[async_trait]
 impl CorePlugin for WebhookSenderPlugin {
     fn id(&self) -> &str {
@@ -276,19 +314,19 @@ mod tests {
     #[test]
     fn plugin_id() {
         let plugin = WebhookSenderPlugin::new();
-        assert_eq!(plugin.id(), "com.life-engine.webhook-sender");
+        assert_eq!(CorePlugin::id(&plugin), "com.life-engine.webhook-sender");
     }
 
     #[test]
     fn plugin_display_name() {
         let plugin = WebhookSenderPlugin::new();
-        assert_eq!(plugin.display_name(), "Webhook Sender");
+        assert_eq!(CorePlugin::display_name(&plugin), "Webhook Sender");
     }
 
     #[test]
     fn plugin_version() {
         let plugin = WebhookSenderPlugin::new();
-        assert_eq!(plugin.version(), "0.1.0");
+        assert_eq!(CorePlugin::version(&plugin), "0.1.0");
     }
 
     #[test]
@@ -322,7 +360,7 @@ mod tests {
         plugin.subscribe(test_subscription());
         assert_eq!(plugin.subscriptions().len(), 1);
 
-        let ctx = PluginContext::new(plugin.id());
+        let ctx = PluginContext::new(CorePlugin::id(&plugin));
         plugin.on_load(&ctx).await.expect("on_load should succeed");
         plugin.on_unload().await.expect("on_unload should succeed");
         assert!(plugin.subscriptions().is_empty());
@@ -337,7 +375,7 @@ mod tests {
     #[test]
     fn default_impl() {
         let plugin = WebhookSenderPlugin::default();
-        assert_eq!(plugin.id(), "com.life-engine.webhook-sender");
+        assert_eq!(CorePlugin::id(&plugin), "com.life-engine.webhook-sender");
     }
 
     // --- Subscription management tests ---
@@ -546,5 +584,87 @@ mod tests {
 
         let result = plugin.handle_event(&event).await;
         assert!(result.is_ok());
+    }
+
+    // --- WASM Plugin trait tests ---
+
+    #[test]
+    fn wasm_plugin_id_matches_core() {
+        let plugin = WebhookSenderPlugin::new();
+        assert_eq!(Plugin::id(&plugin), CorePlugin::id(&plugin));
+    }
+
+    #[test]
+    fn wasm_plugin_actions() {
+        let plugin = WebhookSenderPlugin::new();
+        let actions = Plugin::actions(&plugin);
+        let names: Vec<&str> = actions.iter().map(|a| a.name.as_str()).collect();
+        assert_eq!(names, vec!["subscribe", "unsubscribe", "subscriptions", "deliveries"]);
+    }
+
+    #[test]
+    fn wasm_plugin_execute_known_action() {
+        let plugin = WebhookSenderPlugin::new();
+        let msg = PipelineMessage {
+            metadata: MessageMetadata {
+                correlation_id: uuid::Uuid::new_v4(),
+                source: "test".into(),
+                timestamp: chrono::Utc::now(),
+                auth_context: None,
+            },
+            payload: TypedPayload::Cdm(Box::new(CdmType::Task(life_engine_plugin_sdk::Task {
+                    id: uuid::Uuid::new_v4(),
+                    title: "test".into(),
+                    description: None,
+                    status: life_engine_plugin_sdk::TaskStatus::Pending,
+                    priority: life_engine_plugin_sdk::TaskPriority::Medium,
+                    due_date: None,
+                    completed_at: None,
+                    tags: vec![],
+                    assignee: None,
+                    parent_id: None,
+                    source: "test".into(),
+                    source_id: "t-1".into(),
+                    extensions: None,
+                    created_at: chrono::Utc::now(),
+                    updated_at: chrono::Utc::now(),
+                }))),
+        };
+        let result = Plugin::execute(&plugin, "subscribe", msg);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn wasm_plugin_execute_unknown_action() {
+        let plugin = WebhookSenderPlugin::new();
+        let msg = PipelineMessage {
+            metadata: MessageMetadata {
+                correlation_id: uuid::Uuid::new_v4(),
+                source: "test".into(),
+                timestamp: chrono::Utc::now(),
+                auth_context: None,
+            },
+            payload: TypedPayload::Cdm(Box::new(CdmType::Task(life_engine_plugin_sdk::Task {
+                    id: uuid::Uuid::new_v4(),
+                    title: "test".into(),
+                    description: None,
+                    status: life_engine_plugin_sdk::TaskStatus::Pending,
+                    priority: life_engine_plugin_sdk::TaskPriority::Medium,
+                    due_date: None,
+                    completed_at: None,
+                    tags: vec![],
+                    assignee: None,
+                    parent_id: None,
+                    source: "test".into(),
+                    source_id: "t-1".into(),
+                    extensions: None,
+                    created_at: chrono::Utc::now(),
+                    updated_at: chrono::Utc::now(),
+                }))),
+        };
+        let result = Plugin::execute(&plugin, "nonexistent", msg);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert_eq!(err.code(), "WEBHOOK_004");
     }
 }

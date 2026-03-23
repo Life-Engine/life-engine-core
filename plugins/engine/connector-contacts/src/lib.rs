@@ -122,6 +122,42 @@ impl Default for ContactsConnectorPlugin {
     }
 }
 
+impl Plugin for ContactsConnectorPlugin {
+    fn id(&self) -> &str {
+        "com.life-engine.connector-contacts"
+    }
+
+    fn display_name(&self) -> &str {
+        "Contacts Connector"
+    }
+
+    fn version(&self) -> &str {
+        "0.1.0"
+    }
+
+    fn actions(&self) -> Vec<Action> {
+        vec![
+            Action::new("sync", "Sync contacts from configured providers"),
+            Action::new("status", "Get the current sync status"),
+        ]
+    }
+
+    fn execute(
+        &self,
+        action: &str,
+        input: PipelineMessage,
+    ) -> std::result::Result<PipelineMessage, Box<dyn EngineError>> {
+        match action {
+            "sync" | "status" => Ok(input),
+            other => Err(Box::new(
+                crate::error::ContactsConnectorError::UnknownAction(other.to_string()),
+            )),
+        }
+    }
+}
+
+life_engine_plugin_sdk::register_plugin!(ContactsConnectorPlugin);
+
 #[async_trait]
 impl CorePlugin for ContactsConnectorPlugin {
     fn id(&self) -> &str {
@@ -187,19 +223,19 @@ mod tests {
     #[test]
     fn plugin_id_is_correct() {
         let plugin = ContactsConnectorPlugin::new();
-        assert_eq!(plugin.id(), "com.life-engine.connector-contacts");
+        assert_eq!(CorePlugin::id(&plugin), "com.life-engine.connector-contacts");
     }
 
     #[test]
     fn plugin_display_name() {
         let plugin = ContactsConnectorPlugin::new();
-        assert_eq!(plugin.display_name(), "Contacts Connector");
+        assert_eq!(CorePlugin::display_name(&plugin), "Contacts Connector");
     }
 
     #[test]
     fn plugin_version() {
         let plugin = ContactsConnectorPlugin::new();
-        assert_eq!(plugin.version(), "0.1.0");
+        assert_eq!(CorePlugin::version(&plugin), "0.1.0");
     }
 
     #[test]
@@ -228,7 +264,7 @@ mod tests {
         assert!(!plugin.has_carddav());
         assert!(!plugin.has_google());
 
-        let ctx = PluginContext::new(plugin.id());
+        let ctx = PluginContext::new(CorePlugin::id(&plugin));
         plugin.on_load(&ctx).await.expect("on_load should succeed");
 
         // Configure clients
@@ -275,7 +311,7 @@ mod tests {
     #[test]
     fn default_impl() {
         let plugin = ContactsConnectorPlugin::default();
-        assert_eq!(plugin.id(), "com.life-engine.connector-contacts");
+        assert_eq!(CorePlugin::id(&plugin), "com.life-engine.connector-contacts");
     }
 
     #[test]
@@ -420,5 +456,93 @@ mod tests {
             plugin.last_sync().is_none(),
             "last_sync should be None after on_unload"
         );
+    }
+
+    // --- WASM Plugin trait tests ---
+
+    #[test]
+    fn wasm_plugin_id_matches_core() {
+        let plugin = ContactsConnectorPlugin::new();
+        assert_eq!(Plugin::id(&plugin), CorePlugin::id(&plugin));
+    }
+
+    #[test]
+    fn wasm_plugin_actions() {
+        let plugin = ContactsConnectorPlugin::new();
+        let actions = Plugin::actions(&plugin);
+        let names: Vec<&str> = actions.iter().map(|a| a.name.as_str()).collect();
+        assert_eq!(names, vec!["sync", "status"]);
+    }
+
+    #[test]
+    fn wasm_plugin_execute_known_action() {
+        use chrono::Utc;
+        use uuid::Uuid;
+
+        let plugin = ContactsConnectorPlugin::new();
+        let msg = PipelineMessage {
+            metadata: MessageMetadata {
+                correlation_id: Uuid::new_v4(),
+                source: "test".into(),
+                timestamp: Utc::now(),
+                auth_context: None,
+            },
+            payload: TypedPayload::Cdm(Box::new(CdmType::Task(life_engine_plugin_sdk::Task {
+                    id: uuid::Uuid::new_v4(),
+                    title: "test".into(),
+                    description: None,
+                    status: life_engine_plugin_sdk::TaskStatus::Pending,
+                    priority: life_engine_plugin_sdk::TaskPriority::Medium,
+                    due_date: None,
+                    completed_at: None,
+                    tags: vec![],
+                    assignee: None,
+                    parent_id: None,
+                    source: "test".into(),
+                    source_id: "t-1".into(),
+                    extensions: None,
+                    created_at: chrono::Utc::now(),
+                    updated_at: chrono::Utc::now(),
+                }))),
+        };
+        let result = Plugin::execute(&plugin, "sync", msg);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn wasm_plugin_execute_unknown_action() {
+        use chrono::Utc;
+        use uuid::Uuid;
+
+        let plugin = ContactsConnectorPlugin::new();
+        let msg = PipelineMessage {
+            metadata: MessageMetadata {
+                correlation_id: Uuid::new_v4(),
+                source: "test".into(),
+                timestamp: Utc::now(),
+                auth_context: None,
+            },
+            payload: TypedPayload::Cdm(Box::new(CdmType::Task(life_engine_plugin_sdk::Task {
+                    id: uuid::Uuid::new_v4(),
+                    title: "test".into(),
+                    description: None,
+                    status: life_engine_plugin_sdk::TaskStatus::Pending,
+                    priority: life_engine_plugin_sdk::TaskPriority::Medium,
+                    due_date: None,
+                    completed_at: None,
+                    tags: vec![],
+                    assignee: None,
+                    parent_id: None,
+                    source: "test".into(),
+                    source_id: "t-1".into(),
+                    extensions: None,
+                    created_at: chrono::Utc::now(),
+                    updated_at: chrono::Utc::now(),
+                }))),
+        };
+        let result = Plugin::execute(&plugin, "nonexistent", msg);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert_eq!(err.code(), "CONTACTS_004");
     }
 }

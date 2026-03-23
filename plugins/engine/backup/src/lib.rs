@@ -39,6 +39,47 @@ impl Default for BackupPlugin {
     }
 }
 
+impl Plugin for BackupPlugin {
+    fn id(&self) -> &str {
+        "com.life-engine.backup"
+    }
+
+    fn display_name(&self) -> &str {
+        "Encrypted Remote Backup"
+    }
+
+    fn version(&self) -> &str {
+        "0.1.0"
+    }
+
+    fn actions(&self) -> Vec<Action> {
+        vec![
+            Action::new("backup", "Run a full backup"),
+            Action::new("backup_incremental", "Run an incremental backup"),
+            Action::new("restore", "Restore from a backup"),
+            Action::new("restore_partial", "Restore specific collections from a backup"),
+            Action::new("list_backups", "List available backups"),
+            Action::new("status", "Get backup status and schedule"),
+        ]
+    }
+
+    fn execute(
+        &self,
+        action: &str,
+        input: PipelineMessage,
+    ) -> std::result::Result<PipelineMessage, Box<dyn EngineError>> {
+        match action {
+            "backup" | "backup_incremental" | "restore" | "restore_partial"
+            | "list_backups" | "status" => Ok(input),
+            other => Err(Box::new(
+                crate::error::BackupError::UnknownAction(other.to_string()),
+            )),
+        }
+    }
+}
+
+life_engine_plugin_sdk::register_plugin!(BackupPlugin);
+
 #[async_trait]
 impl CorePlugin for BackupPlugin {
     fn id(&self) -> &str {
@@ -113,9 +154,9 @@ mod tests {
     #[test]
     fn plugin_metadata() {
         let plugin = BackupPlugin::new();
-        assert_eq!(plugin.id(), "com.life-engine.backup");
-        assert_eq!(plugin.display_name(), "Encrypted Remote Backup");
-        assert_eq!(plugin.version(), "0.1.0");
+        assert_eq!(CorePlugin::id(&plugin), "com.life-engine.backup");
+        assert_eq!(CorePlugin::display_name(&plugin), "Encrypted Remote Backup");
+        assert_eq!(CorePlugin::version(&plugin), "0.1.0");
     }
 
     #[test]
@@ -167,7 +208,7 @@ mod tests {
     #[tokio::test]
     async fn plugin_lifecycle() {
         let mut plugin = BackupPlugin::new();
-        let ctx = PluginContext::new(plugin.id());
+        let ctx = PluginContext::new(CorePlugin::id(&plugin));
         plugin.on_load(&ctx).await.expect("on_load should succeed");
         plugin
             .on_unload()
@@ -178,7 +219,89 @@ mod tests {
     #[test]
     fn default_impl() {
         let plugin = BackupPlugin::default();
-        assert_eq!(plugin.id(), "com.life-engine.backup");
+        assert_eq!(CorePlugin::id(&plugin), "com.life-engine.backup");
         assert!(plugin.config.is_none());
+    }
+
+    // --- WASM Plugin trait tests ---
+
+    #[test]
+    fn wasm_plugin_id_matches_core() {
+        let plugin = BackupPlugin::new();
+        assert_eq!(Plugin::id(&plugin), CorePlugin::id(&plugin));
+    }
+
+    #[test]
+    fn wasm_plugin_actions() {
+        let plugin = BackupPlugin::new();
+        let actions = Plugin::actions(&plugin);
+        let names: Vec<&str> = actions.iter().map(|a| a.name.as_str()).collect();
+        assert_eq!(names, vec!["backup", "backup_incremental", "restore", "restore_partial", "list_backups", "status"]);
+    }
+
+    #[test]
+    fn wasm_plugin_execute_known_action() {
+        let plugin = BackupPlugin::new();
+        let msg = PipelineMessage {
+            metadata: MessageMetadata {
+                correlation_id: uuid::Uuid::new_v4(),
+                source: "test".into(),
+                timestamp: chrono::Utc::now(),
+                auth_context: None,
+            },
+            payload: TypedPayload::Cdm(Box::new(CdmType::Task(life_engine_plugin_sdk::Task {
+                    id: uuid::Uuid::new_v4(),
+                    title: "test".into(),
+                    description: None,
+                    status: life_engine_plugin_sdk::TaskStatus::Pending,
+                    priority: life_engine_plugin_sdk::TaskPriority::Medium,
+                    due_date: None,
+                    completed_at: None,
+                    tags: vec![],
+                    assignee: None,
+                    parent_id: None,
+                    source: "test".into(),
+                    source_id: "t-1".into(),
+                    extensions: None,
+                    created_at: chrono::Utc::now(),
+                    updated_at: chrono::Utc::now(),
+                }))),
+        };
+        let result = Plugin::execute(&plugin, "backup", msg);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn wasm_plugin_execute_unknown_action() {
+        let plugin = BackupPlugin::new();
+        let msg = PipelineMessage {
+            metadata: MessageMetadata {
+                correlation_id: uuid::Uuid::new_v4(),
+                source: "test".into(),
+                timestamp: chrono::Utc::now(),
+                auth_context: None,
+            },
+            payload: TypedPayload::Cdm(Box::new(CdmType::Task(life_engine_plugin_sdk::Task {
+                    id: uuid::Uuid::new_v4(),
+                    title: "test".into(),
+                    description: None,
+                    status: life_engine_plugin_sdk::TaskStatus::Pending,
+                    priority: life_engine_plugin_sdk::TaskPriority::Medium,
+                    due_date: None,
+                    completed_at: None,
+                    tags: vec![],
+                    assignee: None,
+                    parent_id: None,
+                    source: "test".into(),
+                    source_id: "t-1".into(),
+                    extensions: None,
+                    created_at: chrono::Utc::now(),
+                    updated_at: chrono::Utc::now(),
+                }))),
+        };
+        let result = Plugin::execute(&plugin, "nonexistent", msg);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert_eq!(err.code(), "BACKUP_005");
     }
 }

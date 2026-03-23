@@ -203,6 +203,45 @@ impl Default for CalendarConnectorPlugin {
     }
 }
 
+impl Plugin for CalendarConnectorPlugin {
+    fn id(&self) -> &str {
+        "com.life-engine.connector-calendar"
+    }
+
+    fn display_name(&self) -> &str {
+        "Calendar Connector"
+    }
+
+    fn version(&self) -> &str {
+        "0.1.0"
+    }
+
+    fn actions(&self) -> Vec<Action> {
+        vec![
+            Action::new("sync", "Sync calendar events from configured providers"),
+            Action::new("status", "Get the current sync status"),
+            Action::new("calendars", "List available calendars"),
+            Action::new("google_auth", "Initiate Google OAuth2 authorization flow"),
+            Action::new("google_callback", "Handle Google OAuth2 callback"),
+        ]
+    }
+
+    fn execute(
+        &self,
+        action: &str,
+        input: PipelineMessage,
+    ) -> std::result::Result<PipelineMessage, Box<dyn EngineError>> {
+        match action {
+            "sync" | "status" | "calendars" | "google_auth" | "google_callback" => Ok(input),
+            other => Err(Box::new(
+                crate::error::CalendarConnectorError::UnknownAction(other.to_string()),
+            )),
+        }
+    }
+}
+
+life_engine_plugin_sdk::register_plugin!(CalendarConnectorPlugin);
+
 #[async_trait]
 impl CorePlugin for CalendarConnectorPlugin {
     fn id(&self) -> &str {
@@ -333,19 +372,19 @@ mod tests {
     #[test]
     fn plugin_id_is_correct() {
         let plugin = CalendarConnectorPlugin::new();
-        assert_eq!(plugin.id(), "com.life-engine.connector-calendar");
+        assert_eq!(CorePlugin::id(&plugin), "com.life-engine.connector-calendar");
     }
 
     #[test]
     fn plugin_display_name() {
         let plugin = CalendarConnectorPlugin::new();
-        assert_eq!(plugin.display_name(), "Calendar Connector");
+        assert_eq!(CorePlugin::display_name(&plugin), "Calendar Connector");
     }
 
     #[test]
     fn plugin_version() {
         let plugin = CalendarConnectorPlugin::new();
-        assert_eq!(plugin.version(), "0.1.0");
+        assert_eq!(CorePlugin::version(&plugin), "0.1.0");
     }
 
     #[test]
@@ -374,7 +413,7 @@ mod tests {
         assert!(!plugin.has_caldav());
         assert!(!plugin.has_google());
 
-        let ctx = PluginContext::new(plugin.id());
+        let ctx = PluginContext::new(CorePlugin::id(&plugin));
         plugin.on_load(&ctx).await.expect("on_load should succeed");
 
         // Configure clients
@@ -424,7 +463,7 @@ mod tests {
     #[test]
     fn default_impl() {
         let plugin = CalendarConnectorPlugin::default();
-        assert_eq!(plugin.id(), "com.life-engine.connector-calendar");
+        assert_eq!(CorePlugin::id(&plugin), "com.life-engine.connector-calendar");
     }
 
     #[tokio::test]
@@ -662,5 +701,93 @@ mod tests {
         assert!(plugin.pkce_verifier().is_some());
         let verifier = plugin.pkce_verifier().unwrap();
         assert!(verifier.len() >= 43 && verifier.len() <= 128);
+    }
+
+    // --- WASM Plugin trait tests ---
+
+    #[test]
+    fn wasm_plugin_id_matches_core() {
+        let plugin = CalendarConnectorPlugin::new();
+        assert_eq!(Plugin::id(&plugin), CorePlugin::id(&plugin));
+    }
+
+    #[test]
+    fn wasm_plugin_actions() {
+        let plugin = CalendarConnectorPlugin::new();
+        let actions = Plugin::actions(&plugin);
+        let names: Vec<&str> = actions.iter().map(|a| a.name.as_str()).collect();
+        assert_eq!(names, vec!["sync", "status", "calendars", "google_auth", "google_callback"]);
+    }
+
+    #[test]
+    fn wasm_plugin_execute_known_action() {
+        use chrono::Utc;
+        use uuid::Uuid;
+
+        let plugin = CalendarConnectorPlugin::new();
+        let msg = PipelineMessage {
+            metadata: MessageMetadata {
+                correlation_id: Uuid::new_v4(),
+                source: "test".into(),
+                timestamp: Utc::now(),
+                auth_context: None,
+            },
+            payload: TypedPayload::Cdm(Box::new(CdmType::Task(life_engine_plugin_sdk::Task {
+                    id: uuid::Uuid::new_v4(),
+                    title: "test".into(),
+                    description: None,
+                    status: life_engine_plugin_sdk::TaskStatus::Pending,
+                    priority: life_engine_plugin_sdk::TaskPriority::Medium,
+                    due_date: None,
+                    completed_at: None,
+                    tags: vec![],
+                    assignee: None,
+                    parent_id: None,
+                    source: "test".into(),
+                    source_id: "t-1".into(),
+                    extensions: None,
+                    created_at: Utc::now(),
+                    updated_at: Utc::now(),
+                }))),
+        };
+        let result = Plugin::execute(&plugin, "sync", msg);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn wasm_plugin_execute_unknown_action() {
+        use chrono::Utc;
+        use uuid::Uuid;
+
+        let plugin = CalendarConnectorPlugin::new();
+        let msg = PipelineMessage {
+            metadata: MessageMetadata {
+                correlation_id: Uuid::new_v4(),
+                source: "test".into(),
+                timestamp: Utc::now(),
+                auth_context: None,
+            },
+            payload: TypedPayload::Cdm(Box::new(CdmType::Task(life_engine_plugin_sdk::Task {
+                    id: uuid::Uuid::new_v4(),
+                    title: "test".into(),
+                    description: None,
+                    status: life_engine_plugin_sdk::TaskStatus::Pending,
+                    priority: life_engine_plugin_sdk::TaskPriority::Medium,
+                    due_date: None,
+                    completed_at: None,
+                    tags: vec![],
+                    assignee: None,
+                    parent_id: None,
+                    source: "test".into(),
+                    source_id: "t-1".into(),
+                    extensions: None,
+                    created_at: Utc::now(),
+                    updated_at: Utc::now(),
+                }))),
+        };
+        let result = Plugin::execute(&plugin, "nonexistent", msg);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert_eq!(err.code(), "CALENDAR_005");
     }
 }

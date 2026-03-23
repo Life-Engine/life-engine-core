@@ -104,6 +104,43 @@ impl Default for FilesystemConnectorPlugin {
     }
 }
 
+impl Plugin for FilesystemConnectorPlugin {
+    fn id(&self) -> &str {
+        "com.life-engine.connector-filesystem"
+    }
+
+    fn display_name(&self) -> &str {
+        "Filesystem Connector"
+    }
+
+    fn version(&self) -> &str {
+        "0.1.0"
+    }
+
+    fn actions(&self) -> Vec<Action> {
+        vec![
+            Action::new("scan", "Trigger a filesystem scan"),
+            Action::new("status", "Get the current scan status"),
+            Action::new("changes", "List detected file changes since last scan"),
+        ]
+    }
+
+    fn execute(
+        &self,
+        action: &str,
+        input: PipelineMessage,
+    ) -> std::result::Result<PipelineMessage, Box<dyn EngineError>> {
+        match action {
+            "scan" | "status" | "changes" => Ok(input),
+            other => Err(Box::new(
+                crate::error::FilesystemConnectorError::UnknownAction(other.to_string()),
+            )),
+        }
+    }
+}
+
+life_engine_plugin_sdk::register_plugin!(FilesystemConnectorPlugin);
+
 #[async_trait]
 impl CorePlugin for FilesystemConnectorPlugin {
     fn id(&self) -> &str {
@@ -170,19 +207,19 @@ mod tests {
     #[test]
     fn plugin_id_is_correct() {
         let plugin = FilesystemConnectorPlugin::new();
-        assert_eq!(plugin.id(), "com.life-engine.connector-filesystem");
+        assert_eq!(CorePlugin::id(&plugin), "com.life-engine.connector-filesystem");
     }
 
     #[test]
     fn plugin_display_name() {
         let plugin = FilesystemConnectorPlugin::new();
-        assert_eq!(plugin.display_name(), "Filesystem Connector");
+        assert_eq!(CorePlugin::display_name(&plugin), "Filesystem Connector");
     }
 
     #[test]
     fn plugin_version() {
         let plugin = FilesystemConnectorPlugin::new();
-        assert_eq!(plugin.version(), "0.1.0");
+        assert_eq!(CorePlugin::version(&plugin), "0.1.0");
     }
 
     #[test]
@@ -207,7 +244,7 @@ mod tests {
         let mut plugin = FilesystemConnectorPlugin::new();
         assert!(!plugin.has_local());
 
-        let ctx = PluginContext::new(plugin.id());
+        let ctx = PluginContext::new(CorePlugin::id(&plugin));
         plugin.on_load(&ctx).await.expect("on_load should succeed");
 
         plugin.configure_local(LocalFsConfig {
@@ -244,7 +281,7 @@ mod tests {
     #[test]
     fn default_impl() {
         let plugin = FilesystemConnectorPlugin::default();
-        assert_eq!(plugin.id(), "com.life-engine.connector-filesystem");
+        assert_eq!(CorePlugin::id(&plugin), "com.life-engine.connector-filesystem");
     }
 
     #[test]
@@ -263,5 +300,93 @@ mod tests {
             ..Default::default()
         });
         assert!(plugin.local_connector().is_some());
+    }
+
+    // --- WASM Plugin trait tests ---
+
+    #[test]
+    fn wasm_plugin_id_matches_core() {
+        let plugin = FilesystemConnectorPlugin::new();
+        assert_eq!(Plugin::id(&plugin), CorePlugin::id(&plugin));
+    }
+
+    #[test]
+    fn wasm_plugin_actions() {
+        let plugin = FilesystemConnectorPlugin::new();
+        let actions = Plugin::actions(&plugin);
+        let names: Vec<&str> = actions.iter().map(|a| a.name.as_str()).collect();
+        assert_eq!(names, vec!["scan", "status", "changes"]);
+    }
+
+    #[test]
+    fn wasm_plugin_execute_known_action() {
+        use chrono::Utc;
+        use uuid::Uuid;
+
+        let plugin = FilesystemConnectorPlugin::new();
+        let msg = PipelineMessage {
+            metadata: MessageMetadata {
+                correlation_id: Uuid::new_v4(),
+                source: "test".into(),
+                timestamp: Utc::now(),
+                auth_context: None,
+            },
+            payload: TypedPayload::Cdm(Box::new(CdmType::Task(life_engine_plugin_sdk::Task {
+                    id: uuid::Uuid::new_v4(),
+                    title: "test".into(),
+                    description: None,
+                    status: life_engine_plugin_sdk::TaskStatus::Pending,
+                    priority: life_engine_plugin_sdk::TaskPriority::Medium,
+                    due_date: None,
+                    completed_at: None,
+                    tags: vec![],
+                    assignee: None,
+                    parent_id: None,
+                    source: "test".into(),
+                    source_id: "t-1".into(),
+                    extensions: None,
+                    created_at: chrono::Utc::now(),
+                    updated_at: chrono::Utc::now(),
+                }))),
+        };
+        let result = Plugin::execute(&plugin, "scan", msg);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn wasm_plugin_execute_unknown_action() {
+        use chrono::Utc;
+        use uuid::Uuid;
+
+        let plugin = FilesystemConnectorPlugin::new();
+        let msg = PipelineMessage {
+            metadata: MessageMetadata {
+                correlation_id: Uuid::new_v4(),
+                source: "test".into(),
+                timestamp: Utc::now(),
+                auth_context: None,
+            },
+            payload: TypedPayload::Cdm(Box::new(CdmType::Task(life_engine_plugin_sdk::Task {
+                    id: uuid::Uuid::new_v4(),
+                    title: "test".into(),
+                    description: None,
+                    status: life_engine_plugin_sdk::TaskStatus::Pending,
+                    priority: life_engine_plugin_sdk::TaskPriority::Medium,
+                    due_date: None,
+                    completed_at: None,
+                    tags: vec![],
+                    assignee: None,
+                    parent_id: None,
+                    source: "test".into(),
+                    source_id: "t-1".into(),
+                    extensions: None,
+                    created_at: chrono::Utc::now(),
+                    updated_at: chrono::Utc::now(),
+                }))),
+        };
+        let result = Plugin::execute(&plugin, "nonexistent", msg);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert_eq!(err.code(), "FILESYSTEM_004");
     }
 }

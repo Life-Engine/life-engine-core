@@ -196,13 +196,13 @@ Progress: 10 / 22 work packages complete
 > depends: 8.10
 > spec: .odm/spec/plugin-system/brief.md
 
-- [ ] Implement six-phase lifecycle state machine
+- [x] Implement six-phase lifecycle state machine
   <!-- file: packages/plugin-system/src/lifecycle.rs -->
   <!-- purpose: Define PluginState enum: Discovered, Loaded, Initialized, Running, Stopped, Unloaded. Define PluginManager struct holding a HashMap<String, (PluginHandle, PluginState)>. Implement state transition methods with validation: transition(plugin_id, target_state) -> Result. Valid transitions: Discovered -> Loaded, Loaded -> Initialized (calls plugin init if it has an "init" action), Initialized -> Running, Running -> Stopped (calls plugin "shutdown" action if declared), Stopped -> Unloaded (drops the PluginInstance), any state -> Unloaded (force unload). Invalid transitions return PluginError with the current and target state. Implement pub async fn start_all(&mut self) that transitions all plugins through Discover -> Load -> Init -> Running in order. Implement pub async fn stop_all(&mut self) that transitions all running plugins through Running -> Stop -> Unload in reverse loading order. Log each state transition with plugin ID and timing. -->
   <!-- requirements: from plugin-system spec 4.1, 4.2, 4.3, 4.4, 4.5, 4.6 -->
   <!-- leverage: none -->
 
-- [ ] Add lifecycle manager tests
+- [x] Add lifecycle manager tests
   <!-- file: packages/plugin-system/src/lifecycle.rs -->
   <!-- purpose: Test cases: (1) full lifecycle Discover->Load->Init->Running->Stop->Unload succeeds, (2) start_all loads and inits all discovered plugins, (3) stop_all stops and unloads in reverse order, (4) invalid state transition (e.g., Discovered -> Running) is rejected, (5) force unload from any state works, (6) state transitions are logged. -->
   <!-- requirements: from plugin-system spec 4.1-4.6 -->

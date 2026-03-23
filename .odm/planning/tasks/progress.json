@@ -121,13 +121,15 @@
     "7.14",
     "7.15",
     "7.16",
-    "7.17"
+    "7.17",
+    "8.11"
   ],
   "current_wp": null,
   "current_wp_tasks": {
-    "total": 1,
+    "total": 2,
     "completed": [
-      "Implement structured execution logging with per-step timing"
+      "Implement six-phase lifecycle state machine",
+      "Add lifecycle manager tests"
     ],
     "deferred": [],
     "remaining": [],
@@ -1092,6 +1094,14 @@
       "completed_at": "2026-03-23T00:00:00Z",
       "commit": "f4c2157",
       "tasks_completed": 1,
+      "tasks_deferred": 0
+    },
+    {
+      "wp": "8.11",
+      "title": "Lifecycle Manager",
+      "completed_at": "2026-03-23T00:00:00Z",
+      "commit": "PENDING",
+      "tasks_completed": 2,
       "tasks_deferred": 0
     }
   ]

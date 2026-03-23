@@ -39,6 +39,10 @@ pub enum PluginError {
     #[error("plugin execution failed: {0}")]
     ExecutionFailed(String),
 
+    /// Lifecycle state transition error.
+    #[error("lifecycle error: {0}")]
+    LifecycleError(String),
+
     /// I/O error.
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
@@ -54,7 +58,8 @@ impl EngineError for PluginError {
             PluginError::WasmLoadFailed(_) => "PLUGIN_005",
             PluginError::CapabilityViolation(_) => "PLUGIN_006",
             PluginError::ExecutionFailed(_) => "PLUGIN_007",
-            PluginError::Io(_) => "PLUGIN_008",
+            PluginError::LifecycleError(_) => "PLUGIN_008",
+            PluginError::Io(_) => "PLUGIN_009",
         }
     }
 
@@ -67,6 +72,7 @@ impl EngineError for PluginError {
             PluginError::WasmLoadFailed(_) => Severity::Fatal,
             PluginError::CapabilityViolation(_) => Severity::Fatal,
             PluginError::ExecutionFailed(_) => Severity::Retryable,
+            PluginError::LifecycleError(_) => Severity::Fatal,
             PluginError::Io(_) => Severity::Retryable,
         }
     }

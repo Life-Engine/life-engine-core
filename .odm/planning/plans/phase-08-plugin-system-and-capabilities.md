@@ -335,7 +335,7 @@ Progress: 13 / 22 work packages complete
 > depends: 8.10
 > spec: .odm/spec/plugin-system/brief.md
 
-- [ ] Add community plugin discovery, approval, and loading test
+- [x] Add community plugin discovery, approval, and loading test
   <!-- file: packages/plugin-system/tests/community_plugin.rs -->
   <!-- purpose: Create a test directory outside the monorepo plugins/ path containing a minimal third-party plugin (plugin.wasm + manifest.toml declaring storage:read). Test cases: (1) the plugin is discovered during directory scanning, (2) without config approval, it is rejected with CAP_001 error and a log warning, (3) add [plugins.test-community-plugin] approved_capabilities = ["storage:read"] to the test config, (4) reload — the plugin now loads successfully, (5) the plugin can call storage:read but not storage:write. This validates the entire third-party plugin lifecycle from discovery to capability-gated execution. -->
   <!-- requirements: from plugin-system spec 9.1, 9.2, 9.3 -->

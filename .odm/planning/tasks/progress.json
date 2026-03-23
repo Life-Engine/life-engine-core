@@ -130,13 +130,14 @@
     "8.16",
     "8.17",
     "8.18",
-    "8.19"
+    "8.19",
+    "8.20"
   ],
   "current_wp": null,
   "current_wp_tasks": {
     "total": 1,
     "completed": [
-      "Add workflow chaining and shared collection tests"
+      "Add community plugin discovery, approval, and loading test"
     ],
     "deferred": [],
     "remaining": [],
@@ -1171,7 +1172,15 @@
       "wp": "8.19",
       "title": "Plugin-to-Plugin Communication Tests",
       "completed_at": "2026-03-23T00:00:00Z",
-      "commit": "pending",
+      "commit": "dcbe4cd",
+      "tasks_completed": 1,
+      "tasks_deferred": 0
+    },
+    {
+      "wp": "8.20",
+      "title": "Community Plugin Loading Test",
+      "completed_at": "2026-03-23T00:00:00Z",
+      "commit": "PENDING",
       "tasks_completed": 1,
       "tasks_deferred": 0
     }

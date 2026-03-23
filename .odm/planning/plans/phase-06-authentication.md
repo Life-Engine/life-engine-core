@@ -84,7 +84,7 @@ Progress: 0 / 12 work packages complete
 ## 6.6 — Pocket ID Provider Tests
 > spec: .odm/spec/auth-and-pocket-id/brief.md
 
-- [ ] Add unit tests for PocketIdProvider JWT validation
+- [x] Add unit tests for PocketIdProvider JWT validation
   <!-- file: packages/auth/src/tests/pocket_id_test.rs -->
   <!-- purpose: Test scenarios: (1) valid JWT with correct signature, issuer, audience, and non-expired claims returns AuthIdentity with correct user_id and scopes, (2) expired JWT returns AuthError::TokenExpired, (3) JWT with invalid signature returns AuthError::TokenInvalid, (4) JWT with wrong issuer returns AuthError::TokenInvalid, (5) JWT with wrong audience returns AuthError::TokenInvalid, (6) JWKS refresh when key not in cache — mock HTTP to return new keys, verify validation succeeds after refresh, (7) unreachable issuer returns AuthError::ProviderUnreachable with Severity::Retryable. Use a test Ed25519 keypair to generate test JWTs. Mock the OIDC discovery endpoint and JWKS endpoint using a local HTTP server or trait-based dependency injection. -->
   <!-- requirements: 3.1, 3.2, 3.3, 3.4, 3.5 -->

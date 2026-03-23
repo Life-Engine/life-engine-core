@@ -75,8 +75,36 @@ CREATE INDEX IF NOT EXISTS idx_quarantine_plugin_collection
     ON quarantine(plugin_id, collection);
 ";
 
+/// DDL for the `migration_log` table — records every migration run.
+///
+/// Each entry captures the plugin, collection, version range, outcome counts,
+/// timing, and backup path for auditability. Failures that prevent execution
+/// entirely (as opposed to per-record failures in quarantine) are also logged
+/// here with zero counts and an error message in `error`.
+///
+/// Index:
+/// - `idx_migration_log_plugin_collection` — for querying migration history per plugin/collection.
+pub const MIGRATION_LOG_DDL: &str = "\
+CREATE TABLE IF NOT EXISTS migration_log (
+    id                    TEXT PRIMARY KEY,
+    plugin_id             TEXT NOT NULL,
+    collection            TEXT NOT NULL,
+    from_version          TEXT NOT NULL,
+    to_version            TEXT NOT NULL,
+    records_migrated      INTEGER NOT NULL,
+    records_quarantined   INTEGER NOT NULL,
+    duration_ms           INTEGER NOT NULL,
+    backup_path           TEXT,
+    error                 TEXT,
+    timestamp             TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_migration_log_plugin_collection
+    ON migration_log(plugin_id, collection);
+";
+
 /// All schema DDL statements in application order.
-pub const ALL_DDL: &[&str] = &[PLUGIN_DATA_DDL, AUDIT_LOG_DDL, QUARANTINE_DDL];
+pub const ALL_DDL: &[&str] = &[PLUGIN_DATA_DDL, AUDIT_LOG_DDL, QUARANTINE_DDL, MIGRATION_LOG_DDL];
 
 #[cfg(test)]
 mod tests {
@@ -219,6 +247,48 @@ mod tests {
             .unwrap();
 
         assert!(indexes.contains(&"idx_quarantine_plugin_collection".to_string()));
+    }
+
+    #[test]
+    fn migration_log_ddl_creates_table_and_index() {
+        let conn = Connection::open_in_memory().expect("open in-memory db");
+        conn.execute_batch(MIGRATION_LOG_DDL)
+            .expect("migration_log DDL should execute without error");
+
+        let columns: Vec<String> = conn
+            .prepare("PRAGMA table_info(migration_log)")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(1))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+
+        assert_eq!(
+            columns,
+            vec![
+                "id",
+                "plugin_id",
+                "collection",
+                "from_version",
+                "to_version",
+                "records_migrated",
+                "records_quarantined",
+                "duration_ms",
+                "backup_path",
+                "error",
+                "timestamp"
+            ]
+        );
+
+        let indexes: Vec<String> = conn
+            .prepare("PRAGMA index_list(migration_log)")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(1))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+
+        assert!(indexes.contains(&"idx_migration_log_plugin_collection".to_string()));
     }
 
     #[test]

@@ -147,13 +147,14 @@
     "10.13",
     "10.14",
     "10.15",
-    "10.16"
+    "10.16",
+    "10.17"
   ],
   "current_wp": null,
   "current_wp_tasks": {
     "total": 1,
     "completed": [
-      "Create quarantine table schema and CRUD operations"
+      "Create migration log table schema and logging operations"
     ],
     "deferred": [],
     "remaining": [],
@@ -1317,6 +1318,22 @@
       "title": "WASM Transform Runner",
       "completed_at": "2026-03-23T10:08:56Z",
       "commit": "b4a2dac",
+      "tasks_completed": 1,
+      "tasks_deferred": 0
+    },
+    {
+      "wp": "10.16",
+      "title": "Quarantine Table and Operations",
+      "completed_at": "2026-03-23T12:00:00Z",
+      "commit": "0c82063",
+      "tasks_completed": 1,
+      "tasks_deferred": 0
+    },
+    {
+      "wp": "10.17",
+      "title": "Migration Log Table and Operations",
+      "completed_at": "2026-03-23T13:00:00Z",
+      "commit": "pending",
       "tasks_completed": 1,
       "tasks_deferred": 0
     }

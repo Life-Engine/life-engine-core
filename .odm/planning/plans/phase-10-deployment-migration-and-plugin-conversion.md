@@ -215,7 +215,7 @@ Progress: 5 / 24 work packages complete
 ## 10.17 — Migration Log Table and Operations
 > spec: .odm/spec/migration-format/brief.md
 
-- [ ] Create migration log table schema and logging operations
+- [x] Create migration log table schema and logging operations
   <!-- file: packages/storage-sqlite/src/migration/log.rs -->
   <!-- purpose: Define CREATE TABLE migration_log with columns: id (TEXT PRIMARY KEY), plugin_id (TEXT NOT NULL), collection (TEXT NOT NULL), from_version (TEXT NOT NULL), to_version (TEXT NOT NULL), records_migrated (INTEGER NOT NULL — count of successfully transformed records), records_quarantined (INTEGER NOT NULL — count of failed records sent to quarantine), duration_ms (INTEGER NOT NULL — total migration time in milliseconds), backup_path (TEXT — path to pre-migration backup file), timestamp (TEXT NOT NULL — ISO 8601). Implement pub async fn log_migration(db, entry: MigrationLogEntry) -> Result<()> that inserts a log entry. Implement pub async fn log_failure(db, plugin_id, collection, from_version, to_version, error) -> Result<()> for recording migration failures that prevented execution entirely (as opposed to per-record failures which go to quarantine). Implement pub async fn get_migration_history(db, plugin_id, collection) -> Result<Vec<MigrationLogEntry>> for admin review. -->
   <!-- requirements: 6.1, 6.2 -->

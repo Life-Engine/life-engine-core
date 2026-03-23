@@ -64,6 +64,10 @@ pub enum StorageError {
         /// Human-readable description of the failure.
         message: String,
     },
+
+    /// I/O error during backup or restore.
+    #[error("I/O error: {0}")]
+    Io(#[from] std::io::Error),
 }
 
 impl EngineError for StorageError {
@@ -80,6 +84,7 @@ impl EngineError for StorageError {
             StorageError::ValidationFailed { .. } => "STORAGE_009",
             StorageError::UnknownCollection(_) => "STORAGE_010",
             StorageError::CredentialEncryption { .. } => "STORAGE_011",
+            StorageError::Io(_) => "STORAGE_012",
         }
     }
 

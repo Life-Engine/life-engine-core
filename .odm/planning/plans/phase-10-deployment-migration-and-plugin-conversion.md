@@ -226,7 +226,7 @@ Progress: 5 / 24 work packages complete
 ## 10.18 — Pre-Migration Backup
 > spec: .odm/spec/migration-format/brief.md
 
-- [ ] Implement pre-migration SQLite backup mechanism
+- [x] Implement pre-migration SQLite backup mechanism
   <!-- file: packages/storage-sqlite/src/migration/backup.rs -->
   <!-- purpose: Implement pub async fn create_backup(db_path: &Path, data_dir: &Path) -> Result<PathBuf> that: (1) creates a backups/ subdirectory in data_dir if it doesn't exist, (2) generates a timestamped backup filename: pre-migration-{YYYY-MM-DD-HHmmss}.db, (3) uses SQLite's backup API (rusqlite's backup_to_file or VACUUM INTO for an atomic copy) to create a consistent backup without blocking reads, (4) verifies the backup by opening it and running PRAGMA integrity_check, (5) returns the path to the backup file. Implement pub async fn restore_backup(backup_path: &Path, db_path: &Path) -> Result<()> that replaces the current database with a backup (forward-only migrations — restore is a manual admin action, not automatic rollback). This backup is created before every migration run and its path is recorded in the migration log. -->
   <!-- requirements: 7.1, 7.2, 7.3 -->

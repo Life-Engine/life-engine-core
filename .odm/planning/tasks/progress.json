@@ -129,13 +129,14 @@
     "8.15",
     "8.16",
     "8.17",
-    "8.18"
+    "8.18",
+    "8.19"
   ],
   "current_wp": null,
   "current_wp_tasks": {
     "total": 1,
     "completed": [
-      "Add end-to-end capability enforcement integration tests"
+      "Add workflow chaining and shared collection tests"
     ],
     "deferred": [],
     "remaining": [],
@@ -1155,6 +1156,22 @@
       "title": "Crash Isolation Verification",
       "completed_at": "2026-03-23T00:00:00Z",
       "commit": "e7b6161",
+      "tasks_completed": 1,
+      "tasks_deferred": 0
+    },
+    {
+      "wp": "8.18",
+      "title": "Capability Enforcement Integration Tests",
+      "completed_at": "2026-03-23T00:00:00Z",
+      "commit": "47efaee",
+      "tasks_completed": 1,
+      "tasks_deferred": 0
+    },
+    {
+      "wp": "8.19",
+      "title": "Plugin-to-Plugin Communication Tests",
+      "completed_at": "2026-03-23T00:00:00Z",
+      "commit": "pending",
       "tasks_completed": 1,
       "tasks_deferred": 0
     }

@@ -323,7 +323,7 @@ Progress: 13 / 22 work packages complete
 > depends: 8.12
 > spec: .odm/spec/plugin-system/brief.md
 
-- [ ] Add workflow chaining and shared collection tests
+- [x] Add workflow chaining and shared collection tests
   <!-- file: packages/plugin-system/tests/communication.rs -->
   <!-- purpose: Set up two test plugins: plugin-a (writes to contacts collection) and plugin-b (reads from contacts collection and writes notes). Test cases: (1) workflow chaining: create a workflow with step 1 = plugin-a:write-contact, step 2 = plugin-b:read-and-note. Execute the workflow. Verify plugin-b receives plugin-a's output PipelineMessage as input. (2) Shared canonical collection: plugin-a writes a contact via storage:write, plugin-b queries contacts via storage:read and sees plugin-a's data (canonical collections are shared). (3) Direct plugin-to-plugin calls are not possible: there is no host function for "call another plugin" — communication is only through workflow chaining or shared collections. Verify that a plugin cannot address another plugin directly. -->
   <!-- requirements: from plugin-system spec 8.1, 8.2, 8.3 -->

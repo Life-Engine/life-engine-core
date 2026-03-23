@@ -34,7 +34,7 @@ Progress: 0 / 10 work packages complete
 > depends: 3.1
 > spec: .odm/spec/data-layer/brief.md
 
-- [ ] Define StorageBackend trait with execute and mutate methods
+- [x] Define StorageBackend trait with execute and mutate methods
   <!-- file: packages/traits/src/storage.rs -->
   <!-- purpose: Define the async StorageBackend trait with two methods: async fn execute(&self, query: StorageQuery) -> Result<Vec<PipelineMessage>, Box<dyn EngineError>> for reads, and async fn mutate(&self, op: StorageMutation) -> Result<(), Box<dyn EngineError>> for writes. Also define async fn init(config: toml::Value, key: [u8; 32]) -> Result<Self, Box<dyn EngineError>> as an associated function for initialization. Import StorageQuery and StorageMutation from life-engine-types. Use async-trait for async trait methods. Re-export from lib.rs. -->
   <!-- requirements: from data-layer spec 1.1 -->
@@ -45,7 +45,7 @@ Progress: 0 / 10 work packages complete
 ## 3.3 — StorageQuery and StorageMutation Types
 > spec: .odm/spec/data-layer/brief.md
 
-- [ ] Define StorageQuery and StorageMutation types in the types crate
+- [x] Define StorageQuery and StorageMutation types in the types crate
   <!-- file: packages/types/src/storage.rs -->
   <!-- purpose: Define StorageQuery struct with fields: collection (String), plugin_id (String), filters (Vec<QueryFilter>), sort (Vec<SortField>), limit (Option<u32> with max 1000), offset (Option<u32>). Define QueryFilter struct with field (String), operator (FilterOp enum: Eq, Gte, Lte, Contains, NotEq), value (serde_json::Value). Define SortField struct with field (String), direction (SortDirection enum: Asc, Desc). Define StorageMutation enum with variants: Insert { plugin_id: String, collection: String, data: PipelineMessage }, Update { plugin_id: String, collection: String, id: Uuid, data: PipelineMessage, expected_version: u64 }, Delete { plugin_id: String, collection: String, id: Uuid }. The expected_version on Update enables optimistic concurrency control. Add serde derives on all types. Re-export from packages/types/src/lib.rs. -->
   <!-- requirements: from data-layer spec 1.1, 1.2 -->

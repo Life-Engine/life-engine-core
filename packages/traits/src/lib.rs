@@ -10,6 +10,7 @@ pub mod transport;
 pub mod types;
 
 pub use error::{EngineError, Severity};
+pub use storage::StorageBackend;
 
 #[cfg(test)]
 mod tests;

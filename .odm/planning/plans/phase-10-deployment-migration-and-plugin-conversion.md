@@ -250,7 +250,7 @@ Progress: 5 / 24 work packages complete
 > depends: 10.19
 > spec: .odm/spec/migration-format/brief.md
 
-- [ ] Set up canonical migration file structure and startup trigger
+- [x] Set up canonical migration file structure and startup trigger
   <!-- file: packages/types/src/migrations/mod.rs -->
   <!-- purpose: Create a packages/types/migrations/ directory structure for bundling canonical schema migrations with the types crate. Structure: migrations/events/ (event schema transforms), migrations/tasks/, migrations/contacts/, etc. — one subdirectory per canonical collection. Each subdirectory contains compiled WASM transform binaries. During Core startup, after storage initialization (step 4) and before loading plugins (step 8): compare each canonical collection's current schema version (stored in a schema_versions table or metadata) against the types crate's declared version. If the stored version is behind, run the canonical migration transforms through the same migration execution engine used for plugin migrations. This ensures canonical schema evolution is handled identically to plugin schema evolution — same WASM sandbox, same quarantine, same backup, same logging. Add schema_versions table DDL to storage-sqlite schema.rs. -->
   <!-- requirements: 3.1, 3.2, 3.3 -->

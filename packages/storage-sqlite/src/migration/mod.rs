@@ -3,3 +3,4 @@
 pub mod backup;
 pub mod log;
 pub mod quarantine;
+pub mod version;

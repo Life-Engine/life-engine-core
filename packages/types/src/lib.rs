@@ -11,6 +11,7 @@ pub mod events;
 pub mod extensions;
 pub mod file_helpers;
 pub mod files;
+pub mod migrations;
 pub mod notes;
 pub mod pipeline;
 pub mod storage;

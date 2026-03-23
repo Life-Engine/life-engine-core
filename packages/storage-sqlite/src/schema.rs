@@ -103,8 +103,33 @@ CREATE INDEX IF NOT EXISTS idx_migration_log_plugin_collection
     ON migration_log(plugin_id, collection);
 ";
 
+/// DDL for the `schema_versions` table — tracks the current schema version
+/// for each canonical and plugin-owned collection.
+///
+/// During startup, Core compares each collection's stored version against
+/// the declared version in the types crate. If the stored version is behind,
+/// canonical migration transforms run through the migration execution engine.
+///
+/// Index:
+/// - Primary key on `(plugin_id, collection)` — one version per plugin/collection pair.
+pub const SCHEMA_VERSIONS_DDL: &str = "\
+CREATE TABLE IF NOT EXISTS schema_versions (
+    plugin_id   TEXT NOT NULL,
+    collection  TEXT NOT NULL,
+    version     INTEGER NOT NULL DEFAULT 1,
+    updated_at  TEXT NOT NULL,
+    PRIMARY KEY (plugin_id, collection)
+);
+";
+
 /// All schema DDL statements in application order.
-pub const ALL_DDL: &[&str] = &[PLUGIN_DATA_DDL, AUDIT_LOG_DDL, QUARANTINE_DDL, MIGRATION_LOG_DDL];
+pub const ALL_DDL: &[&str] = &[
+    PLUGIN_DATA_DDL,
+    AUDIT_LOG_DDL,
+    QUARANTINE_DDL,
+    MIGRATION_LOG_DDL,
+    SCHEMA_VERSIONS_DDL,
+];
 
 #[cfg(test)]
 mod tests {
@@ -289,6 +314,23 @@ mod tests {
             .unwrap();
 
         assert!(indexes.contains(&"idx_migration_log_plugin_collection".to_string()));
+    }
+
+    #[test]
+    fn schema_versions_ddl_creates_table() {
+        let conn = Connection::open_in_memory().expect("open in-memory db");
+        conn.execute_batch(SCHEMA_VERSIONS_DDL)
+            .expect("schema_versions DDL should execute without error");
+
+        let columns: Vec<String> = conn
+            .prepare("PRAGMA table_info(schema_versions)")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(1))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+
+        assert_eq!(columns, vec!["plugin_id", "collection", "version", "updated_at"]);
     }
 
     #[test]

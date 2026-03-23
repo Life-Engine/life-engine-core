@@ -325,6 +325,178 @@ async fn main() -> anyhow::Result<()> {
     };
     log_step!(4, TOTAL_STEPS, "Initialize storage", step_start);
 
+    // ── Step 4b: Run canonical schema migrations ─────────────────────
+    // Compare each canonical collection's stored schema version against
+    // the declared version in the types crate. If behind, run WASM
+    // migration transforms through the same migration engine used for
+    // plugin migrations.
+    {
+        use life_engine_types::migrations::{CANONICAL_COLLECTIONS, CANONICAL_PLUGIN_ID};
+
+        let migrations_base = data_dir_path.join("migrations");
+
+        // Phase 1: Check versions and collect migrations that need to run.
+        // Hold the connection lock only briefly for version checks.
+        struct PendingMigration {
+            collection_name: &'static str,
+            stored_version: i64,
+            declared_version: i64,
+            wasm_path: std::path::PathBuf,
+            entries: Vec<life_engine_workflow_engine::migration::MigrationEntry>,
+        }
+
+        let mut pending_migrations = Vec::new();
+
+        {
+            let conn = storage.connection().await;
+
+            for collection in CANONICAL_COLLECTIONS {
+                let stored_version = conn
+                    .query_row(
+                        "SELECT version FROM schema_versions WHERE plugin_id = ?1 AND collection = ?2",
+                        rusqlite::params![CANONICAL_PLUGIN_ID, collection.name],
+                        |row| row.get::<_, i64>(0),
+                    )
+                    .unwrap_or(0);
+
+                if stored_version == 0 {
+                    // First run — stamp the current version, no migration needed.
+                    let now = chrono::Utc::now().to_rfc3339();
+                    let _ = conn.execute(
+                        "INSERT OR REPLACE INTO schema_versions (plugin_id, collection, version, updated_at) \
+                         VALUES (?1, ?2, ?3, ?4)",
+                        rusqlite::params![CANONICAL_PLUGIN_ID, collection.name, collection.version, now],
+                    );
+                    tracing::debug!(
+                        collection = collection.name,
+                        version = collection.version,
+                        "canonical collection version stamped (first run)"
+                    );
+                    continue;
+                }
+
+                if stored_version >= collection.version {
+                    tracing::debug!(
+                        collection = collection.name,
+                        stored = stored_version,
+                        declared = collection.version,
+                        "canonical collection schema is current"
+                    );
+                    continue;
+                }
+
+                // Schema version is behind — look for WASM migration transforms.
+                let migration_dir = migrations_base.join(collection.migration_dir);
+                if !migration_dir.exists() {
+                    tracing::warn!(
+                        collection = collection.name,
+                        stored = stored_version,
+                        declared = collection.version,
+                        dir = %migration_dir.display(),
+                        "canonical migration directory not found, skipping"
+                    );
+                    continue;
+                }
+
+                let manifest_path = migration_dir.join("manifest.toml");
+                if !manifest_path.exists() {
+                    tracing::warn!(
+                        collection = collection.name,
+                        "canonical migration manifest.toml not found, skipping"
+                    );
+                    continue;
+                }
+
+                let wasm_path = migration_dir.join("transform.wasm");
+                if !wasm_path.exists() {
+                    tracing::warn!(
+                        collection = collection.name,
+                        "canonical transform.wasm not found, skipping"
+                    );
+                    continue;
+                }
+
+                match life_engine_workflow_engine::migration::parse_migration_entries(&manifest_path) {
+                    Ok(entries) => {
+                        let relevant: Vec<_> = entries
+                            .into_iter()
+                            .filter(|e| {
+                                let from_major = e.from.split('.').next()
+                                    .and_then(|s| s.parse::<i64>().ok())
+                                    .unwrap_or(0);
+                                from_major >= stored_version && (e.to.major as i64) <= collection.version
+                            })
+                            .collect();
+
+                        if !relevant.is_empty() {
+                            pending_migrations.push(PendingMigration {
+                                collection_name: collection.name,
+                                stored_version,
+                                declared_version: collection.version,
+                                wasm_path,
+                                entries: relevant,
+                            });
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            collection = collection.name,
+                            error = %e,
+                            "failed to parse canonical migration manifest"
+                        );
+                    }
+                }
+            }
+        } // Connection lock released here.
+
+        // Phase 2: Run any pending migrations (without holding the connection lock).
+        for migration in &pending_migrations {
+            tracing::info!(
+                collection = migration.collection_name,
+                from = migration.stored_version,
+                to = migration.declared_version,
+                entries = migration.entries.len(),
+                "running canonical schema migration"
+            );
+
+            match life_engine_workflow_engine::migration::run_migrations(
+                &migration.wasm_path,
+                &migration.entries,
+                CANONICAL_PLUGIN_ID,
+                &db_path,
+                &data_dir_path,
+            )
+            .await
+            {
+                Ok(result) => {
+                    tracing::info!(
+                        collection = migration.collection_name,
+                        migrated = result.migrated,
+                        quarantined = result.quarantined,
+                        duration_ms = result.duration_ms,
+                        "canonical migration complete"
+                    );
+
+                    // Stamp the new version.
+                    let conn = storage.connection().await;
+                    let now = chrono::Utc::now().to_rfc3339();
+                    let _ = conn.execute(
+                        "INSERT OR REPLACE INTO schema_versions (plugin_id, collection, version, updated_at) \
+                         VALUES (?1, ?2, ?3, ?4)",
+                        rusqlite::params![CANONICAL_PLUGIN_ID, migration.collection_name, migration.declared_version, now],
+                    );
+                }
+                Err(e) => {
+                    tracing::error!(
+                        collection = migration.collection_name,
+                        error = %e,
+                        "canonical migration failed (non-fatal)"
+                    );
+                }
+            }
+        }
+    }
+
     // ── Step 5/10: Initialize auth ───────────────────────────────────
     let step_start = Instant::now();
     let oidc_config = config.auth.oidc.as_ref().map(|oidc| {

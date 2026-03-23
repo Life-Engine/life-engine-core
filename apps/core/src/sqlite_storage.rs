@@ -232,7 +232,15 @@ impl SqliteStorage {
             );
 
             CREATE INDEX IF NOT EXISTS idx_audit_timestamp
-                ON audit_log(timestamp);",
+                ON audit_log(timestamp);
+
+            CREATE TABLE IF NOT EXISTS schema_versions (
+                plugin_id   TEXT NOT NULL,
+                collection  TEXT NOT NULL,
+                version     INTEGER NOT NULL DEFAULT 1,
+                updated_at  TEXT NOT NULL,
+                PRIMARY KEY (plugin_id, collection)
+            );",
         )?;
         Ok(())
     }

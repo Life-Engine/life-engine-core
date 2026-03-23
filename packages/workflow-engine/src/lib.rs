@@ -6,6 +6,7 @@ pub mod event_bus;
 pub mod executor;
 pub mod loader;
 pub mod migration;
+pub mod schema_registry;
 pub mod scheduler;
 pub mod types;
 
@@ -17,6 +18,7 @@ pub use executor::{
     PipelineExecutor, PluginExecutor, StepErrorLog, StepLog, StepStatus, WorkflowEventEmitter,
 };
 pub use loader::{load_workflows, HttpMethod, TriggerRegistry};
+pub use schema_registry::{SchemaRegistry, SchemaRegistryError};
 pub use scheduler::Scheduler;
 pub use types::{
     ConditionDef, ErrorStrategy, ErrorStrategyType, ExecutionMode, StepDef, TriggerContext,

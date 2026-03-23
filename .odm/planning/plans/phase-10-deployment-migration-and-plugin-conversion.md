@@ -310,7 +310,7 @@ Progress: 5 / 24 work packages complete
 > depends: 10.23
 > spec: .odm/spec/canonical-data-models/brief.md
 
-- [ ] Implement private collection registration from plugin manifests
+- [x] Implement private collection registration from plugin manifests
   <!-- file: packages/workflow-engine/src/schema_registry.rs -->
   <!-- purpose: During plugin loading (Phase 8), after parsing each plugin's manifest.toml, check for [collections.private] sections declaring plugin-owned collections. Each private collection declaration includes: name (String — the collection name, automatically namespaced as "plugin-id:collection-name"), schema (serde_json::Value — JSON Schema for validation). Register these schemas in a SchemaRegistry that the storage validation layer (Phase 5) uses. Implement SchemaRegistry struct with methods: register(plugin_id: &str, collection: &str, schema: serde_json::Value), get_schema(plugin_id: &str, collection: &str) -> Option<&serde_json::Value>, is_registered(plugin_id: &str, collection: &str) -> bool. The schema registry is shared with the storage backend. On write to a private collection, the storage layer looks up the schema and validates before persisting. Private collections are fully isolated by plugin_id — no cross-plugin access. Add tests: registration succeeds, schema lookup works, unregistered collection write is rejected, cross-plugin access is denied. -->
   <!-- requirements: from canonical-data-models spec 6.1, 6.2, 6.3 -->

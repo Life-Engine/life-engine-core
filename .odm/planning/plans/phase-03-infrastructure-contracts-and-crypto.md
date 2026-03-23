@@ -57,7 +57,7 @@ Progress: 0 / 10 work packages complete
 > depends: 3.1
 > spec: .odm/spec/binary-and-startup/brief.md
 
-- [ ] Define Transport trait for protocol-specific entry points
+- [x] Define Transport trait for protocol-specific entry points
   <!-- file: packages/traits/src/transport.rs -->
   <!-- purpose: Define the async Transport trait. Methods: async fn start(&self, config: toml::Value) -> Result<(), Box<dyn EngineError>> to bind and begin serving, async fn stop(&self) -> Result<(), Box<dyn EngineError>> for graceful shutdown, fn name(&self) -> &str returning the transport identifier (e.g., "rest", "graphql", "caldav"). Transports receive a reference to the workflow engine and auth module at construction time so they can route requests through workflows and validate authentication. Define TransportConfig struct with common fields: bind_address (String, default "127.0.0.1"), port (u16), tls (Option<TlsConfig> with cert_path and key_path). Re-export from lib.rs. -->
   <!-- requirements: from binary-and-startup spec -->

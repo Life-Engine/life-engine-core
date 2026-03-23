@@ -11,6 +11,7 @@ pub mod types;
 
 pub use error::{EngineError, Severity};
 pub use storage::StorageBackend;
+pub use transport::{TlsConfig, Transport, TransportConfig};
 
 #[cfg(test)]
 mod tests;

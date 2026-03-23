@@ -34,7 +34,7 @@ Progress: 0 / 17 work packages complete
 ## 7.2 — Workflow Types
 > spec: .odm/spec/workflow-engine/brief.md
 
-- [ ] Define all workflow definition types with serde derives
+- [x] Define all workflow definition types with serde derives
   <!-- file: packages/workflow-engine/src/types.rs -->
   <!-- purpose: Define WorkflowDef struct: id (String — unique workflow identifier), name (String — human-readable), mode (ExecutionMode), validate (ValidationLevel), trigger (TriggerDef), steps (Vec<StepDef>). Define StepDef struct: plugin (String — plugin ID), action (String — action name from manifest), on_error (Option<ErrorStrategy>), condition (Option<ConditionDef>). Define TriggerDef struct with all optional fields: endpoint (Option<String> — HTTP method + path like "POST /email/sync"), event (Option<String> — event name like "webhook.email.received"), schedule (Option<String> — cron expression like "*/5 * * * *"). Define ExecutionMode enum: Sync, Async with Default = Sync, serde rename_all = "lowercase". Define ValidationLevel enum: Strict, Edges, None with Default = Edges, serde rename_all = "lowercase". Define ErrorStrategy struct: strategy (ErrorStrategyType enum: Halt, Skip, Retry), max_retries (Option<u32> — only for Retry, default 3), fallback (Option<StepDef> — fallback step if all retries fail). Default ErrorStrategy is Halt. Define ConditionDef struct: field (String — dot-notation path like "payload.category"), equals (serde_json::Value — comparison value), then_steps (Vec<StepDef>), else_steps (Vec<StepDef>). All types derive Serialize, Deserialize, Debug, Clone. -->
   <!-- requirements: from workflow-engine spec 1.2 -->

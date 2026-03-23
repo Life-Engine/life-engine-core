@@ -10,6 +10,10 @@ pub mod types;
 
 pub use config::WorkflowConfig;
 pub use error::WorkflowError;
+pub use types::{
+    ConditionDef, ErrorStrategy, ErrorStrategyType, ExecutionMode, StepDef, TriggerDef,
+    ValidationLevel, WorkflowDef,
+};
 
 #[cfg(test)]
 mod tests;

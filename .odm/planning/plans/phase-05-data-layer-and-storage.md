@@ -51,7 +51,7 @@ Progress: 0 / 16 work packages complete
 > depends: 5.1, 5.2
 > spec: .odm/spec/data-layer/brief.md
 
-- [ ] Implement StorageBackend::execute to translate StorageQuery to SQL
+- [x] Implement StorageBackend::execute to translate StorageQuery to SQL
   <!-- file: packages/storage-sqlite/src/backend.rs -->
   <!-- purpose: Implement the execute method on SqliteStorage. Translation logic: (1) start with SELECT id, plugin_id, collection, data, version, created_at, updated_at FROM plugin_data, (2) add WHERE plugin_id = ? for plugin scoping (always present), (3) add WHERE collection = ? from query.collection, (4) for each QueryFilter, translate to SQL: Eq -> json_extract(data, '$.field') = ?, Gte -> json_extract(data, '$.field') >= ?, Lte -> json_extract(data, '$.field') <= ?, Contains -> json_extract(data, '$.field') LIKE '%?%', NotEq -> json_extract(data, '$.field') != ?, (5) apply ORDER BY json_extract(data, '$.field') ASC/DESC from sort fields, (6) apply LIMIT and OFFSET with maximum 1000 limit cap, (7) deserialize each row into a PipelineMessage by parsing the data JSON column into the appropriate CdmType based on collection name, wrapping in TypedPayload::Cdm, and constructing MessageMetadata from the row's metadata. Use parameterized queries throughout — never interpolate user values into SQL strings. Return Vec<PipelineMessage>. -->
   <!-- requirements: 2.2, 2.6, 8.1, 8.2, 8.3, 8.4, 9.1, 9.2, 9.3, 9.4, 9.5 -->

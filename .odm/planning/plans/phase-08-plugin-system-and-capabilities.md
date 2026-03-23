@@ -15,7 +15,7 @@ This phase depends on Phase 3 (traits, capabilities), Phase 4 (plugin SDK), Phas
 
 > spec: .odm/spec/plugin-system/brief.md, .odm/spec/capability-enforcement/brief.md
 
-Progress: 1 / 22 work packages complete
+Progress: 2 / 22 work packages complete
 
 ---
 
@@ -40,13 +40,13 @@ Progress: 1 / 22 work packages complete
 > depends: 8.1
 > spec: .odm/spec/plugin-system/brief.md
 
-- [ ] Implement manifest.toml parser with struct definitions
+- [x] Implement manifest.toml parser with struct definitions
   <!-- file: packages/plugin-system/src/manifest.rs -->
   <!-- purpose: Define PluginManifest struct: plugin section (PluginMeta: id String, name String, version String, description Option<String>, author Option<String>), actions (HashMap<String, ActionDef>: name String, description String, input_schema Option<String>, output_schema Option<String>), capabilities (CapabilitySet: required Vec<Capability>), config (Option<ConfigSchema>: schema serde_json::Value — JSON Schema for plugin-specific config). Implement pub fn parse_manifest(path: &Path) -> Result<PluginManifest, PluginError>. Validation: [plugin] section must exist, id/name/version are required, id must match regex [a-z][a-z0-9-]* (lowercase with hyphens), version must be valid semver, actions section is optional (plugin with no actions is valid — it might only subscribe to events), capabilities section is optional (defaults to no capabilities). Use toml crate for parsing. -->
   <!-- requirements: from plugin-system spec 2.1, 2.2, 2.3, 2.4, 2.5 -->
   <!-- leverage: none -->
 
-- [ ] Add manifest parser tests
+- [x] Add manifest parser tests
   <!-- file: packages/plugin-system/src/manifest.rs -->
   <!-- purpose: Test cases: (1) valid complete manifest parses correctly with all fields, (2) minimal manifest with only [plugin] section parses (empty actions, no capabilities), (3) missing [plugin] section returns error, (4) missing required field (id, name, version) returns error with field name, (5) invalid plugin ID format (uppercase, spaces) returns error, (6) invalid semver version returns error, (7) actions are correctly extracted with input/output schemas, (8) capabilities are parsed as Capability enum values, (9) unknown capability string returns error, (10) config schema is preserved as raw JSON. -->
   <!-- requirements: from plugin-system spec 2.1, 2.2, 2.3, 2.4, 2.5 -->

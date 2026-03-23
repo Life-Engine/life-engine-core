@@ -6,6 +6,8 @@
 
 pub mod discovery;
 pub mod error;
+pub mod manifest;
 
 pub use discovery::{scan_plugins_directory, DiscoveredPlugin};
 pub use error::PluginError;
+pub use manifest::{parse_manifest, ActionDef, CapabilitySet, ConfigSchema, PluginManifest, PluginMeta};

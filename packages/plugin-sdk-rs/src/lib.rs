@@ -25,12 +25,14 @@
 
 pub mod credential_store;
 pub mod retry;
+pub mod storage;
 pub mod traits;
 pub mod types;
 pub mod wasm_guest;
 
 // Re-export core SDK types at crate root.
 pub use credential_store::{CredentialStore, StoredCredential};
+pub use storage::StorageContext;
 pub use traits::CorePlugin;
 pub use types::{
     Capability, CollectionSchema, CoreEvent, CredentialAccess, HttpMethod, PluginContext,
@@ -95,7 +97,8 @@ pub mod prelude {
         CdmType, MessageMetadata, PipelineMessage, SchemaValidated, TypedPayload,
     };
 
-    // Storage types
+    // Storage types and context
+    pub use crate::storage::StorageContext;
     pub use life_engine_types::{
         FilterOp, QueryFilter, SortDirection, SortField, StorageMutation, StorageQuery,
     };

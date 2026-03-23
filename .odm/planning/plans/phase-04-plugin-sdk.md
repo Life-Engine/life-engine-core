@@ -15,7 +15,7 @@ This phase depends on Phase 2 (types) and Phase 3 (traits, crypto). Phase 5 (dat
 
 > spec: .odm/spec/plugin-sdk-rs/brief.md
 
-Progress: 1 / 7 work packages complete
+Progress: 2 / 7 work packages complete
 
 ---
 
@@ -35,13 +35,13 @@ Progress: 1 / 7 work packages complete
 > depends: 4.1
 > spec: .odm/spec/plugin-sdk-rs/brief.md
 
-- [ ] Implement StorageContext struct with fluent query API
+- [x] Implement StorageContext struct with fluent query API
   <!-- file: packages/plugin-sdk/src/storage.rs -->
   <!-- purpose: Define StorageContext struct that holds a reference to a StorageBackend and the calling plugin's ID. Implement query(collection: &str) method that returns a QueryBuilder. QueryBuilder methods: where_eq(field, value) adds an Eq filter, where_gte(field, value) adds Gte filter, where_lte(field, value) adds Lte filter, where_contains(field, value) adds Contains filter, order_by(field) adds Asc sort, order_by_desc(field) adds Desc sort, limit(n: u32) sets limit (capped at 1000, silently clamped), offset(n: u32) sets offset, execute() async method that builds a StorageQuery with the plugin_id and delegates to StorageBackend::execute(). All filter values accept impl Into<serde_json::Value> for ergonomic usage. QueryBuilder consumes self and returns self for method chaining. -->
   <!-- requirements: from plugin-sdk-rs spec 1.2, data-layer spec 1.2-1.6, 8.1-8.4, 9.1-9.5 -->
   <!-- leverage: none -->
 
-- [ ] Implement StorageContext write methods
+- [x] Implement StorageContext write methods
   <!-- file: packages/plugin-sdk/src/storage.rs -->
   <!-- purpose: Add write methods to StorageContext: insert(collection: &str, message: PipelineMessage) that creates a StorageMutation::Insert with the plugin_id and delegates to StorageBackend::mutate(), update(collection: &str, id: Uuid, message: PipelineMessage, expected_version: u64) that creates a StorageMutation::Update with optimistic concurrency, delete(collection: &str, id: Uuid) that creates a StorageMutation::Delete. All methods are async and return Result<(), Box<dyn EngineError>>. Re-export StorageContext from lib.rs. -->
   <!-- requirements: from plugin-sdk-rs spec 1.2 -->

@@ -24,6 +24,7 @@
 //! ```
 
 pub mod credential_store;
+pub mod macros;
 pub mod retry;
 pub mod storage;
 pub mod traits;
@@ -32,6 +33,7 @@ pub mod wasm_guest;
 
 // Re-export core SDK types at crate root.
 pub use credential_store::{CredentialStore, StoredCredential};
+pub use macros::{PluginInvocation, PluginOutput};
 pub use storage::StorageContext;
 pub use traits::CorePlugin;
 pub use types::{

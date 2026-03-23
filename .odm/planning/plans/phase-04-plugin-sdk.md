@@ -15,7 +15,7 @@ This phase depends on Phase 2 (types) and Phase 3 (traits, crypto). Phase 5 (dat
 
 > spec: .odm/spec/plugin-sdk-rs/brief.md
 
-Progress: 2 / 7 work packages complete
+Progress: 3 / 7 work packages complete
 
 ---
 
@@ -53,7 +53,7 @@ Progress: 2 / 7 work packages complete
 > depends: 4.1
 > spec: .odm/spec/plugin-sdk-rs/brief.md
 
-- [ ] Define register_plugin! macro for WASM entry-point generation
+- [x] Define register_plugin! macro for WASM entry-point generation
   <!-- file: packages/plugin-sdk/src/macros.rs -->
   <!-- purpose: Define a declarative macro register_plugin!(MyPlugin) that generates Extism WASM entry-point boilerplate. The generated code: (1) creates an extern "C" fn that Extism calls as the WASM export, (2) deserializes the input bytes into a PipelineMessage, (3) extracts the action name from the input metadata, (4) instantiates the plugin struct, (5) calls plugin.execute(action, input), (6) serializes the PipelineMessage output back to bytes, (7) handles errors by returning a serialized EngineError. The macro must NOT require the plugin author to write any unsafe code. The generated entry point should be named "execute" to match the Extism calling convention. Export the macro from lib.rs using #[macro_export]. -->
   <!-- requirements: from plugin-sdk-rs spec 1.3 -->

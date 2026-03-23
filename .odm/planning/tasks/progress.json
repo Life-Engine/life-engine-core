@@ -128,13 +128,14 @@
     "8.14",
     "8.15",
     "8.16",
-    "8.17"
+    "8.17",
+    "8.18"
   ],
   "current_wp": null,
   "current_wp_tasks": {
     "total": 1,
     "completed": [
-      "Add crash isolation integration tests"
+      "Add end-to-end capability enforcement integration tests"
     ],
     "deferred": [],
     "remaining": [],
@@ -1153,7 +1154,7 @@
       "wp": "8.17",
       "title": "Crash Isolation Verification",
       "completed_at": "2026-03-23T00:00:00Z",
-      "commit": "PENDING",
+      "commit": "e7b6161",
       "tasks_completed": 1,
       "tasks_deferred": 0
     }

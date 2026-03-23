@@ -311,7 +311,7 @@ Progress: 13 / 22 work packages complete
 > depends: 8.12
 > spec: .odm/spec/capability-enforcement/brief.md
 
-- [ ] Add end-to-end capability enforcement integration tests
+- [x] Add end-to-end capability enforcement integration tests
   <!-- file: packages/plugin-system/tests/capability_enforcement.rs -->
   <!-- purpose: Load a first-party test plugin (in the plugins/ directory) and verify all declared capabilities are auto-granted. Load a third-party test plugin (outside plugins/ directory) with partial approval (e.g., only storage:read approved). Test cases: (1) first-party plugin can call all host functions, (2) third-party approved operations succeed, (3) third-party unapproved operations return Fatal EngineError, (4) third-party plugin with unapproved manifest capability refuses to load entirely with CAP_001, (5) modifying config to approve the capability allows the plugin to load on next restart. -->
   <!-- requirements: from capability-enforcement spec 1.2, 1.4, 2.1, 3.3, 4.1, 4.3 -->

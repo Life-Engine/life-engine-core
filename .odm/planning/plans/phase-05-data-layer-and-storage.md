@@ -163,13 +163,13 @@ Progress: 0 / 16 work packages complete
 ## 5.12 — Data Export
 > spec: .odm/spec/data-layer/brief.md
 
-- [ ] Implement full database export as compressed archive
+- [x] Implement full database export as compressed archive
   <!-- file: packages/storage-sqlite/src/export.rs -->
   <!-- purpose: Implement pub async fn export_full(db: &Connection, output_path: &Path) -> Result<PathBuf> that: (1) queries all data from plugin_data table, (2) groups records by collection, (3) serializes each collection as a JSON array file (events.json, tasks.json, etc.), (4) packages all files into a .tar.gz archive at the output path, (5) logs AuditEventType::DataExport with record counts per collection, (6) returns the path to the created archive. Handle large datasets by streaming records rather than loading all into memory. -->
   <!-- requirements: 10.1, 10.2 -->
   <!-- leverage: packages/storage-sqlite as data source -->
 
-- [ ] Implement per-service data export in standard formats
+- [x] Implement per-service data export in standard formats
   <!-- file: packages/storage-sqlite/src/export.rs -->
   <!-- purpose: Implement format-specific export functions: export_emails(db, output_path) -> .mbox file (standard mbox format with From_ separator lines), export_calendar(db, output_path) -> .ics file (iCalendar format with VCALENDAR/VEVENT blocks), export_contacts(db, output_path) -> .vcf file (vCard 4.0 format). Each function queries the relevant collection, transforms CDM records to the standard format, and writes the output file. Use the dav-utils crate for iCal and vCard serialization where applicable. Log AuditEventType::DataExport for each export operation. -->
   <!-- requirements: 10.3, 10.4, 10.5 -->

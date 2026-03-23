@@ -83,7 +83,7 @@ Progress: 4 / 24 work packages complete
 ## 10.6 — Install-Service CLI Subcommand
 > spec: .odm/spec/deployment-modes/brief.md
 
-- [ ] Implement install-service CLI subcommand
+- [x] Implement install-service CLI subcommand
   <!-- file: apps/core/src/main.rs -->
   <!-- purpose: Add a CLI subcommand: life-engine-core install-service. On Linux: (1) copy deploy/systemd/life-engine-core.service to /etc/systemd/system/, (2) create /var/lib/life-engine directory with correct ownership, (3) create life-engine user/group if they don't exist, (4) run systemctl daemon-reload, (5) run systemctl enable life-engine-core, (6) print instructions for setting the passphrase and starting the service. On macOS: (1) copy deploy/launchd/com.life-engine.core.plist to ~/Library/LaunchAgents/, (2) create ~/Library/Application Support/life-engine/ directory, (3) run launchctl load the plist, (4) print instructions for configuring. Detect platform at runtime. Print clear messages for each step. Require root/sudo on Linux. -->
   <!-- requirements: 2.2, 2.3, 2.4 -->

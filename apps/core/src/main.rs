@@ -33,10 +33,11 @@ mod household;
 mod sync_primitives;
 mod federation;
 mod identity;
+mod install_service;
 
 use crate::auth::middleware::{auth_middleware, AuthMiddlewareState, RateLimiter};
 use crate::auth::routes::auth_router;
-use crate::config::{CliArgs, CoreConfig, LogReloadHandle};
+use crate::config::{CliArgs, CliCommand, CoreConfig, LogReloadHandle};
 use crate::rate_limit::{rate_limit_middleware, GeneralRateLimiter};
 use crate::conflict::ConflictStore;
 use crate::message_bus::MessageBus;
@@ -112,6 +113,13 @@ async fn main() -> anyhow::Result<()> {
     // ── Step 1/10: Load configuration ────────────────────────────────
     let step_start = Instant::now();
     let cli = CliArgs::parse();
+
+    // Handle subcommands before starting the server.
+    if let Some(CliCommand::InstallService) = cli.command {
+        install_service::run();
+        return Ok(());
+    }
+
     let config = CoreConfig::load(&cli).unwrap_or_else(|e| {
         eprintln!("Step 1/{TOTAL_STEPS}: Load configuration... FAILED: {e}");
         std::process::exit(1);

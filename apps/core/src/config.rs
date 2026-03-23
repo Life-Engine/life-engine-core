@@ -487,6 +487,17 @@ pub struct CliArgs {
     /// Data directory path.
     #[arg(long)]
     pub data_dir: Option<String>,
+
+    /// Subcommand to execute instead of starting the server.
+    #[command(subcommand)]
+    pub command: Option<CliCommand>,
+}
+
+/// CLI subcommands.
+#[derive(Debug, clap::Subcommand)]
+pub enum CliCommand {
+    /// Install Life Engine Core as a system service (systemd on Linux, launchd on macOS).
+    InstallService,
 }
 
 impl CoreConfig {
@@ -2378,6 +2389,7 @@ core:
             log_level: Some("debug".into()),
             log_format: Some("pretty".into()),
             data_dir: Some("/custom/data".into()),
+            command: None,
         };
         config.apply_cli_overrides(&cli);
         assert_eq!(config.core.host, "0.0.0.0");
@@ -2397,6 +2409,7 @@ core:
             log_level: None,
             log_format: None,
             data_dir: None,
+            command: None,
         };
         config.apply_cli_overrides(&cli);
         assert_eq!(config.core.host, "127.0.0.1");

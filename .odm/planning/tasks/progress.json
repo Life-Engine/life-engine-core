@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "last_updated": "2026-03-23T00:00:09Z",
+  "last_updated": "2026-03-23T10:08:56Z",
   "completed_wps": [
     "1.1",
     "1.2",
@@ -145,13 +145,14 @@
     "10.11",
     "10.12",
     "10.13",
-    "10.14"
+    "10.14",
+    "10.15"
   ],
   "current_wp": null,
   "current_wp_tasks": {
     "total": 1,
     "completed": [
-      "Validate transform export names exist in plugin.wasm"
+      "Implement the WASM migration transform executor"
     ],
     "deferred": [],
     "remaining": [],
@@ -1299,6 +1300,22 @@
       "title": "Migration Entry Overlap Detection",
       "completed_at": "2026-03-23T00:00:09Z",
       "commit": "ef57267",
+      "tasks_completed": 1,
+      "tasks_deferred": 0
+    },
+    {
+      "wp": "10.14",
+      "title": "WASM Export Validation",
+      "completed_at": "2026-03-23T00:00:10Z",
+      "commit": "2a19285",
+      "tasks_completed": 1,
+      "tasks_deferred": 0
+    },
+    {
+      "wp": "10.15",
+      "title": "WASM Transform Runner",
+      "completed_at": "2026-03-23T10:08:56Z",
+      "commit": "b4a2dac",
       "tasks_completed": 1,
       "tasks_deferred": 0
     }

@@ -4157,6 +4157,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "cron 0.15.0",
+ "extism",
  "jsonschema",
  "life-engine-traits",
  "life-engine-types",

@@ -193,7 +193,7 @@ Progress: 4 / 24 work packages complete
 > depends: 10.12
 > spec: .odm/spec/migration-format/brief.md
 
-- [ ] Implement the WASM migration transform executor
+- [x] Implement the WASM migration transform executor
   <!-- file: packages/workflow-engine/src/migration/runner.rs -->
   <!-- purpose: Implement pub async fn run_transform(wasm_path: &Path, function_name: &str, input_record: serde_json::Value) -> Result<serde_json::Value, MigrationError>. Logic: (1) load the plugin WASM module into a fresh Extism instance with NO host functions — migration transforms run in a pure sandbox with no storage, HTTP, or event access, (2) serialize the input record as JSON bytes, (3) call the named export function with the serialized input, (4) deserialize the output bytes as JSON, (5) return the transformed record. Error handling: if the WASM function returns an error (non-zero exit), capture the error message and return MigrationError::TransformFailed. If the function traps (panic), return MigrationError::TransformCrashed. Enforce a 10-second timeout per record transform — migrations should be fast. The transform function is pure: JSON in, JSON out, no side effects. -->
   <!-- requirements: 2.1, 2.2, 2.3, 2.4, 2.5 -->

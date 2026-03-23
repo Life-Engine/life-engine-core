@@ -216,7 +216,7 @@ Progress: 0 / 17 work packages complete
 > depends: 7.5
 > spec: .odm/spec/workflow-engine/brief.md
 
-- [ ] Implement structured execution logging with per-step timing
+- [x] Implement structured execution logging with per-step timing
   <!-- file: packages/workflow-engine/src/executor.rs -->
   <!-- purpose: Instrument the step executor to capture timing and status per step. Define ExecutionLog struct: workflow_id (String), trigger_type (String), trigger_value (String), started_at (DateTime<Utc>), completed_at (DateTime<Utc>), total_duration_ms (u64), status (ExecutionStatus enum: Completed, Failed, PartiallyFailed), steps (Vec<StepLog>). Define StepLog struct: index (usize), plugin_id (String), action (String), status (StepStatus enum: Completed, Failed, Skipped, Retried), duration_ms (u64), error (Option<StepErrorLog>), retry_count (Option<u32>). Define StepErrorLog struct: message (String), code (String), severity (String), input_summary (String — truncated serialization of input PipelineMessage for debugging). After each workflow execution (success or failure), emit the ExecutionLog as a structured tracing event at info level using tracing::info!(execution_log = ?log). For failures, log at error level with the full error context. Skipped steps log the skip reason and original error. -->
   <!-- requirements: from workflow-engine spec 9.1, 9.2 -->

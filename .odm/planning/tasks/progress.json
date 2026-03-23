@@ -120,13 +120,14 @@
     "7.13",
     "7.14",
     "7.15",
-    "7.16"
+    "7.16",
+    "7.17"
   ],
   "current_wp": null,
   "current_wp_tasks": {
     "total": 1,
     "completed": [
-      "Expose endpoint matching method for transports"
+      "Implement structured execution logging with per-step timing"
     ],
     "deferred": [],
     "remaining": [],

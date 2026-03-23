@@ -12,8 +12,8 @@ pub use config::WorkflowConfig;
 pub use error::WorkflowError;
 pub use event_bus::EventBus;
 pub use executor::{
-    build_initial_message, JobStatus, NoOpEventEmitter, PipelineExecutor, PluginExecutor,
-    WorkflowEventEmitter,
+    build_initial_message, ExecutionLog, ExecutionStatus, JobStatus, NoOpEventEmitter,
+    PipelineExecutor, PluginExecutor, StepErrorLog, StepLog, StepStatus, WorkflowEventEmitter,
 };
 pub use loader::{load_workflows, HttpMethod, TriggerRegistry};
 pub use scheduler::Scheduler;

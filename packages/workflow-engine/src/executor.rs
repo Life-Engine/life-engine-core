@@ -8,6 +8,7 @@ use async_trait::async_trait;
 use chrono::Utc;
 use life_engine_traits::{EngineError, Severity};
 use life_engine_types::{MessageMetadata, PipelineMessage, SchemaValidated, TypedPayload};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -18,6 +19,85 @@ use crate::error::WorkflowError;
 use crate::types::{
     ErrorStrategyType, ExecutionMode, StepDef, TriggerContext, ValidationLevel, WorkflowDef,
 };
+
+/// Overall execution status of a workflow run.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExecutionStatus {
+    /// All steps completed successfully.
+    Completed,
+    /// The workflow failed (halted or retry exhausted).
+    Failed,
+    /// Some steps failed but execution continued (skip strategy).
+    PartiallyFailed,
+}
+
+/// Status of an individual step execution.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StepStatus {
+    /// Step completed successfully.
+    Completed,
+    /// Step failed.
+    Failed,
+    /// Step was skipped due to error strategy.
+    Skipped,
+    /// Step succeeded after retries.
+    Retried,
+}
+
+/// Error details for a failed step.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StepErrorLog {
+    /// Error message.
+    pub message: String,
+    /// Error code.
+    pub code: String,
+    /// Severity level.
+    pub severity: String,
+    /// Truncated serialization of the input message for debugging.
+    pub input_summary: String,
+}
+
+/// Log entry for a single step execution.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StepLog {
+    /// Step index in the pipeline.
+    pub index: usize,
+    /// Plugin ID that was executed.
+    pub plugin_id: String,
+    /// Action name that was executed.
+    pub action: String,
+    /// Outcome of the step.
+    pub status: StepStatus,
+    /// Duration of the step in milliseconds.
+    pub duration_ms: u64,
+    /// Error details if the step failed or was skipped.
+    pub error: Option<StepErrorLog>,
+    /// Number of retry attempts (if any).
+    pub retry_count: Option<u32>,
+}
+
+/// Structured execution log emitted after each workflow run.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExecutionLog {
+    /// Workflow ID.
+    pub workflow_id: String,
+    /// Trigger type (e.g., "endpoint", "event", "schedule").
+    pub trigger_type: String,
+    /// Trigger value (e.g., "POST /email/sync").
+    pub trigger_value: String,
+    /// When execution started.
+    pub started_at: chrono::DateTime<Utc>,
+    /// When execution completed.
+    pub completed_at: chrono::DateTime<Utc>,
+    /// Total duration in milliseconds.
+    pub total_duration_ms: u64,
+    /// Overall execution status.
+    pub status: ExecutionStatus,
+    /// Per-step log entries.
+    pub steps: Vec<StepLog>,
+}
 
 /// Trait for executing a single plugin action.
 ///
@@ -336,12 +416,39 @@ impl PipelineExecutor {
         Ok(response)
     }
 
+    /// Derive trigger type and value from a workflow definition.
+    fn derive_trigger_info(workflow: &WorkflowDef) -> (String, String) {
+        if let Some(ref endpoint) = workflow.trigger.endpoint {
+            ("endpoint".to_string(), endpoint.clone())
+        } else if let Some(ref event) = workflow.trigger.event {
+            ("event".to_string(), event.clone())
+        } else if let Some(ref schedule) = workflow.trigger.schedule {
+            ("schedule".to_string(), schedule.clone())
+        } else {
+            ("unknown".to_string(), String::new())
+        }
+    }
+
+    /// Truncate an input message to a short summary for error logging.
+    fn summarize_input(message: &PipelineMessage) -> String {
+        let json = serde_json::to_string(&message.payload).unwrap_or_default();
+        if json.len() > 200 {
+            format!("{}...", &json[..200])
+        } else {
+            json
+        }
+    }
+
     /// Run the steps of a workflow sequentially, respecting each step's error strategy.
+    /// Emits a structured `ExecutionLog` after completion (success or failure).
     async fn run_steps(
         &self,
         workflow: &WorkflowDef,
         initial_message: PipelineMessage,
     ) -> Result<PipelineMessage, WorkflowError> {
+        let started_at = Utc::now();
+        let (trigger_type, trigger_value) = Self::derive_trigger_info(workflow);
+
         info!(
             workflow_id = %workflow.id,
             workflow_name = %workflow.name,
@@ -358,6 +465,8 @@ impl PipelineExecutor {
             validate_message(&initial_message, 0, "entry validation")?;
         }
 
+        let mut step_logs: Vec<StepLog> = Vec::new();
+
         let result = self
             .execute_steps(
                 &workflow.id,
@@ -365,19 +474,53 @@ impl PipelineExecutor {
                 initial_message,
                 0,
                 &workflow.validate,
+                &mut step_logs,
             )
-            .await?;
+            .await;
 
-        // Edges and Strict both validate the exit message
-        if matches!(
-            workflow.validate,
-            ValidationLevel::Strict | ValidationLevel::Edges
-        ) {
-            let last_index = workflow.steps.len().saturating_sub(1);
-            validate_message(&result, last_index, "exit validation")?;
+        let completed_at = Utc::now();
+        let total_duration_ms = (completed_at - started_at).num_milliseconds().max(0) as u64;
+
+        let has_skipped = step_logs.iter().any(|s| s.status == StepStatus::Skipped);
+
+        let status = match &result {
+            Ok(_) if has_skipped => ExecutionStatus::PartiallyFailed,
+            Ok(_) => ExecutionStatus::Completed,
+            Err(_) => ExecutionStatus::Failed,
+        };
+
+        let execution_log = ExecutionLog {
+            workflow_id: workflow.id.clone(),
+            trigger_type,
+            trigger_value,
+            started_at,
+            completed_at,
+            total_duration_ms,
+            status: status.clone(),
+            steps: step_logs,
+        };
+
+        match status {
+            ExecutionStatus::Failed => {
+                error!(execution_log = ?execution_log, "workflow execution failed");
+            }
+            _ => {
+                info!(execution_log = ?execution_log, "workflow execution completed");
+            }
         }
 
-        Ok(result)
+        // Validate exit message on success
+        if let Ok(ref msg) = result {
+            if matches!(
+                workflow.validate,
+                ValidationLevel::Strict | ValidationLevel::Edges
+            ) {
+                let last_index = workflow.steps.len().saturating_sub(1);
+                validate_message(msg, last_index, "exit validation")?;
+            }
+        }
+
+        result
     }
 
     /// Resolve a dot-notation field path against a PipelineMessage payload.
@@ -412,7 +555,8 @@ impl PipelineExecutor {
     /// Execute a list of steps sequentially, returning the final message.
     ///
     /// This is used both for top-level workflow steps and for conditional
-    /// branch steps (`then_steps` / `else_steps`).
+    /// branch steps (`then_steps` / `else_steps`). Step logs are appended
+    /// to the provided `step_logs` vector for execution logging.
     fn execute_steps<'a>(
         &'a self,
         workflow_id: &'a str,
@@ -420,6 +564,7 @@ impl PipelineExecutor {
         initial_message: PipelineMessage,
         base_index: usize,
         validate: &'a ValidationLevel,
+        step_logs: &'a mut Vec<StepLog>,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<PipelineMessage, WorkflowError>> + Send + 'a>> {
         Box::pin(async move {
         let mut current_message = initial_message;
@@ -450,10 +595,12 @@ impl PipelineExecutor {
                 };
 
                 current_message = self
-                    .execute_steps(workflow_id, branch, current_message, index * 100, validate)
+                    .execute_steps(workflow_id, branch, current_message, index * 100, validate, step_logs)
                     .await?;
                 continue;
             }
+
+            let step_start = Utc::now();
 
             info!(
                 workflow_id = %workflow_id,
@@ -469,6 +616,17 @@ impl PipelineExecutor {
                 .await
             {
                 Ok(output) => {
+                    let duration_ms = (Utc::now() - step_start).num_milliseconds().max(0) as u64;
+                    step_logs.push(StepLog {
+                        index,
+                        plugin_id: step.plugin.clone(),
+                        action: step.action.clone(),
+                        status: StepStatus::Completed,
+                        duration_ms,
+                        error: None,
+                        retry_count: None,
+                    });
+
                     current_message = output;
 
                     // Strict: validate after every step
@@ -522,6 +680,23 @@ impl PipelineExecutor {
 
                     match effective_strategy {
                         ErrorStrategyType::Halt => {
+                            let duration_ms = (Utc::now() - step_start).num_milliseconds().max(0) as u64;
+                            let input_summary = Self::summarize_input(&current_message);
+                            step_logs.push(StepLog {
+                                index,
+                                plugin_id: step.plugin.clone(),
+                                action: step.action.clone(),
+                                status: StepStatus::Failed,
+                                duration_ms,
+                                error: Some(StepErrorLog {
+                                    message: plugin_error.to_string(),
+                                    code: plugin_error.code().to_string(),
+                                    severity: format!("{:?}", severity),
+                                    input_summary,
+                                }),
+                                retry_count: None,
+                            });
+
                             error!(
                                 workflow_id = %workflow_id,
                                 step_index = index,
@@ -539,6 +714,23 @@ impl PipelineExecutor {
                             });
                         }
                         ErrorStrategyType::Skip => {
+                            let duration_ms = (Utc::now() - step_start).num_milliseconds().max(0) as u64;
+                            let input_summary = Self::summarize_input(&current_message);
+                            step_logs.push(StepLog {
+                                index,
+                                plugin_id: step.plugin.clone(),
+                                action: step.action.clone(),
+                                status: StepStatus::Skipped,
+                                duration_ms,
+                                error: Some(StepErrorLog {
+                                    message: plugin_error.to_string(),
+                                    code: plugin_error.code().to_string(),
+                                    severity: format!("{:?}", severity),
+                                    input_summary,
+                                }),
+                                retry_count: None,
+                            });
+
                             warn!(
                                 workflow_id = %workflow_id,
                                 step_index = index,
@@ -559,8 +751,10 @@ impl PipelineExecutor {
 
                             let mut last_error = plugin_error;
                             let mut succeeded = false;
+                            let mut retry_count: u32 = 0;
 
                             for attempt in 1..=max_retries {
+                                retry_count = attempt;
                                 let backoff = std::time::Duration::from_secs(1 << (attempt - 1));
                                 warn!(
                                     workflow_id = %workflow_id,
@@ -602,7 +796,18 @@ impl PipelineExecutor {
                                 }
                             }
 
-                            if !succeeded {
+                            if succeeded {
+                                let duration_ms = (Utc::now() - step_start).num_milliseconds().max(0) as u64;
+                                step_logs.push(StepLog {
+                                    index,
+                                    plugin_id: step.plugin.clone(),
+                                    action: step.action.clone(),
+                                    status: StepStatus::Retried,
+                                    duration_ms,
+                                    error: None,
+                                    retry_count: Some(retry_count),
+                                });
+                            } else {
                                 // Check for fallback step
                                 let fallback = step
                                     .on_error
@@ -634,6 +839,26 @@ impl PipelineExecutor {
                                             current_message = output;
                                         }
                                         Err(fallback_error) => {
+                                            let duration_ms = (Utc::now() - step_start).num_milliseconds().max(0) as u64;
+                                            let input_summary = Self::summarize_input(&current_message);
+                                            step_logs.push(StepLog {
+                                                index,
+                                                plugin_id: step.plugin.clone(),
+                                                action: step.action.clone(),
+                                                status: StepStatus::Failed,
+                                                duration_ms,
+                                                error: Some(StepErrorLog {
+                                                    message: format!(
+                                                        "retries failed: {}; fallback also failed: {}",
+                                                        last_error, fallback_error
+                                                    ),
+                                                    code: last_error.code().to_string(),
+                                                    severity: format!("{:?}", last_error.severity()),
+                                                    input_summary,
+                                                }),
+                                                retry_count: Some(max_retries),
+                                            });
+
                                             return Err(WorkflowError::RetryExhausted {
                                                 step_index: index,
                                                 plugin: step.plugin.clone(),
@@ -647,6 +872,23 @@ impl PipelineExecutor {
                                         }
                                     }
                                 } else {
+                                    let duration_ms = (Utc::now() - step_start).num_milliseconds().max(0) as u64;
+                                    let input_summary = Self::summarize_input(&current_message);
+                                    step_logs.push(StepLog {
+                                        index,
+                                        plugin_id: step.plugin.clone(),
+                                        action: step.action.clone(),
+                                        status: StepStatus::Failed,
+                                        duration_ms,
+                                        error: Some(StepErrorLog {
+                                            message: last_error.to_string(),
+                                            code: last_error.code().to_string(),
+                                            severity: format!("{:?}", last_error.severity()),
+                                            input_summary,
+                                        }),
+                                        retry_count: Some(max_retries),
+                                    });
+
                                     return Err(WorkflowError::RetryExhausted {
                                         step_index: index,
                                         plugin: step.plugin.clone(),
@@ -661,11 +903,6 @@ impl PipelineExecutor {
                 }
             }
         }
-
-        info!(
-            workflow_id = %workflow_id,
-            "workflow execution completed"
-        );
 
         Ok(current_message)
         }) // Box::pin

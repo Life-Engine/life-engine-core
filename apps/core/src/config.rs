@@ -904,7 +904,7 @@ fn merge_json(base: &mut serde_json::Value, patch: &serde_json::Value) {
 // ---------------------------------------------------------------------------
 
 pub mod startup {
-    use serde::Deserialize;
+    use serde::{Deserialize, Serialize};
     use std::collections::HashMap;
     use std::path::PathBuf;
 
@@ -923,13 +923,241 @@ pub mod startup {
         }
     };
 
+    /// Sensitive key fragments — any TOML key containing one of these words
+    /// (case-insensitive) is redacted before logging.
+    const SENSITIVE_FRAGMENTS: &[&str] = &["key", "secret", "password", "token"];
+
+    /// Errors that can occur while loading or parsing configuration.
+    #[derive(Debug)]
+    pub enum ConfigError {
+        /// The config file could not be read from disk.
+        IoError {
+            path: PathBuf,
+            source: std::io::Error,
+        },
+        /// The TOML content could not be parsed.
+        ParseError {
+            path: PathBuf,
+            message: String,
+        },
+        /// An environment variable value could not be converted to the
+        /// expected type (e.g. a non-integer where an integer was expected).
+        EnvVarConversion {
+            var: String,
+            value: String,
+            message: String,
+        },
+    }
+
+    impl std::fmt::Display for ConfigError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
+                ConfigError::IoError { path, source } => {
+                    write!(f, "failed to read config file {}: {source}", path.display())
+                }
+                ConfigError::ParseError { path, message } => {
+                    write!(f, "failed to parse config file {}: {message}", path.display())
+                }
+                ConfigError::EnvVarConversion { var, value, message } => {
+                    write!(f, "env var {var}={value:?}: {message}")
+                }
+            }
+        }
+    }
+
+    impl std::error::Error for ConfigError {
+        fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+            match self {
+                ConfigError::IoError { source, .. } => Some(source),
+                _ => None,
+            }
+        }
+    }
+
+    /// Load configuration from a TOML file with `LIFE_ENGINE_*` environment
+    /// variable overrides.
+    ///
+    /// Resolution order (highest priority wins): **env vars > TOML file > defaults**.
+    ///
+    /// If `path` is `None`, the function checks the `LIFE_ENGINE_CONFIG` env var,
+    /// then falls back to [`DEFAULT_CONFIG_PATH`]. A missing config file is not
+    /// an error — a default `CoreConfig` is returned instead.
+    pub fn load_config(path: Option<&str>) -> Result<CoreConfig, ConfigError> {
+        // 1. Determine config file path.
+        let config_path = match path {
+            Some(p) => PathBuf::from(p),
+            None => match std::env::var("LIFE_ENGINE_CONFIG") {
+                Ok(p) => PathBuf::from(p),
+                Err(_) => expand_tilde(DEFAULT_CONFIG_PATH),
+            },
+        };
+
+        // 2. Read and parse config.toml (or start with defaults).
+        let mut raw_table = match std::fs::read_to_string(&config_path) {
+            Ok(contents) => {
+                let table: toml::Value = contents.parse().map_err(|e: toml::de::Error| {
+                    ConfigError::ParseError {
+                        path: config_path.clone(),
+                        message: e.to_string(),
+                    }
+                })?;
+                match table {
+                    toml::Value::Table(t) => t,
+                    _ => toml::map::Map::new(),
+                }
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                tracing::info!(
+                    path = %config_path.display(),
+                    "config file not found, using defaults"
+                );
+                toml::map::Map::new()
+            }
+            Err(e) => {
+                return Err(ConfigError::IoError {
+                    path: config_path,
+                    source: e,
+                });
+            }
+        };
+
+        // 3. Scan and apply LIFE_ENGINE_* env var overrides.
+        apply_env_overrides(&mut raw_table)?;
+
+        // 4. Deserialize into CoreConfig.
+        let config: CoreConfig =
+            toml::Value::Table(raw_table).try_into().map_err(|e: toml::de::Error| {
+                ConfigError::ParseError {
+                    path: config_path.clone(),
+                    message: e.to_string(),
+                }
+            })?;
+
+        // 5. Log the loaded config with sensitive values redacted.
+        let redacted = redact_sensitive(
+            &toml::Value::try_from(&config)
+                .unwrap_or(toml::Value::Table(toml::map::Map::new())),
+        );
+        tracing::info!(config = %redacted, "configuration loaded");
+
+        Ok(config)
+    }
+
+    /// Scan environment variables for the `LIFE_ENGINE_` prefix and apply
+    /// them as overrides on the raw TOML table.
+    ///
+    /// Mapping: underscores in the env var name become nested TOML keys.
+    /// `LIFE_ENGINE_STORAGE_PATH` → `storage.path`
+    /// `LIFE_ENGINE_TRANSPORTS_REST_PORT` → `transports.rest.port`
+    fn apply_env_overrides(table: &mut toml::map::Map<String, toml::Value>) -> Result<(), ConfigError> {
+        let prefix = "LIFE_ENGINE_";
+        let mut env_vars: Vec<(String, String)> = std::env::vars()
+            .filter(|(k, _)| k.starts_with(prefix) && k != "LIFE_ENGINE_CONFIG")
+            .collect();
+        // Sort for deterministic application order.
+        env_vars.sort_by(|a, b| a.0.cmp(&b.0));
+
+        for (key, value) in env_vars {
+            let suffix = &key[prefix.len()..];
+            let segments: Vec<String> = suffix.split('_').map(|s| s.to_lowercase()).collect();
+            if segments.is_empty() || segments.iter().any(|s| s.is_empty()) {
+                continue;
+            }
+            set_nested_value(table, &segments, &value).map_err(|msg| {
+                ConfigError::EnvVarConversion {
+                    var: key.clone(),
+                    value: value.clone(),
+                    message: msg,
+                }
+            })?;
+        }
+        Ok(())
+    }
+
+    /// Set a value in a nested TOML table, creating intermediate tables as
+    /// needed. The leaf value is stored as a TOML string (modules handle
+    /// their own type conversion).
+    fn set_nested_value(
+        table: &mut toml::map::Map<String, toml::Value>,
+        segments: &[String],
+        value: &str,
+    ) -> Result<(), String> {
+        if segments.len() == 1 {
+            // Try to preserve the type of an existing value.
+            let typed = match table.get(&segments[0]) {
+                Some(toml::Value::Integer(_)) => value
+                    .parse::<i64>()
+                    .map(toml::Value::Integer)
+                    .unwrap_or_else(|_| toml::Value::String(value.to_string())),
+                Some(toml::Value::Float(_)) => value
+                    .parse::<f64>()
+                    .map(toml::Value::Float)
+                    .unwrap_or_else(|_| toml::Value::String(value.to_string())),
+                Some(toml::Value::Boolean(_)) => value
+                    .parse::<bool>()
+                    .map(toml::Value::Boolean)
+                    .unwrap_or_else(|_| toml::Value::String(value.to_string())),
+                _ => toml::Value::String(value.to_string()),
+            };
+            table.insert(segments[0].clone(), typed);
+            return Ok(());
+        }
+
+        let entry = table
+            .entry(segments[0].clone())
+            .or_insert_with(|| toml::Value::Table(toml::map::Map::new()));
+
+        if !entry.is_table() {
+            *entry = toml::Value::Table(toml::map::Map::new());
+        }
+        match entry {
+            toml::Value::Table(inner) => set_nested_value(inner, &segments[1..], value),
+            _ => unreachable!(),
+        }
+    }
+
+    /// Expand a leading `~` in a path to the user's home directory.
+    fn expand_tilde(path: &str) -> PathBuf {
+        if let Some(rest) = path.strip_prefix("~/") {
+            if let Some(home) = dirs_home() {
+                return home.join(rest);
+            }
+        }
+        PathBuf::from(path)
+    }
+
+    fn dirs_home() -> Option<PathBuf> {
+        directories::BaseDirs::new().map(|d| d.home_dir().to_path_buf())
+    }
+
+    /// Return a display-safe version of a TOML value with sensitive keys
+    /// replaced by `"[REDACTED]"`.
+    fn redact_sensitive(value: &toml::Value) -> toml::Value {
+        match value {
+            toml::Value::Table(table) => {
+                let mut redacted = toml::map::Map::new();
+                for (k, v) in table {
+                    let lower = k.to_lowercase();
+                    if SENSITIVE_FRAGMENTS.iter().any(|f| lower.contains(f)) {
+                        redacted.insert(k.clone(), toml::Value::String("[REDACTED]".into()));
+                    } else {
+                        redacted.insert(k.clone(), redact_sensitive(v));
+                    }
+                }
+                toml::Value::Table(redacted)
+            }
+            other => other.clone(),
+        }
+    }
+
     /// Top-level configuration for the Core binary.
     ///
     /// Each section is a raw `toml::Value` that gets handed to the owning module
     /// for parsing and validation — Core does not parse module internals.
     /// The exceptions are `workflows`, `plugins`, and `logging` which have
     /// lightweight Core-owned types since Core directly uses those values.
-    #[derive(Debug, Clone, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[serde(default)]
     pub struct CoreConfig {
         /// Storage configuration — passed as-is to `StorageBackend::init()`.
         #[serde(default = "default_empty_table")]
@@ -960,8 +1188,21 @@ pub mod startup {
         pub logging: LoggingConfig,
     }
 
+    impl Default for CoreConfig {
+        fn default() -> Self {
+            Self {
+                storage: default_empty_table(),
+                auth: default_empty_table(),
+                transports: HashMap::new(),
+                workflows: WorkflowsConfig::default(),
+                plugins: PluginsConfig::default(),
+                logging: LoggingConfig::default(),
+            }
+        }
+    }
+
     /// Workflow engine configuration.
-    #[derive(Debug, Clone, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct WorkflowsConfig {
         /// Directory containing YAML workflow definition files.
         #[serde(default = "default_workflows_path")]
@@ -981,7 +1222,7 @@ pub mod startup {
     }
 
     /// Plugin system configuration.
-    #[derive(Debug, Clone, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct PluginsConfig {
         /// Directory containing WASM plugin bundles.
         #[serde(default = "default_plugins_path")]
@@ -1009,7 +1250,7 @@ pub mod startup {
     }
 
     /// Logging configuration.
-    #[derive(Debug, Clone, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct LoggingConfig {
         /// Log level filter (e.g. `"info"`, `"debug"`, `"warn"`).
         #[serde(default = "default_log_level")]
@@ -1045,6 +1286,10 @@ pub mod startup {
     #[cfg(test)]
     mod tests {
         use super::*;
+        use std::sync::Mutex;
+
+        /// Mutex to serialize tests that modify environment variables.
+        static ENV_LOCK: Mutex<()> = Mutex::new(());
 
         #[test]
         fn deserialize_minimal_config() {
@@ -1186,6 +1431,232 @@ key = "value-b"
                     .and_then(|v| v.as_str()),
                 Some("value-b")
             );
+        }
+
+        #[test]
+        fn load_config_from_toml_file() {
+            let _lock = ENV_LOCK.lock().unwrap();
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("config.toml");
+            std::fs::write(
+                &path,
+                r#"
+[storage]
+path = "/data/core.db"
+
+[logging]
+level = "debug"
+"#,
+            )
+            .unwrap();
+
+            let config = load_config(Some(path.to_str().unwrap())).unwrap();
+            assert_eq!(
+                config.storage.get("path").and_then(|v| v.as_str()),
+                Some("/data/core.db")
+            );
+            assert_eq!(config.logging.level, "debug");
+        }
+
+        #[test]
+        fn load_config_missing_file_returns_defaults() {
+            let _lock = ENV_LOCK.lock().unwrap();
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("nonexistent.toml");
+            let config = load_config(Some(path.to_str().unwrap())).unwrap();
+            assert_eq!(config.logging.level, "info");
+            assert_eq!(config.logging.format, "json");
+            assert_eq!(config.workflows.path, "workflows");
+            assert_eq!(config.plugins.path, "plugins");
+        }
+
+        #[test]
+        fn load_config_invalid_toml_returns_parse_error() {
+            let _lock = ENV_LOCK.lock().unwrap();
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("bad.toml");
+            std::fs::write(&path, "{{not valid toml}}").unwrap();
+            let err = load_config(Some(path.to_str().unwrap())).unwrap_err();
+            assert!(matches!(err, ConfigError::ParseError { .. }));
+            assert!(err.to_string().contains("failed to parse"));
+        }
+
+        #[test]
+        fn env_var_overrides_toml_value() {
+            let _lock = ENV_LOCK.lock().unwrap();
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("config.toml");
+            std::fs::write(
+                &path,
+                r#"
+[storage]
+path = "/original/path"
+"#,
+            )
+            .unwrap();
+
+            let key = "LIFE_ENGINE_STORAGE_PATH";
+            unsafe { std::env::set_var(key, "/overridden/path") };
+            let config = load_config(Some(path.to_str().unwrap())).unwrap();
+            unsafe { std::env::remove_var(key) };
+
+            assert_eq!(
+                config.storage.get("path").and_then(|v| v.as_str()),
+                Some("/overridden/path")
+            );
+        }
+
+        #[test]
+        fn env_var_preserves_integer_type() {
+            let _lock = ENV_LOCK.lock().unwrap();
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("config.toml");
+            std::fs::write(
+                &path,
+                r#"
+[transports.rest]
+port = 3000
+"#,
+            )
+            .unwrap();
+
+            let key = "LIFE_ENGINE_TRANSPORTS_REST_PORT";
+            unsafe { std::env::set_var(key, "4000") };
+            let config = load_config(Some(path.to_str().unwrap())).unwrap();
+            unsafe { std::env::remove_var(key) };
+
+            assert_eq!(
+                config.transports["rest"]
+                    .get("port")
+                    .and_then(|v| v.as_integer()),
+                Some(4000)
+            );
+        }
+
+        #[test]
+        fn env_var_creates_nested_keys() {
+            let _lock = ENV_LOCK.lock().unwrap();
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("config.toml");
+            std::fs::write(&path, "").unwrap();
+
+            let key = "LIFE_ENGINE_AUTH_PROVIDER";
+            unsafe { std::env::set_var(key, "pocket-id") };
+            let config = load_config(Some(path.to_str().unwrap())).unwrap();
+            unsafe { std::env::remove_var(key) };
+
+            assert_eq!(
+                config.auth.get("provider").and_then(|v| v.as_str()),
+                Some("pocket-id")
+            );
+        }
+
+        #[test]
+        fn env_var_config_path_override() {
+            let _lock = ENV_LOCK.lock().unwrap();
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("custom.toml");
+            std::fs::write(
+                &path,
+                r#"
+[logging]
+level = "trace"
+"#,
+            )
+            .unwrap();
+
+            unsafe { std::env::set_var("LIFE_ENGINE_CONFIG", path.to_str().unwrap()) };
+            let config = load_config(None).unwrap();
+            unsafe { std::env::remove_var("LIFE_ENGINE_CONFIG") };
+
+            assert_eq!(config.logging.level, "trace");
+        }
+
+        #[test]
+        fn redact_sensitive_hides_secrets() {
+            let toml_str = r#"
+[storage]
+path = "/data/core.db"
+passphrase_token = "super-secret"
+
+[auth]
+provider = "pocket-id"
+client_secret = "my-secret"
+api_key = "abc123"
+"#;
+            let val: toml::Value = toml_str.parse().unwrap();
+            let redacted = redact_sensitive(&val);
+
+            // Non-sensitive values are preserved.
+            assert_eq!(
+                redacted
+                    .get("storage")
+                    .and_then(|s| s.get("path"))
+                    .and_then(|v| v.as_str()),
+                Some("/data/core.db")
+            );
+            assert_eq!(
+                redacted
+                    .get("auth")
+                    .and_then(|s| s.get("provider"))
+                    .and_then(|v| v.as_str()),
+                Some("pocket-id")
+            );
+
+            // Sensitive values are redacted.
+            assert_eq!(
+                redacted
+                    .get("storage")
+                    .and_then(|s| s.get("passphrase_token"))
+                    .and_then(|v| v.as_str()),
+                Some("[REDACTED]")
+            );
+            assert_eq!(
+                redacted
+                    .get("auth")
+                    .and_then(|s| s.get("client_secret"))
+                    .and_then(|v| v.as_str()),
+                Some("[REDACTED]")
+            );
+            assert_eq!(
+                redacted
+                    .get("auth")
+                    .and_then(|s| s.get("api_key"))
+                    .and_then(|v| v.as_str()),
+                Some("[REDACTED]")
+            );
+        }
+
+        #[test]
+        fn expand_tilde_expands_home() {
+            let expanded = expand_tilde("~/some/path");
+            // Should not start with ~ anymore (unless there is no home dir).
+            assert!(!expanded.to_string_lossy().starts_with('~'));
+            assert!(expanded.to_string_lossy().ends_with("some/path"));
+        }
+
+        #[test]
+        fn expand_tilde_ignores_non_tilde() {
+            let path = "/absolute/path";
+            let expanded = expand_tilde(path);
+            assert_eq!(expanded, PathBuf::from(path));
+        }
+
+        #[test]
+        fn set_nested_value_creates_intermediate_tables() {
+            let mut table = toml::map::Map::new();
+            set_nested_value(
+                &mut table,
+                &["a".into(), "b".into(), "c".into()],
+                "hello",
+            )
+            .unwrap();
+            let val = table
+                .get("a")
+                .and_then(|v| v.get("b"))
+                .and_then(|v| v.get("c"))
+                .and_then(|v| v.as_str());
+            assert_eq!(val, Some("hello"));
         }
     }
 }

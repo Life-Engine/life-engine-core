@@ -15,7 +15,7 @@ This phase depends on all previous phases (types, traits, crypto, SDK, storage, 
 
 > spec: .odm/spec/binary-and-startup/brief.md
 
-Progress: 1 / 11 work packages complete
+Progress: 2 / 11 work packages complete
 
 ---
 
@@ -33,7 +33,7 @@ Progress: 1 / 11 work packages complete
 ## 9.2 — Config Loading with Environment Variable Overrides
 > spec: .odm/spec/binary-and-startup/brief.md
 
-- [ ] Implement config.toml loading with LIFE_ENGINE_* env var overrides
+- [x] Implement config.toml loading with LIFE_ENGINE_* env var overrides
   <!-- file: apps/core/src/config.rs -->
   <!-- purpose: Implement pub fn load_config(path: Option<&str>) -> Result<CoreConfig, ConfigError>. Logic: (1) determine config file path: use provided path, or LIFE_ENGINE_CONFIG env var, or DEFAULT_CONFIG_PATH, (2) read and parse config.toml using toml crate, (3) scan environment variables for LIFE_ENGINE_* prefix, (4) map env var names to config keys using underscore separation: LIFE_ENGINE_STORAGE_PATH -> storage.path, LIFE_ENGINE_AUTH_PROVIDER -> auth.provider, LIFE_ENGINE_TRANSPORTS_REST_PORT -> transports.rest.port, (5) apply env var overrides on top of TOML values — env vars always win (precedence: env > TOML > defaults), (6) return the merged CoreConfig. Handle errors: missing config file (create default), parse errors (show line/column), env var type conversion failures. Log the loaded config at info level excluding any values containing "key", "secret", "password", or "token" (redact sensitive values). -->
   <!-- requirements: 1.2, 1.4 -->

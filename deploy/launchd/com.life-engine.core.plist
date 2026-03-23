@@ -8,19 +8,9 @@
     <key>ProgramArguments</key>
     <array>
         <string>/usr/local/bin/life-engine-core</string>
+        <string>--config</string>
+        <string>~/Library/Application Support/life-engine/config.toml</string>
     </array>
-
-    <key>EnvironmentVariables</key>
-    <dict>
-        <key>LIFE_ENGINE_CORE_HOST</key>
-        <string>127.0.0.1</string>
-        <key>LIFE_ENGINE_CORE_PORT</key>
-        <string>3750</string>
-        <key>LIFE_ENGINE_CORE_LOG_LEVEL</key>
-        <string>info</string>
-        <key>LIFE_ENGINE_CORE_DATA_DIR</key>
-        <string>~/Library/Application Support/Life Engine</string>
-    </dict>
 
     <key>RunAtLoad</key>
     <true/>
@@ -28,10 +18,19 @@
     <key>KeepAlive</key>
     <true/>
 
+    <key>WorkingDirectory</key>
+    <string>~/Library/Application Support/life-engine</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>LIFE_ENGINE_STORAGE_PASSPHRASE</key>
+        <string></string>
+    </dict>
+
     <key>StandardOutPath</key>
     <string>~/Library/Logs/life-engine/core.log</string>
 
     <key>StandardErrorPath</key>
-    <string>~/Library/Logs/life-engine/core.error.log</string>
+    <string>~/Library/Logs/life-engine/core-error.log</string>
 </dict>
 </plist>

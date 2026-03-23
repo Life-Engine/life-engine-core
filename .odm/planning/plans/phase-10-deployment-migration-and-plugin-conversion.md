@@ -15,7 +15,7 @@ This phase depends on Phase 9 (completed Core binary). The deployment modes shar
 
 > spec: .odm/spec/deployment-modes/brief.md, .odm/spec/migration-format/brief.md
 
-Progress: 3 / 24 work packages complete
+Progress: 4 / 24 work packages complete
 
 ---
 
@@ -72,7 +72,7 @@ Progress: 3 / 24 work packages complete
 ## 10.5 — Launchd Plist
 > spec: .odm/spec/deployment-modes/brief.md
 
-- [ ] Create launchd plist for macOS
+- [x] Create launchd plist for macOS
   <!-- file: deploy/launchd/com.life-engine.core.plist -->
   <!-- purpose: Define a launchd plist: Label=com.life-engine.core, ProgramArguments=[/usr/local/bin/life-engine-core, --config, ~/Library/Application Support/life-engine/config.toml], RunAtLoad=true, KeepAlive=true, StandardOutPath=~/Library/Logs/life-engine/core.log, StandardErrorPath=~/Library/Logs/life-engine/core-error.log, WorkingDirectory=~/Library/Application Support/life-engine, EnvironmentVariables with LIFE_ENGINE_STORAGE_PASSPHRASE placeholder. -->
   <!-- requirements: 2.3 -->

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "last_updated": "2026-03-23T00:00:00Z",
+  "last_updated": "2026-03-23T00:00:01Z",
   "completed_wps": [
     "1.1",
     "1.2",
@@ -135,13 +135,14 @@
     "9.11",
     "10.2",
     "10.3",
-    "10.4"
+    "10.4",
+    "10.5"
   ],
   "current_wp": null,
   "current_wp_tasks": {
     "total": 1,
     "completed": [
-      "Create systemd service unit for Linux"
+      "Create launchd plist for macOS"
     ],
     "deferred": [],
     "remaining": [],
@@ -1217,6 +1218,14 @@
       "title": "Systemd Service Unit",
       "completed_at": "2026-03-23T00:00:00Z",
       "commit": "330dd96",
+      "tasks_completed": 1,
+      "tasks_deferred": 0
+    },
+    {
+      "wp": "10.5",
+      "title": "Launchd Plist",
+      "completed_at": "2026-03-23T00:00:01Z",
+      "commit": "abb92d4",
       "tasks_completed": 1,
       "tasks_deferred": 0
     }

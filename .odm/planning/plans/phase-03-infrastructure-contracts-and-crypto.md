@@ -127,13 +127,13 @@ Progress: 0 / 10 work packages complete
 ## 3.10 — HMAC Utilities and Crypto Tests
 > spec: .odm/spec/binary-and-startup/brief.md
 
-- [ ] Implement HMAC-SHA256 sign and verify functions
+- [x] Implement HMAC-SHA256 sign and verify functions
   <!-- file: packages/crypto/src/hmac.rs -->
   <!-- purpose: Implement pub fn hmac_sign(key: &[u8], data: &[u8]) -> Vec<u8> that produces an HMAC-SHA256 tag. Implement pub fn hmac_verify(key: &[u8], data: &[u8], tag: &[u8]) -> bool that verifies an HMAC tag using constant-time comparison. Use the hmac and sha2 crates. Add unit tests: sign produces consistent output, verify accepts correct tag, verify rejects wrong tag, verify rejects truncated tag. Re-export from lib.rs. -->
   <!-- requirements: from auth-and-pocket-id spec (webhook signature verification) -->
   <!-- leverage: none -->
 
-- [ ] Finalize crypto crate public API
+- [x] Finalize crypto crate public API
   <!-- file: packages/crypto/src/lib.rs -->
   <!-- purpose: Ensure lib.rs re-exports: encrypt, decrypt from encryption module; derive_key, generate_salt from kdf module; hmac_sign, hmac_verify from hmac module; CryptoError from error module. Verify the crate compiles with clippy -D warnings. Ensure no unsafe code is used anywhere in the crate. -->
   <!-- requirements: from binary-and-startup spec -->

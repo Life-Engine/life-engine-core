@@ -5,8 +5,10 @@ use thiserror::Error;
 use life_engine_traits::{EngineError, Severity};
 
 pub mod manifest;
+pub mod validate;
 
 pub use manifest::{parse_migration_entries, parse_migration_entries_from_str, MigrationEntry};
+pub use validate::{validate_wasm_exports, validate_wasm_exports_from_bytes};
 
 /// Errors that can occur during migration manifest parsing and execution.
 #[derive(Debug, Error)]

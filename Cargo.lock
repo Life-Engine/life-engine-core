@@ -3111,6 +3111,8 @@ dependencies = [
  "allocator-api2",
  "equivalent",
  "foldhash 0.2.0",
+ "serde",
+ "serde_core",
 ]
 
 [[package]]
@@ -4168,6 +4170,8 @@ dependencies = [
  "toml 0.8.23",
  "tracing",
  "uuid",
+ "wasmparser 0.245.1",
+ "wat",
 ]
 
 [[package]]
@@ -7598,8 +7602,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4f08c9adee0428b7bddf3890fc27e015ac4b761cc608c822667102b8bfd6995e"
 dependencies = [
  "bitflags 2.11.0",
+ "hashbrown 0.16.1",
  "indexmap",
  "semver",
+ "serde",
 ]
 
 [[package]]

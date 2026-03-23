@@ -181,7 +181,7 @@ Progress: 4 / 24 work packages complete
 > depends: 10.12
 > spec: .odm/spec/migration-format/brief.md
 
-- [ ] Validate transform export names exist in plugin.wasm
+- [x] Validate transform export names exist in plugin.wasm
   <!-- file: packages/workflow-engine/src/migration/validate.rs -->
   <!-- purpose: Implement pub fn validate_wasm_exports(wasm_path: &Path, entries: &[MigrationEntry]) -> Result<(), MigrationError>. Logic: (1) load the plugin.wasm binary, (2) parse the WASM module's export section (use wasmparser or Extism's introspection), (3) for each MigrationEntry, check that the transform function name exists as an exported function, (4) verify the exported function has the correct signature: takes one input (JSON bytes) and returns one output (JSON bytes), (5) if any transform name is missing, return an error listing all missing exports with their expected names. This validation runs at plugin load time — a plugin with missing migration exports is rejected before it can run. -->
   <!-- requirements: 8.1, 8.2, 8.3 -->

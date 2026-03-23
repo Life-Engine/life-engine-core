@@ -144,13 +144,14 @@
     "10.10",
     "10.11",
     "10.12",
-    "10.13"
+    "10.13",
+    "10.14"
   ],
   "current_wp": null,
   "current_wp_tasks": {
     "total": 1,
     "completed": [
-      "Add overlap detection for migration from ranges"
+      "Validate transform export names exist in plugin.wasm"
     ],
     "deferred": [],
     "remaining": [],
@@ -1297,7 +1298,7 @@
       "wp": "10.13",
       "title": "Migration Entry Overlap Detection",
       "completed_at": "2026-03-23T00:00:09Z",
-      "commit": "pending",
+      "commit": "ef57267",
       "tasks_completed": 1,
       "tasks_deferred": 0
     }

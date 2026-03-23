@@ -9,6 +9,7 @@ pub mod discovery;
 pub mod error;
 pub mod execute;
 pub mod host_functions;
+pub mod injection;
 pub mod lifecycle;
 pub mod loader;
 pub mod manifest;

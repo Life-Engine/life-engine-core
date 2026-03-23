@@ -15,7 +15,7 @@ This phase depends on Phase 3 (traits, capabilities), Phase 4 (plugin SDK), Phas
 
 > spec: .odm/spec/plugin-system/brief.md, .odm/spec/capability-enforcement/brief.md
 
-Progress: 11 / 22 work packages complete
+Progress: 12 / 22 work packages complete
 
 ---
 
@@ -261,13 +261,13 @@ Progress: 11 / 22 work packages complete
 > depends: 8.5, 8.6, 8.7, 8.8, 8.9
 > spec: .odm/spec/capability-enforcement/brief.md
 
-- [ ] Inject host functions per-plugin based on approved capabilities
+- [x] Inject host functions per-plugin based on approved capabilities
   <!-- file: packages/plugin-system/src/loader.rs -->
   <!-- purpose: During the WASM loading step in the plugin loader, construct the host function set based on the plugin's ApprovedCapabilities. Mapping: storage:read → register host_storage_read, storage:write → register host_storage_write, http:outbound → register host_http_request, events:emit → register host_events_emit, events:subscribe → register host_events_subscribe, config:read → register host_config_read. host_log is ALWAYS registered regardless of capabilities. If a plugin has no approved capabilities, it gets only host_log. This is the first layer of enforcement: structural prevention — unapproved host functions simply don't exist in the WASM sandbox, so the plugin cannot call them at all. -->
   <!-- requirements: from capability-enforcement spec 2.1, 2.2, 2.3, 2.4, 2.5, 2.6 -->
   <!-- leverage: host functions from WPs 8.5-8.9, loader from WP 8.10 -->
 
-- [ ] Add host function injection tests
+- [x] Add host function injection tests
   <!-- file: packages/plugin-system/tests/injection_test.rs -->
   <!-- purpose: Test cases: (1) plugin with storage:read only gets storage read host function but not write, (2) plugin with storage:write without storage:read does not get read function, (3) plugin with no capabilities gets only logging host function, (4) plugin with all capabilities gets all host functions, (5) host_log is always present. -->
   <!-- requirements: from capability-enforcement spec 2.1, 2.2, 2.6 -->

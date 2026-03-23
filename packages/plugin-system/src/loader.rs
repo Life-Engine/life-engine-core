@@ -15,6 +15,7 @@ use crate::capability::{check_capability_approval, ApprovedCapabilities};
 use crate::discovery::scan_plugins_directory;
 use crate::error::PluginError;
 use crate::host_functions::logging::LogRateLimiter;
+use crate::injection::{build_host_functions, InjectionDeps};
 use crate::manifest::{parse_manifest, PluginManifest};
 use crate::runtime::{load_plugin, PluginInstance};
 
@@ -53,8 +54,8 @@ pub fn load_plugins(
     plugins_dir: &Path,
     first_party_dir: &Path,
     config: &LoaderConfig,
-    _storage: Arc<dyn StorageBackend>,
-    _event_bus: Arc<dyn WorkflowEventEmitter>,
+    storage: Arc<dyn StorageBackend>,
+    event_bus: Arc<dyn WorkflowEventEmitter>,
     log_rate_limiter: Arc<LogRateLimiter>,
 ) -> Result<Vec<PluginHandle>, PluginError> {
     let discovered = scan_plugins_directory(plugins_dir)?;
@@ -67,7 +68,14 @@ pub fn load_plugins(
     let mut handles = Vec::new();
 
     for plugin in &discovered {
-        match load_single_plugin(plugin, first_party_dir, config, &log_rate_limiter) {
+        match load_single_plugin(
+            plugin,
+            first_party_dir,
+            config,
+            &storage,
+            &event_bus,
+            &log_rate_limiter,
+        ) {
             Ok(handle) => {
                 let cap_names: Vec<String> =
                     handle.capabilities.iter().map(|c| c.to_string()).collect();
@@ -103,7 +111,9 @@ fn load_single_plugin(
     plugin: &crate::discovery::DiscoveredPlugin,
     first_party_dir: &Path,
     config: &LoaderConfig,
-    _log_rate_limiter: &Arc<LogRateLimiter>,
+    storage: &Arc<dyn StorageBackend>,
+    event_bus: &Arc<dyn WorkflowEventEmitter>,
+    log_rate_limiter: &Arc<LogRateLimiter>,
 ) -> Result<PluginHandle, PluginError> {
     // Step 1: Parse manifest
     let manifest = parse_manifest(&plugin.manifest_path)?;
@@ -120,12 +130,16 @@ fn load_single_plugin(
         check_capability_approval(&manifest, &plugin.path, first_party_dir, approved_caps)?;
 
     // Step 3: Build host functions based on approved capabilities
-    // Host functions are registered as Extism Functions. For now, we pass an
-    // empty list — the actual Extism host function wiring requires Extism
-    // UserData and will be completed in WP 8.15 (Host Function Injection Gating).
-    // The loader's job is to determine WHICH functions to inject; the actual
-    // function objects are constructed by the injection layer.
-    let host_functions = Vec::new();
+    // Injection gating: only approved host functions are registered in the
+    // WASM sandbox. Unapproved functions don't exist — the plugin cannot
+    // call them at all. host_log is always injected.
+    let deps = InjectionDeps {
+        storage: Arc::clone(storage),
+        event_bus: Arc::clone(event_bus),
+        log_rate_limiter: Arc::clone(log_rate_limiter),
+        plugin_config: config.plugin_configs.get(plugin_id).cloned(),
+    };
+    let host_functions = build_host_functions(plugin_id, &capabilities, &deps);
 
     // Step 4: Load WASM binary
     let instance = load_plugin(&plugin.wasm_path, plugin_id, host_functions)?;

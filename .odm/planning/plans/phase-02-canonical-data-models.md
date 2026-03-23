@@ -125,7 +125,7 @@ Progress: 0 / 11 work packages complete
 > depends: 2.6
 > spec: .odm/spec/canonical-data-models/brief.md
 
-- [ ] Re-export all canonical types and PipelineMessage from plugin-sdk
+- [x] Re-export all canonical types and PipelineMessage from plugin-sdk
   <!-- file: packages/plugin-sdk/src/types.rs -->
   <!-- file: packages/plugin-sdk/src/lib.rs -->
   <!-- purpose: In packages/plugin-sdk/src/lib.rs, add pub use life_engine_types::{CalendarEvent, Task, Contact, Note, Email, FileMetadata, Credential, PipelineMessage, MessageMetadata, TypedPayload, CdmType, SchemaValidated} and all supporting types (enums, nested structs). Plugin authors must be able to import everything from life_engine_plugin_sdk without adding life-engine-types as a direct dependency. Verify this by writing a compile test that imports all types from the SDK only. -->

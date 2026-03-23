@@ -46,14 +46,18 @@ pub use anyhow::Result;
 // Re-export serde_json so plugin authors can use it (needed for handle_route, events, etc.)
 pub use serde_json;
 
-// Re-export all canonical data model types from the types crate
+// Re-export all canonical data model types and pipeline types from the types crate
 // so plugin authors only need one dependency.
 pub use life_engine_types;
 pub use life_engine_types::{
+    // Canonical collection types
     Attendee, AttendeeStatus, CalendarEvent, Contact, ContactAddress, ContactEmail,
-    ContactInfoType, ContactName, ContactPhone, Credential, CredentialType, Email, EmailAttachment,
-    EventStatus, FileMetadata, Note, PhoneType, Recurrence, RecurrenceFrequency, Reminder,
-    ReminderMethod, Task, TaskPriority, TaskStatus,
+    ContactInfoType, ContactName, ContactPhone, Credential, CredentialType, Email, EmailAddress,
+    EmailAttachment, EventStatus, FileMetadata, Note, NoteFormat, PhoneType, Recurrence,
+    RecurrenceFrequency, Reminder, ReminderMethod, Task, TaskPriority, TaskStatus,
+    // Pipeline message types
+    CdmType, MessageMetadata, PipelineMessage, SchemaValidated, SchemaValidationError,
+    TypedPayload,
 };
 
 /// Convenience prelude for plugin authors.
@@ -71,4 +75,5 @@ pub mod prelude {
     };
     pub use anyhow::Result;
     pub use async_trait::async_trait;
+    pub use life_engine_types::{CdmType, MessageMetadata, PipelineMessage, TypedPayload};
 }

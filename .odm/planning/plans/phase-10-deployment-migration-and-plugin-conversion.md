@@ -15,7 +15,7 @@ This phase depends on Phase 9 (completed Core binary). The deployment modes shar
 
 > spec: .odm/spec/deployment-modes/brief.md, .odm/spec/migration-format/brief.md
 
-Progress: 2 / 24 work packages complete
+Progress: 3 / 24 work packages complete
 
 ---
 
@@ -44,13 +44,13 @@ Progress: 2 / 24 work packages complete
 ## 10.3 — Standalone Binary Configuration
 > spec: .odm/spec/deployment-modes/brief.md
 
-- [ ] Implement platform-specific config file discovery for standalone mode
+- [x] Implement platform-specific config file discovery for standalone mode
   <!-- file: apps/core/src/config.rs -->
   <!-- purpose: Implement config file discovery for standalone binary mode: (1) check LIFE_ENGINE_CONFIG env var first, (2) check command-line --config argument, (3) check platform-specific default locations: Linux: $XDG_CONFIG_HOME/life-engine/config.toml or ~/.config/life-engine/config.toml, macOS: ~/Library/Application Support/life-engine/config.toml, Windows: %APPDATA%\life-engine\config.toml. (4) If no config found, create the default config directory and write a starter config.toml with commented-out sections explaining each option. Log the resolved config path at info level. Add support for --config CLI argument using clap or manual arg parsing. -->
   <!-- requirements: 2.1, 2.5, 6.1, 6.2, 7.1, 7.2, 7.3 -->
   <!-- leverage: existing apps/core/src/config.rs -->
 
-- [ ] Add startup logging for deployment mode and active configuration
+- [x] Add startup logging for deployment mode and active configuration
   <!-- file: apps/core/src/main.rs -->
   <!-- purpose: At the start of the startup sequence (after config loading), log a summary: deployment mode (bundled/standalone/docker — detected from environment), bind address and port for each active transport, TLS status (enabled/disabled), auth provider, database path, plugins directory, workflows directory, number of loaded plugins, and any warnings (e.g., "No transports configured", "Running without TLS on non-localhost address"). -->
   <!-- requirements: 6.3 -->

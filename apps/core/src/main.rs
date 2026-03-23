@@ -143,12 +143,35 @@ async fn main() -> anyhow::Result<()> {
         "Step 1/{TOTAL_STEPS}: Load configuration... done"
     );
     tracing::info!("Life Engine Core starting");
+
+    // Log deployment mode and active configuration summary.
+    let deployment_mode = detect_deployment_mode();
+    let tls_status = if config.network.tls.enabled { "enabled" } else { "disabled" };
+    let plugins_dir = if config.plugins.paths.is_empty() {
+        "plugins".to_string()
+    } else {
+        config.plugins.paths.join(", ")
+    };
+    let workflows_dir = "workflows";
     tracing::info!(
-        host = %config.core.host,
-        port = %config.core.port,
+        deployment_mode = %deployment_mode,
+        bind = %format!("{}:{}", config.core.host, config.core.port),
+        tls = %tls_status,
+        auth_provider = %config.auth.provider,
+        database_path = %config.core.data_dir,
+        plugins_dir = %plugins_dir,
+        workflows_dir = %workflows_dir,
         log_level = %config.core.log_level,
-        "configuration loaded"
+        "startup configuration summary"
     );
+
+    // Warn about potentially insecure configurations.
+    if !config.network.tls.enabled && config.core.host != "127.0.0.1" && config.core.host != "localhost" && config.core.host != "::1" {
+        tracing::warn!(
+            host = %config.core.host,
+            "running without TLS on non-localhost address"
+        );
+    }
 
     // ── Step 3/10: Derive database key ───────────────────────────────
     let step_start = Instant::now();
@@ -839,6 +862,29 @@ async fn dynamic_cors_middleware(
 ///
 /// Returns a [`LogReloadHandle`] that can be used to hot-reload the
 /// EnvFilter (log level) at runtime without restarting the server.
+/// Detect the deployment mode from the runtime environment.
+///
+/// Returns one of:
+/// - `"docker"` — running inside a container (`/.dockerenv` exists or `container` env var set)
+/// - `"bundled"` — running as a Tauri sidecar (`TAURI_ENV` or `TAURI` env var set)
+/// - `"standalone"` — default for direct binary execution
+fn detect_deployment_mode() -> &'static str {
+    // Docker: check for /.dockerenv or container runtime env vars.
+    if std::path::Path::new("/.dockerenv").exists()
+        || std::env::var("container").is_ok()
+        || std::env::var("DOCKER_CONTAINER").is_ok()
+    {
+        return "docker";
+    }
+
+    // Tauri sidecar: check for Tauri-specific env vars.
+    if std::env::var("TAURI_ENV").is_ok() || std::env::var("TAURI").is_ok() {
+        return "bundled";
+    }
+
+    "standalone"
+}
+
 fn init_logging(config: &CoreConfig) -> LogReloadHandle {
     use tracing_subscriber::prelude::*;
 

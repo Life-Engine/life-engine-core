@@ -950,12 +950,17 @@ pub mod startup {
     ///
     /// - Linux: `$XDG_CONFIG_HOME/life-engine/config.toml` or `~/.config/life-engine/config.toml`
     /// - macOS: `~/Library/Application Support/life-engine/config.toml`
+    /// - Windows: `%APPDATA%\life-engine\config.toml`
     pub const DEFAULT_CONFIG_PATH: &str = {
         #[cfg(target_os = "macos")]
         {
             "~/Library/Application Support/life-engine/config.toml"
         }
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(target_os = "windows")]
+        {
+            "%APPDATA%\\life-engine\\config.toml"
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
         {
             "~/.config/life-engine/config.toml"
         }
@@ -1047,23 +1052,70 @@ pub mod startup {
         }
     }
 
+    /// Resolve the platform-specific default config directory at runtime.
+    ///
+    /// Uses the `directories` crate for correct OS integration:
+    /// - Linux: `$XDG_CONFIG_HOME/life-engine` or `~/.config/life-engine`
+    /// - macOS: `~/Library/Application Support/life-engine`
+    /// - Windows: `%APPDATA%\life-engine`
+    pub fn default_config_dir() -> Option<PathBuf> {
+        directories::BaseDirs::new().map(|dirs| dirs.config_dir().join("life-engine"))
+    }
+
+    /// Resolve the platform-specific default config file path at runtime.
+    pub fn default_config_file() -> Option<PathBuf> {
+        default_config_dir().map(|dir| dir.join("config.toml"))
+    }
+
+    /// Starter config.toml content with commented-out sections explaining each option.
+    const STARTER_CONFIG: &str = r#"# Life Engine Core Configuration
+# See documentation for all available options.
+
+# [storage]
+# path = "data/core.db"
+# passphrase = ""  # Or set LIFE_ENGINE_STORAGE_PASSPHRASE env var
+
+# [auth]
+# provider = "local-token"  # Options: local-token, oidc, webauthn
+
+# [logging]
+# level = "info"            # Options: trace, debug, info, warn, error
+# format = "json"           # Options: json, pretty
+
+# [plugins]
+# path = "plugins"
+
+# [workflows]
+# path = "workflows"
+
+# [transports.rest]
+# port = 3000
+"#;
+
     /// Load configuration from a TOML file with `LIFE_ENGINE_*` environment
     /// variable overrides.
     ///
-    /// Resolution order (highest priority wins): **env vars > TOML file > defaults**.
+    /// Resolution order for config file discovery (first match wins):
+    /// 1. Explicit `path` argument (from `--config` CLI flag)
+    /// 2. `LIFE_ENGINE_CONFIG` environment variable
+    /// 3. Platform-specific default location (see [`default_config_file`])
     ///
-    /// If `path` is `None`, the function checks the `LIFE_ENGINE_CONFIG` env var,
-    /// then falls back to [`DEFAULT_CONFIG_PATH`]. A missing config file is not
-    /// an error — a default `CoreConfig` is returned instead.
+    /// Resolution order for values (highest priority wins):
+    /// **env vars > TOML file > defaults**.
+    ///
+    /// If no config file exists at the resolved path, a starter config is
+    /// created with commented-out sections explaining each option.
     pub fn load_config(path: Option<&str>) -> Result<CoreConfig, ConfigError> {
         // 1. Determine config file path.
         let config_path = match path {
-            Some(p) => PathBuf::from(p),
-            None => match std::env::var("LIFE_ENGINE_CONFIG") {
-                Ok(p) => PathBuf::from(p),
-                Err(_) => expand_tilde(DEFAULT_CONFIG_PATH),
+            Some(p) if !p.is_empty() => PathBuf::from(p),
+            _ => match std::env::var("LIFE_ENGINE_CONFIG") {
+                Ok(p) if !p.is_empty() => PathBuf::from(p),
+                _ => default_config_file().unwrap_or_else(|| expand_tilde(DEFAULT_CONFIG_PATH)),
             },
         };
+
+        tracing::info!(path = %config_path.display(), "resolved config file path");
 
         // 2. Read and parse config.toml (or start with defaults).
         let mut raw_table = match std::fs::read_to_string(&config_path) {
@@ -1082,8 +1134,30 @@ pub mod startup {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 tracing::info!(
                     path = %config_path.display(),
-                    "config file not found, using defaults"
+                    "config file not found, creating starter config"
                 );
+                // Create the config directory and write a starter config.
+                if let Some(parent) = config_path.parent() {
+                    if let Err(e) = std::fs::create_dir_all(parent) {
+                        tracing::warn!(
+                            path = %parent.display(),
+                            error = %e,
+                            "failed to create config directory"
+                        );
+                    }
+                }
+                if let Err(e) = std::fs::write(&config_path, STARTER_CONFIG) {
+                    tracing::warn!(
+                        path = %config_path.display(),
+                        error = %e,
+                        "failed to write starter config"
+                    );
+                } else {
+                    tracing::info!(
+                        path = %config_path.display(),
+                        "wrote starter config.toml"
+                    );
+                }
                 toml::map::Map::new()
             }
             Err(e) => {
@@ -1286,11 +1360,18 @@ pub mod startup {
         }
     }
 
-    /// Expand a leading `~` in a path to the user's home directory.
+    /// Expand a leading `~` in a path to the user's home directory,
+    /// or `%APPDATA%` on Windows.
     fn expand_tilde(path: &str) -> PathBuf {
         if let Some(rest) = path.strip_prefix("~/") {
             if let Some(home) = dirs_home() {
                 return home.join(rest);
+            }
+        }
+        #[cfg(target_os = "windows")]
+        if let Some(rest) = path.strip_prefix("%APPDATA%\\") {
+            if let Ok(appdata) = std::env::var("APPDATA") {
+                return PathBuf::from(appdata).join(rest);
             }
         }
         PathBuf::from(path)

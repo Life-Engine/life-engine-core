@@ -15,7 +15,7 @@ This phase depends on Phase 3 (traits, capabilities), Phase 4 (plugin SDK), Phas
 
 > spec: .odm/spec/plugin-system/brief.md, .odm/spec/capability-enforcement/brief.md
 
-Progress: 3 / 22 work packages complete
+Progress: 4 / 22 work packages complete
 
 ---
 
@@ -75,14 +75,14 @@ Progress: 3 / 22 work packages complete
 ## 8.4 — Extism Runtime Setup
 > spec: .odm/spec/plugin-system/brief.md
 
-- [ ] Add extism dependency and create runtime wrapper
+- [x] Add extism dependency and create runtime wrapper
   <!-- file: packages/plugin-system/Cargo.toml -->
   <!-- file: packages/plugin-system/src/runtime.rs -->
   <!-- purpose: Add extism = "1" dependency to Cargo.toml. Define ExtismRuntime struct. Implement pub fn load_plugin(wasm_path: &Path, host_functions: Vec<HostFunction>) -> Result<PluginInstance, PluginError> that: (1) reads the WASM binary from disk, (2) creates an Extism Manifest with the WASM data, (3) configures memory limits (default 256 MB per plugin), (4) configures execution timeout (default 30 seconds per call), (5) registers the provided host functions, (6) creates and returns a PluginInstance wrapping the Extism Plugin. Define PluginInstance struct with methods: call(function_name: &str, input: &[u8]) -> Result<Vec<u8>, PluginError> that invokes a WASM export, id() -> &str returning the manifest's plugin ID. Handle loading errors: corrupt WASM binary, missing exports, memory allocation failures. -->
   <!-- requirements: from plugin-system spec 3.1, 3.2, 3.5 -->
   <!-- leverage: none -->
 
-- [ ] Add runtime loading tests
+- [x] Add runtime loading tests
   <!-- file: packages/plugin-system/src/runtime.rs -->
   <!-- purpose: Test cases: (1) valid WASM binary loads into isolated instance (use a minimal test WASM module), (2) corrupt binary data returns PluginError, (3) WASM module can call registered host functions, (4) execution timeout is enforced — a WASM module that loops forever is terminated after the configured timeout. Note: test WASM modules should be small precompiled binaries stored in test fixtures, or compiled from Rust during test setup. -->
   <!-- requirements: from plugin-system spec 3.1, 3.2, 3.4 -->

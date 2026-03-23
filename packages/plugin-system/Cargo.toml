@@ -15,7 +15,9 @@ tracing = { workspace = true }
 thiserror = { workspace = true }
 toml = { workspace = true }
 semver = { workspace = true }
+extism = { workspace = true }
 
 [dev-dependencies]
+wat = "1"
 tempfile = { workspace = true }
 tokio = { workspace = true }

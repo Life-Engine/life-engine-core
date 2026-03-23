@@ -22,7 +22,7 @@ Progress: 0 / 12 work packages complete
 ## 6.1 — Auth Crate Scaffold
 > spec: .odm/spec/auth-and-pocket-id/brief.md
 
-- [ ] Create the auth crate with standard layout and dependencies
+- [x] Create the auth crate with standard layout and dependencies
   <!-- file: packages/auth/Cargo.toml -->
   <!-- file: packages/auth/src/lib.rs -->
   <!-- purpose: Set up Cargo.toml with name = "life-engine-auth", edition = "2024", dependencies on life-engine-types (workspace), life-engine-traits (workspace), life-engine-crypto (workspace), jsonwebtoken = "9" (JWT validation), reqwest = { version = "0.12", features = ["json"] } (OIDC discovery), ed25519-dalek = "2" (Ed25519 signature verification), serde (workspace), serde_json (workspace), tokio (workspace), tracing (workspace), thiserror (workspace), uuid (workspace), chrono (workspace). Create src/lib.rs with module declarations: mod config, mod error, mod types, mod handlers (containing validate, rate_limit, keys submodules), mod tests. Declare pub use for the public API: AuthProvider trait, AuthConfig, AuthIdentity, AuthError. Verify crate compiles. -->

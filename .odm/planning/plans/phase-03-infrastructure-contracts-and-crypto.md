@@ -81,7 +81,7 @@ Progress: 0 / 10 work packages complete
 > depends: 3.1
 > spec: .odm/spec/capability-enforcement/brief.md
 
-- [ ] Define Capability enum and CapabilityViolation error
+- [x] Define Capability enum and CapabilityViolation error
   <!-- file: packages/traits/src/capability.rs -->
   <!-- purpose: Define Capability enum with six variants: StorageRead, StorageWrite, HttpOutbound, EventsEmit, EventsSubscribe, ConfigRead. Implement Display (lowercase colon-separated: "storage:read", "storage:write", "http:outbound", "events:emit", "events:subscribe", "config:read") and FromStr (parse the display strings back to enum values). Define CapabilityViolation error struct with fields: capability (Capability), plugin_id (String), context (String — what the plugin was trying to do). Implement EngineError for CapabilityViolation: code() returns "CAP_001" for load-time violations and "CAP_002" for runtime violations, severity() returns Severity::Fatal, source_module() returns "capability-enforcement". Implement std::error::Error and Display. Add unit tests for Display/FromStr round-trip and error field correctness. Re-export from lib.rs. -->
   <!-- requirements: from capability-enforcement spec 4.1, 4.2, 4.3, 4.4, 6.1 -->

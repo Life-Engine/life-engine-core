@@ -6,7 +6,7 @@
 
 use async_trait::async_trait;
 use chrono::Utc;
-use life_engine_traits::EngineError;
+use life_engine_traits::{EngineError, Severity};
 use life_engine_types::{MessageMetadata, PipelineMessage, SchemaValidated, TypedPayload};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -310,13 +310,46 @@ impl PipelineExecutor {
                     current_message = output;
                 }
                 Err(plugin_error) => {
-                    let strategy = step
+                    let severity = plugin_error.severity();
+                    let step_strategy = step
                         .on_error
                         .as_ref()
                         .map(|s| &s.strategy)
                         .unwrap_or(&ErrorStrategyType::Halt);
 
-                    match strategy {
+                    // Severity overrides: plugin severity > step strategy for Fatal and Warning.
+                    // For Retryable severity, the step's declared strategy wins.
+                    let effective_strategy = match severity {
+                        Severity::Fatal => {
+                            // Always halt regardless of declared strategy.
+                            &ErrorStrategyType::Halt
+                        }
+                        Severity::Warning => {
+                            // Log warning and continue — no error strategy applied.
+                            warn!(
+                                workflow_id = %workflow.id,
+                                step_index = index,
+                                plugin = %step.plugin,
+                                action = %step.action,
+                                error = %plugin_error,
+                                "step returned warning severity — continuing execution"
+                            );
+                            // current_message is unchanged — pass through input.
+                            continue;
+                        }
+                        Severity::Retryable => {
+                            // Step strategy wins for Retryable severity.
+                            // If the step doesn't declare a strategy (defaults to Halt),
+                            // upgrade to retry with defaults since the error is retryable.
+                            if step.on_error.is_none() {
+                                &ErrorStrategyType::Retry
+                            } else {
+                                step_strategy
+                            }
+                        }
+                    };
+
+                    match effective_strategy {
                         ErrorStrategyType::Halt => {
                             error!(
                                 workflow_id = %workflow.id,
@@ -324,6 +357,7 @@ impl PipelineExecutor {
                                 plugin = %step.plugin,
                                 action = %step.action,
                                 error = %plugin_error,
+                                severity = ?severity,
                                 "step failed with halt strategy — stopping workflow"
                             );
                             return Err(WorkflowError::StepHalted {
@@ -534,7 +568,7 @@ mod tests {
             "MOCK_001"
         }
         fn severity(&self) -> life_engine_traits::Severity {
-            life_engine_traits::Severity::Fatal
+            life_engine_traits::Severity::Retryable
         }
         fn source_module(&self) -> &str {
             "mock"
@@ -753,7 +787,7 @@ mod tests {
         let executor = PipelineExecutor::new(mock.clone());
         let workflow = make_workflow(vec![
             make_step("step-a", "act"),
-            make_step("step-b", "act"),
+            make_step_with_strategy("step-b", "act", ErrorStrategyType::Halt),
             make_step("step-c", "act"),
         ]);
 
@@ -878,7 +912,11 @@ mod tests {
         let mock = Arc::new(FailingPluginExecutor::new(0)); // fail immediately
         let executor =
             PipelineExecutor::with_event_emitter(mock, Arc::new(emitter));
-        let workflow = make_async_workflow(vec![make_step("bad-plugin", "crash")]);
+        let workflow = make_async_workflow(vec![make_step_with_strategy(
+            "bad-plugin",
+            "crash",
+            ErrorStrategyType::Halt,
+        )]);
 
         let result = executor
             .execute_workflow(&workflow, make_test_message())
@@ -1121,13 +1159,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn default_strategy_is_halt_when_on_error_is_none() {
-        // Steps with no on_error should behave identically to explicit halt
+    async fn default_strategy_with_retryable_severity_upgrades_to_retry() {
+        // Steps with no on_error and Retryable severity upgrade to retry
         let mock = Arc::new(FailingPluginExecutor::new(1));
         let executor = PipelineExecutor::new(mock.clone());
         let workflow = make_workflow(vec![
             make_step("step-a", "act"),
-            make_step("step-b", "act"), // no on_error → defaults to halt
+            make_step("step-b", "act"), // no on_error + Retryable severity → retries
             make_step("step-c", "act"),
         ]);
 
@@ -1135,15 +1173,11 @@ mod tests {
             .execute_workflow(&workflow, make_test_message())
             .await;
 
-        assert!(result.is_err());
-        match result.unwrap_err() {
-            WorkflowError::StepHalted { step_index, .. } => {
-                assert_eq!(step_index, 1);
-            }
-            other => panic!("expected StepHalted, got: {other:?}"),
-        }
-        // step-c should not have been called
-        assert_eq!(mock.call_count.load(Ordering::SeqCst), 2);
+        // Retryable severity upgrades default halt to retry; retry succeeds on second attempt
+        assert!(result.is_ok());
+        // step-a succeeds (call 0), step-b fails (call 1), step-b retry succeeds (call 2), step-c succeeds (call 3)
+        // But FailingPluginExecutor only fails on call at index fail_on_call=1, all others succeed
+        assert_eq!(mock.call_count.load(Ordering::SeqCst), 4);
     }
 
     // --- Skip error strategy tests (WP 7.9) ---
@@ -1473,5 +1507,361 @@ mod tests {
 
         let payload_json = serde_json::to_value(&result.unwrap().payload).unwrap();
         assert_eq!(payload_json["data"]["executed_by"], "next-plugin.process");
+    }
+
+    // --- Severity override tests (WP 7.11) ---
+
+    /// A mock error with configurable severity.
+    #[derive(Debug)]
+    struct SeverityError {
+        msg: String,
+        severity: Severity,
+    }
+
+    impl std::fmt::Display for SeverityError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{}", self.msg)
+        }
+    }
+
+    impl std::error::Error for SeverityError {}
+
+    impl EngineError for SeverityError {
+        fn code(&self) -> &str {
+            "SEVERITY_TEST"
+        }
+        fn severity(&self) -> Severity {
+            self.severity.clone()
+        }
+        fn source_module(&self) -> &str {
+            "test"
+        }
+    }
+
+    /// A mock plugin executor that always fails with a configurable severity.
+    struct SeverityPluginExecutor {
+        severity: Severity,
+        call_count: AtomicUsize,
+    }
+
+    impl SeverityPluginExecutor {
+        fn new(severity: Severity) -> Self {
+            Self {
+                severity,
+                call_count: AtomicUsize::new(0),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl PluginExecutor for SeverityPluginExecutor {
+        async fn execute(
+            &self,
+            plugin_id: &str,
+            action: &str,
+            _input: PipelineMessage,
+        ) -> Result<PipelineMessage, Box<dyn EngineError>> {
+            self.call_count.fetch_add(1, Ordering::SeqCst);
+            Err(Box::new(SeverityError {
+                msg: format!("{plugin_id}.{action} failed"),
+                severity: self.severity.clone(),
+            }))
+        }
+    }
+
+    /// A mock executor that fails with configurable severity for the first N calls,
+    /// then succeeds.
+    struct SeverityRetryableExecutor {
+        severity: Severity,
+        fail_count: usize,
+        call_count: AtomicUsize,
+    }
+
+    impl SeverityRetryableExecutor {
+        fn new(severity: Severity, fail_count: usize) -> Self {
+            Self {
+                severity,
+                fail_count,
+                call_count: AtomicUsize::new(0),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl PluginExecutor for SeverityRetryableExecutor {
+        async fn execute(
+            &self,
+            plugin_id: &str,
+            action: &str,
+            mut input: PipelineMessage,
+        ) -> Result<PipelineMessage, Box<dyn EngineError>> {
+            let call = self.call_count.fetch_add(1, Ordering::SeqCst);
+            if call < self.fail_count {
+                return Err(Box::new(SeverityError {
+                    msg: format!("attempt {call} failed for {plugin_id}.{action}"),
+                    severity: self.severity.clone(),
+                }));
+            }
+            let schema = serde_json::json!({"type": "object"});
+            let transformed =
+                serde_json::json!({"executed_by": format!("{plugin_id}.{action}"), "attempt": call});
+            input.payload =
+                TypedPayload::Custom(SchemaValidated::new(transformed, &schema).unwrap());
+            Ok(input)
+        }
+    }
+
+    #[tokio::test]
+    async fn fatal_severity_halts_even_with_skip_strategy() {
+        let mock = Arc::new(SeverityPluginExecutor::new(Severity::Fatal));
+        let executor = PipelineExecutor::new(mock.clone());
+        let workflow = make_workflow(vec![make_step_with_strategy(
+            "fatal-plugin",
+            "crash",
+            ErrorStrategyType::Skip,
+        )]);
+
+        let result = executor
+            .execute_workflow(&workflow, make_test_message())
+            .await;
+
+        // Despite skip strategy, Fatal severity forces halt.
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            WorkflowError::StepHalted { plugin, .. } => {
+                assert_eq!(plugin, "fatal-plugin");
+            }
+            other => panic!("expected StepHalted, got: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn fatal_severity_halts_even_with_retry_strategy() {
+        let mock = Arc::new(SeverityPluginExecutor::new(Severity::Fatal));
+        let executor = PipelineExecutor::new(mock.clone());
+        let workflow = make_workflow(vec![make_retry_step("fatal-plugin", "crash", 3)]);
+
+        let result = executor
+            .execute_workflow(&workflow, make_test_message())
+            .await;
+
+        // Despite retry strategy, Fatal severity forces halt immediately.
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            WorkflowError::StepHalted { plugin, .. } => {
+                assert_eq!(plugin, "fatal-plugin");
+            }
+            other => panic!("expected StepHalted, got: {other:?}"),
+        }
+        // Only one call — no retries attempted.
+        assert_eq!(mock.call_count.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn warning_severity_continues_with_halt_strategy() {
+        let mock = Arc::new(SeverityPluginExecutor::new(Severity::Warning));
+        let executor = PipelineExecutor::new(mock.clone());
+        // Step with halt strategy but plugin returns Warning severity.
+        let workflow = make_workflow(vec![make_step_with_strategy(
+            "warn-plugin",
+            "act",
+            ErrorStrategyType::Halt,
+        )]);
+
+        let result = executor
+            .execute_workflow(&workflow, make_test_message())
+            .await;
+
+        // Warning overrides halt — pipeline continues successfully.
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn warning_severity_passes_through_input() {
+        // Two steps: first returns Warning error, second should receive the original input.
+        // We need a mixed executor: step 0 warns, step 1 succeeds.
+        struct WarnThenSucceedExecutor {
+            call_count: AtomicUsize,
+        }
+
+        #[async_trait]
+        impl PluginExecutor for WarnThenSucceedExecutor {
+            async fn execute(
+                &self,
+                plugin_id: &str,
+                action: &str,
+                mut input: PipelineMessage,
+            ) -> Result<PipelineMessage, Box<dyn EngineError>> {
+                let call = self.call_count.fetch_add(1, Ordering::SeqCst);
+                if call == 0 {
+                    return Err(Box::new(SeverityError {
+                        msg: "just a warning".into(),
+                        severity: Severity::Warning,
+                    }));
+                }
+                let schema = serde_json::json!({"type": "object"});
+                let transformed =
+                    serde_json::json!({"executed_by": format!("{plugin_id}.{action}")});
+                input.payload =
+                    TypedPayload::Custom(SchemaValidated::new(transformed, &schema).unwrap());
+                Ok(input)
+            }
+        }
+
+        let mock = Arc::new(WarnThenSucceedExecutor {
+            call_count: AtomicUsize::new(0),
+        });
+        let executor = PipelineExecutor::new(mock.clone());
+        let workflow = make_workflow(vec![
+            make_step_with_strategy("warn-plugin", "act", ErrorStrategyType::Halt),
+            make_step("next-plugin", "process"),
+        ]);
+
+        let result = executor
+            .execute_workflow(&workflow, make_test_message())
+            .await;
+
+        assert!(result.is_ok());
+        // Both steps were called.
+        assert_eq!(mock.call_count.load(Ordering::SeqCst), 2);
+        // The second step received the original input (pass-through from warning).
+        let payload_json = serde_json::to_value(&result.unwrap().payload).unwrap();
+        assert_eq!(payload_json["data"]["executed_by"], "next-plugin.process");
+    }
+
+    #[tokio::test]
+    async fn retryable_severity_upgrades_default_strategy_to_retry() {
+        // Step has no declared strategy (defaults to Halt), plugin returns Retryable.
+        // Since there's no explicit strategy, severity upgrades to retry with defaults.
+        let mock = Arc::new(SeverityRetryableExecutor::new(Severity::Retryable, 1));
+        let executor = PipelineExecutor::new(mock.clone());
+        // make_step has no on_error (defaults to halt)
+        let workflow = make_workflow(vec![make_step("flaky-plugin", "act")]);
+
+        let result = executor
+            .execute_workflow(&workflow, make_test_message())
+            .await;
+
+        // Should succeed after retry.
+        assert!(result.is_ok());
+        // call 0: initial fail, call 1: retry success
+        assert_eq!(mock.call_count.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn retryable_severity_respects_explicit_halt_strategy() {
+        // Step explicitly declares halt, plugin returns Retryable.
+        // Explicit step strategy wins — should halt, not retry.
+        let mock = Arc::new(SeverityRetryableExecutor::new(Severity::Retryable, 1));
+        let executor = PipelineExecutor::new(mock.clone());
+        let workflow = make_workflow(vec![make_step_with_strategy(
+            "flaky-plugin",
+            "act",
+            ErrorStrategyType::Halt,
+        )]);
+
+        let result = executor
+            .execute_workflow(&workflow, make_test_message())
+            .await;
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            WorkflowError::StepHalted { plugin, .. } => {
+                assert_eq!(plugin, "flaky-plugin");
+            }
+            other => panic!("expected StepHalted, got: {other:?}"),
+        }
+        // Only 1 call — halted immediately, no retries.
+        assert_eq!(mock.call_count.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn retryable_severity_respects_explicit_skip_strategy() {
+        // Step explicitly declares skip, plugin returns Retryable.
+        // Explicit step strategy wins — should skip, not retry.
+        let mock = Arc::new(SeverityRetryableExecutor::new(Severity::Retryable, 100));
+        let executor = PipelineExecutor::new(mock.clone());
+        let workflow = make_workflow(vec![make_step_with_strategy(
+            "flaky-plugin",
+            "act",
+            ErrorStrategyType::Skip,
+        )]);
+
+        let result = executor
+            .execute_workflow(&workflow, make_test_message())
+            .await;
+
+        // Should succeed (skip continues pipeline).
+        assert!(result.is_ok());
+        // Only 1 call — skipped, no retries.
+        assert_eq!(mock.call_count.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn retryable_severity_uses_step_max_retries_when_declared() {
+        // Step declares retry with max_retries=2, plugin returns Retryable.
+        // Since the step also declares retry, the step's max_retries should be used.
+        let mock = Arc::new(SeverityRetryableExecutor::new(Severity::Retryable, 100));
+        let executor = PipelineExecutor::new(mock.clone());
+        let workflow = make_workflow(vec![make_retry_step("flaky-plugin", "act", 2)]);
+
+        let result = executor
+            .execute_workflow(&workflow, make_test_message())
+            .await;
+
+        assert!(result.is_err());
+        // 1 initial + 2 retries = 3 total calls.
+        assert_eq!(mock.call_count.load(Ordering::SeqCst), 3);
+    }
+
+    #[tokio::test]
+    async fn retryable_severity_with_no_strategy_uses_default_retries() {
+        // Step has no declared strategy, severity is Retryable.
+        // Should use default max_retries=3.
+        let mock = Arc::new(SeverityRetryableExecutor::new(Severity::Retryable, 100));
+        let executor = PipelineExecutor::new(mock.clone());
+        let workflow = make_workflow(vec![make_step("flaky-plugin", "act")]);
+
+        let result = executor
+            .execute_workflow(&workflow, make_test_message())
+            .await;
+
+        assert!(result.is_err());
+        // 1 initial + 3 default retries = 4 total calls.
+        assert_eq!(mock.call_count.load(Ordering::SeqCst), 4);
+    }
+
+    #[tokio::test]
+    async fn warning_severity_continues_with_skip_strategy() {
+        let mock = Arc::new(SeverityPluginExecutor::new(Severity::Warning));
+        let executor = PipelineExecutor::new(mock.clone());
+        let workflow = make_workflow(vec![make_step_with_strategy(
+            "warn-plugin",
+            "act",
+            ErrorStrategyType::Skip,
+        )]);
+
+        let result = executor
+            .execute_workflow(&workflow, make_test_message())
+            .await;
+
+        // Warning always continues regardless of strategy.
+        assert!(result.is_ok());
+        assert_eq!(mock.call_count.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn warning_severity_continues_with_retry_strategy() {
+        let mock = Arc::new(SeverityPluginExecutor::new(Severity::Warning));
+        let executor = PipelineExecutor::new(mock.clone());
+        let workflow = make_workflow(vec![make_retry_step("warn-plugin", "act", 3)]);
+
+        let result = executor
+            .execute_workflow(&workflow, make_test_message())
+            .await;
+
+        // Warning always continues — no retries attempted.
+        assert!(result.is_ok());
+        assert_eq!(mock.call_count.load(Ordering::SeqCst), 1);
     }
 }

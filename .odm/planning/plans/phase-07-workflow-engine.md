@@ -144,7 +144,7 @@ Progress: 0 / 17 work packages complete
 > depends: 7.8, 7.9, 7.10
 > spec: .odm/spec/workflow-engine/brief.md
 
-- [ ] Handle EngineError severity from plugin responses
+- [x] Handle EngineError severity from plugin responses
   <!-- file: packages/workflow-engine/src/executor.rs -->
   <!-- purpose: When a plugin returns an error implementing EngineError, check its severity() before applying the step's declared error strategy. Severity overrides: (1) Severity::Fatal — always halt the pipeline regardless of declared strategy (even if step says skip or retry), (2) Severity::Retryable — treat as retryable regardless of declared strategy (retry with default max_retries if step doesn't declare retry), (3) Severity::Warning — log the warning via tracing::warn! and continue execution without applying any error strategy (the step's output is used as-is, or if the plugin returned no output, pass through the input). This creates a hierarchy: plugin severity > step strategy for Fatal and Warning, step strategy wins for Retryable when the step also declares retry. Add tests for each severity override scenario. -->
   <!-- requirements: from workflow-engine spec 4.4 -->

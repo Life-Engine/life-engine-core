@@ -22,13 +22,13 @@ Progress: 0 / 16 work packages complete
 ## 5.1 — SQLite Schema DDL
 > spec: .odm/spec/data-layer/brief.md
 
-- [ ] Create plugin_data table DDL with composite index
+- [x] Create plugin_data table DDL with composite index
   <!-- file: packages/storage-sqlite/src/schema.rs -->
   <!-- purpose: Define CREATE TABLE plugin_data with columns: id (TEXT PRIMARY KEY — UUID as text), plugin_id (TEXT NOT NULL — owning plugin identifier), collection (TEXT NOT NULL — collection name like "events", "tasks", or private collection name), data (TEXT NOT NULL — JSON-serialized record), version (INTEGER NOT NULL DEFAULT 1 — schema version for migrations and optimistic concurrency), created_at (TEXT NOT NULL — ISO 8601 timestamp), updated_at (TEXT NOT NULL — ISO 8601 timestamp). Create composite index idx_plugin_collection ON plugin_data(plugin_id, collection) for efficient per-plugin queries. Create index idx_collection ON plugin_data(collection) for cross-plugin canonical collection queries. Define the DDL as a const &str for use during database initialization. -->
   <!-- requirements: 2.1 -->
   <!-- leverage: none -->
 
-- [ ] Create audit_log table DDL with timestamp index
+- [x] Create audit_log table DDL with timestamp index
   <!-- file: packages/storage-sqlite/src/schema.rs -->
   <!-- purpose: Define CREATE TABLE audit_log with columns: id (TEXT PRIMARY KEY — UUID), timestamp (TEXT NOT NULL — ISO 8601), event_type (TEXT NOT NULL — one of: auth_success, auth_failure, credential_access, credential_modify, plugin_load, plugin_error, permission_change, data_export), plugin_id (TEXT — nullable, only set for plugin-related events), details (TEXT NOT NULL — JSON-serialized event details), created_at (TEXT NOT NULL). Create index idx_audit_timestamp ON audit_log(timestamp) for time-range queries and retention cleanup. Define daily rotation constant: 90 days retention. -->
   <!-- requirements: 7.1 -->

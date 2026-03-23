@@ -3824,6 +3824,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "life-engine-auth"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "jsonwebtoken",
+ "life-engine-crypto",
+ "life-engine-traits",
+ "life-engine-types",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "life-engine-core"
 version = "0.1.0"
 dependencies = [
@@ -3887,6 +3902,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "life-engine-crypto"
+version = "0.1.0"
+dependencies = [
+ "aes-gcm",
+ "argon2",
+ "hmac",
+ "life-engine-types",
+ "rand 0.8.5",
+ "sha2",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "life-engine-plugin-sdk"
 version = "0.1.0"
 dependencies = [
@@ -3899,6 +3927,20 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "uuid",
+]
+
+[[package]]
+name = "life-engine-storage-sqlite"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "life-engine-crypto",
+ "life-engine-traits",
+ "life-engine-types",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -3928,18 +3970,119 @@ dependencies = [
 ]
 
 [[package]]
+name = "life-engine-traits"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "life-engine-types",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "toml 0.8.23",
+]
+
+[[package]]
+name = "life-engine-transport-caldav"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "axum",
+ "dav-utils",
+ "life-engine-traits",
+ "life-engine-types",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
+name = "life-engine-transport-carddav"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "axum",
+ "dav-utils",
+ "life-engine-traits",
+ "life-engine-types",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
+name = "life-engine-transport-graphql"
+version = "0.1.0"
+dependencies = [
+ "async-graphql",
+ "async-graphql-axum",
+ "async-trait",
+ "axum",
+ "life-engine-traits",
+ "life-engine-types",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
+name = "life-engine-transport-rest"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "axum",
+ "life-engine-traits",
+ "life-engine-types",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
+name = "life-engine-transport-webhook"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "axum",
+ "life-engine-traits",
+ "life-engine-types",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
 name = "life-engine-types"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
  "hex",
+ "jsonschema",
  "mime_guess",
  "serde",
  "serde_json",
  "sha2",
  "tempfile",
  "uuid",
+]
+
+[[package]]
+name = "life-engine-workflow-engine"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "life-engine-traits",
+ "life-engine-types",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "thiserror 2.0.18",
+ "tokio",
 ]
 
 [[package]]

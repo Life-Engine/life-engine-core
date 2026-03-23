@@ -204,13 +204,13 @@ pub struct CalendarEvent {
 impl CalendarEvent {
     /// Validate that the event's time range is consistent (start before end).
     pub fn validate_time_range(&self) -> Result<(), String> {
-        if let Some(end) = self.end {
-            if self.start >= end {
-                return Err(format!(
-                    "event start ({}) must be before end ({})",
-                    self.start, end
-                ));
-            }
+        if let Some(end) = self.end
+            && self.start >= end
+        {
+            return Err(format!(
+                "event start ({}) must be before end ({})",
+                self.start, end
+            ));
         }
         Ok(())
     }

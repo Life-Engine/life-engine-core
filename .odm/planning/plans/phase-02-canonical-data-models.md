@@ -101,19 +101,19 @@ Progress: 0 / 11 work packages complete
 ## 2.6 — PipelineMessage Envelope
 > spec: .odm/spec/canonical-data-models/brief.md
 
-- [ ] Define PipelineMessage, MessageMetadata, TypedPayload, and CdmType
+- [x] Define PipelineMessage, MessageMetadata, TypedPayload, and CdmType
   <!-- file: packages/types/src/pipeline.rs -->
   <!-- purpose: Define PipelineMessage struct with two fields: metadata (MessageMetadata) and payload (TypedPayload). MessageMetadata struct: correlation_id (Uuid — unique per request, propagated through all steps), source (String — trigger type and value, e.g., "endpoint:POST /email/sync"), timestamp (DateTime<Utc>), auth_context (Option<serde_json::Value> — authenticated identity from auth module). TypedPayload enum: Cdm(CdmType) for canonical data, Custom(SchemaValidated<serde_json::Value>) for plugin-defined types. CdmType enum with one variant per canonical collection: Event(CalendarEvent), Task(Task), Contact(Contact), Note(Note), Email(Email), File(FileMetadata), Credential(Credential), plus EventBatch(Vec<CalendarEvent>), TaskBatch(Vec<Task>), ContactBatch(Vec<Contact>), NoteBatch(Vec<Note>), EmailBatch(Vec<Email>), FileBatch(Vec<FileMetadata>), CredentialBatch(Vec<Credential>) for batch operations. All types derive Serialize, Deserialize, Debug, Clone. -->
   <!-- requirements: 2.1, 2.2, 2.3 -->
   <!-- leverage: existing packages/types/src/lib.rs -->
 
-- [ ] Define SchemaValidated wrapper type for custom payloads
+- [x] Define SchemaValidated wrapper type for custom payloads
   <!-- file: packages/types/src/pipeline.rs -->
   <!-- purpose: Define SchemaValidated<T> as a newtype wrapper (pub struct SchemaValidated<T>(T)) that guarantees the inner value has been validated against a JSON Schema. Implement Deref<Target = T> for transparent access. Implement SchemaValidated::new(value: T, schema: &serde_json::Value) -> Result<Self> that validates the value against the provided JSON Schema using the jsonschema crate before wrapping. Implement Serialize/Deserialize that delegate to the inner type. This ensures Custom payloads are always validated before entering the pipeline. -->
   <!-- requirements: 2.3 -->
   <!-- leverage: none -->
 
-- [ ] Re-export all types from packages/types lib.rs
+- [x] Re-export all types from packages/types lib.rs
   <!-- file: packages/types/src/lib.rs -->
   <!-- purpose: Add pub mod pipeline; and re-export PipelineMessage, MessageMetadata, TypedPayload, CdmType, SchemaValidated from the pipeline module. Re-export all 7 canonical types (CalendarEvent, Task, Contact, Note, Email, FileMetadata, Credential) and their supporting types (enums, nested structs) as a flat public API. Ensure the lib.rs public API is comprehensive — downstream crates should only need use life_engine_types::*. -->
   <!-- requirements: 2.1, 2.2 -->

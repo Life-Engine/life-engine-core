@@ -11,6 +11,7 @@ pub mod events;
 pub mod file_helpers;
 pub mod files;
 pub mod notes;
+pub mod pipeline;
 pub mod tasks;
 
 // Re-export all canonical types at crate root for convenience.
@@ -25,6 +26,10 @@ pub use events::{
 };
 pub use files::FileMetadata;
 pub use notes::{Note, NoteFormat};
+pub use pipeline::{
+    CdmType, MessageMetadata, PipelineMessage, SchemaValidated, SchemaValidationError,
+    TypedPayload,
+};
 pub use tasks::{Task, TaskPriority, TaskStatus};
 
 #[cfg(test)]

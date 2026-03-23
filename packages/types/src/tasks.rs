@@ -5,35 +5,25 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// Task priority levels.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum TaskPriority {
     Low,
+    #[default]
     Medium,
     High,
     Urgent,
 }
 
-impl Default for TaskPriority {
-    fn default() -> Self {
-        Self::Medium
-    }
-}
-
 /// Task status values.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum TaskStatus {
+    #[default]
     Pending,
     InProgress,
     Completed,
     Cancelled,
-}
-
-impl Default for TaskStatus {
-    fn default() -> Self {
-        Self::Pending
-    }
 }
 
 /// A task in the Life Engine canonical data model.

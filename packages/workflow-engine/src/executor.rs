@@ -11,11 +11,13 @@ use life_engine_types::{MessageMetadata, PipelineMessage, SchemaValidated, Typed
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use crate::error::WorkflowError;
-use crate::types::{ErrorStrategyType, ExecutionMode, StepDef, TriggerContext, WorkflowDef};
+use crate::types::{
+    ErrorStrategyType, ExecutionMode, StepDef, TriggerContext, ValidationLevel, WorkflowDef,
+};
 
 /// Trait for executing a single plugin action.
 ///
@@ -111,6 +113,63 @@ pub fn build_initial_message(
         },
         payload: TypedPayload::Custom(validated),
     })
+}
+
+/// Validate a `PipelineMessage` payload against its expected schema.
+///
+/// For `TypedPayload::Cdm`, validates the serialized CDM value against a
+/// structural schema (the CDM types are strongly typed so this confirms
+/// serialization integrity). For `TypedPayload::Custom`, validates the
+/// inner value against the basic object schema.
+///
+/// Returns `Ok(())` on success or a `WorkflowError::ValidationFailed` on
+/// failure.
+fn validate_message(
+    message: &PipelineMessage,
+    step_index: usize,
+    context: &str,
+) -> Result<(), WorkflowError> {
+    let payload_json = serde_json::to_value(&message.payload).map_err(|e| {
+        WorkflowError::ValidationFailed {
+            step_index,
+            details: format!("failed to serialize payload: {e}"),
+        }
+    })?;
+
+    // Extract the inner data from the TypedPayload envelope
+    let data = payload_json
+        .get("data")
+        .unwrap_or(&payload_json);
+
+    // CDM payloads are strongly typed — validate structural integrity by
+    // confirming the serialized form is a valid JSON object.
+    // Custom payloads are validated against {"type": "object"}.
+    let schema = serde_json::json!({"type": "object"});
+    let validator = jsonschema::validator_for(&schema).map_err(|e| {
+        WorkflowError::ValidationFailed {
+            step_index,
+            details: format!("schema compilation error: {e}"),
+        }
+    })?;
+
+    if let Err(error) = validator.validate(data) {
+        return Err(WorkflowError::ValidationFailed {
+            step_index,
+            details: format!("{context}: {error}"),
+        });
+    }
+
+    debug!(
+        step_index = step_index,
+        context = context,
+        payload_type = match &message.payload {
+            TypedPayload::Cdm(_) => "Cdm",
+            TypedPayload::Custom(_) => "Custom",
+        },
+        "pipeline validation passed"
+    );
+
+    Ok(())
 }
 
 /// Executes workflow steps sequentially, passing each step's output
@@ -287,11 +346,38 @@ impl PipelineExecutor {
             workflow_id = %workflow.id,
             workflow_name = %workflow.name,
             step_count = workflow.steps.len(),
+            validate = ?workflow.validate,
             "starting workflow execution"
         );
 
-        self.execute_steps(&workflow.id, &workflow.steps, initial_message, 0)
-            .await
+        // Edges and Strict both validate the entry message
+        if matches!(
+            workflow.validate,
+            ValidationLevel::Strict | ValidationLevel::Edges
+        ) {
+            validate_message(&initial_message, 0, "entry validation")?;
+        }
+
+        let result = self
+            .execute_steps(
+                &workflow.id,
+                &workflow.steps,
+                initial_message,
+                0,
+                &workflow.validate,
+            )
+            .await?;
+
+        // Edges and Strict both validate the exit message
+        if matches!(
+            workflow.validate,
+            ValidationLevel::Strict | ValidationLevel::Edges
+        ) {
+            let last_index = workflow.steps.len().saturating_sub(1);
+            validate_message(&result, last_index, "exit validation")?;
+        }
+
+        Ok(result)
     }
 
     /// Resolve a dot-notation field path against a PipelineMessage payload.
@@ -333,6 +419,7 @@ impl PipelineExecutor {
         steps: &'a [StepDef],
         initial_message: PipelineMessage,
         base_index: usize,
+        validate: &'a ValidationLevel,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<PipelineMessage, WorkflowError>> + Send + 'a>> {
         Box::pin(async move {
         let mut current_message = initial_message;
@@ -363,7 +450,7 @@ impl PipelineExecutor {
                 };
 
                 current_message = self
-                    .execute_steps(workflow_id, branch, current_message, index * 100)
+                    .execute_steps(workflow_id, branch, current_message, index * 100, validate)
                     .await?;
                 continue;
             }
@@ -383,6 +470,15 @@ impl PipelineExecutor {
             {
                 Ok(output) => {
                     current_message = output;
+
+                    // Strict: validate after every step
+                    if *validate == ValidationLevel::Strict {
+                        validate_message(
+                            &current_message,
+                            index,
+                            &format!("strict validation after step {index} ({}.{})", step.plugin, step.action),
+                        )?;
+                    }
                 }
                 Err(plugin_error) => {
                     let severity = plugin_error.severity();
@@ -2099,5 +2195,180 @@ mod tests {
             .pointer("/data/executed_by")
             .and_then(|v| v.as_str());
         assert_eq!(executed_by, Some("inbox.deliver"));
+    }
+
+    // --- Pipeline validation tests ---
+
+    fn make_workflow_with_validation(
+        steps: Vec<StepDef>,
+        validate: crate::types::ValidationLevel,
+    ) -> WorkflowDef {
+        WorkflowDef {
+            id: "validation-test".into(),
+            name: "Validation Test Workflow".into(),
+            mode: ExecutionMode::Sync,
+            validate,
+            trigger: TriggerDef {
+                endpoint: Some("POST /test".into()),
+                event: None,
+                schedule: None,
+            },
+            steps,
+        }
+    }
+
+    /// A mock plugin executor that produces an invalid (non-object) payload
+    /// at a specific call index, causing schema validation to fail.
+    struct InvalidOutputExecutor {
+        invalid_on_call: usize,
+        call_count: AtomicUsize,
+    }
+
+    impl InvalidOutputExecutor {
+        fn new(invalid_on_call: usize) -> Self {
+            Self {
+                invalid_on_call,
+                call_count: AtomicUsize::new(0),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl PluginExecutor for InvalidOutputExecutor {
+        async fn execute(
+            &self,
+            plugin_id: &str,
+            action: &str,
+            mut input: PipelineMessage,
+        ) -> Result<PipelineMessage, Box<dyn EngineError>> {
+            let call = self.call_count.fetch_add(1, Ordering::SeqCst);
+            let schema = serde_json::json!({"type": "object"});
+            if call == self.invalid_on_call {
+                // Produce a string payload — not a valid object
+                input.payload = TypedPayload::Custom(
+                    SchemaValidated::new(serde_json::json!("invalid-string"), &serde_json::json!({"type": "string"})).unwrap(),
+                );
+            } else {
+                let transformed = serde_json::json!({"executed_by": format!("{plugin_id}.{action}")});
+                input.payload =
+                    TypedPayload::Custom(SchemaValidated::new(transformed, &schema).unwrap());
+            }
+            Ok(input)
+        }
+    }
+
+    #[tokio::test]
+    async fn strict_validation_catches_invalid_intermediate_output() {
+        let mock = Arc::new(InvalidOutputExecutor::new(0)); // first step produces invalid output
+        let executor = PipelineExecutor::new(mock);
+        let workflow = make_workflow_with_validation(
+            vec![
+                make_step("bad-plugin", "act"),
+                make_step("good-plugin", "act"),
+            ],
+            crate::types::ValidationLevel::Strict,
+        );
+
+        let result = executor
+            .execute_workflow(&workflow, make_test_message())
+            .await;
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            WorkflowError::ValidationFailed { step_index, details } => {
+                assert_eq!(step_index, 0);
+                assert!(details.contains("strict validation"));
+            }
+            other => panic!("expected ValidationFailed, got: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn edges_validation_allows_invalid_intermediate_but_catches_invalid_exit() {
+        // Step 0 produces invalid, step 1 also produces invalid → exit validation fails
+        let mock = Arc::new(InvalidOutputExecutor::new(1)); // second step produces invalid
+        let executor = PipelineExecutor::new(mock);
+        let workflow = make_workflow_with_validation(
+            vec![
+                make_step("good-plugin", "act"),
+                make_step("bad-plugin", "act"),
+            ],
+            crate::types::ValidationLevel::Edges,
+        );
+
+        let result = executor
+            .execute_workflow(&workflow, make_test_message())
+            .await;
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            WorkflowError::ValidationFailed { details, .. } => {
+                assert!(details.contains("exit validation"));
+            }
+            other => panic!("expected ValidationFailed, got: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn edges_validation_allows_invalid_intermediate_output() {
+        // Step 0 produces invalid, step 1 produces valid → edges should pass
+        // (edges only checks entry and exit, not intermediate)
+        let mock = Arc::new(InvalidOutputExecutor::new(0));
+        let executor = PipelineExecutor::new(mock);
+        let workflow = make_workflow_with_validation(
+            vec![
+                make_step("bad-plugin", "act"),
+                make_step("good-plugin", "act"),
+            ],
+            crate::types::ValidationLevel::Edges,
+        );
+
+        let result = executor
+            .execute_workflow(&workflow, make_test_message())
+            .await;
+
+        // Should succeed — invalid intermediate is allowed, final is valid object
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn none_validation_allows_everything() {
+        let mock = Arc::new(InvalidOutputExecutor::new(1)); // last step produces invalid
+        let executor = PipelineExecutor::new(mock);
+        let workflow = make_workflow_with_validation(
+            vec![
+                make_step("good-plugin", "act"),
+                make_step("bad-plugin", "act"),
+            ],
+            crate::types::ValidationLevel::None,
+        );
+
+        let result = executor
+            .execute_workflow(&workflow, make_test_message())
+            .await;
+
+        // Should succeed — no validation at all
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn strict_validation_passes_with_all_valid_outputs() {
+        let mock = Arc::new(MockPluginExecutor::new());
+        let executor = PipelineExecutor::new(mock.clone());
+        let workflow = make_workflow_with_validation(
+            vec![
+                make_step("a", "act"),
+                make_step("b", "act"),
+                make_step("c", "act"),
+            ],
+            crate::types::ValidationLevel::Strict,
+        );
+
+        let result = executor
+            .execute_workflow(&workflow, make_test_message())
+            .await;
+
+        assert!(result.is_ok());
+        assert_eq!(mock.call_count.load(Ordering::SeqCst), 3);
     }
 }

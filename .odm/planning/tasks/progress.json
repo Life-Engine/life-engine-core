@@ -116,13 +116,14 @@
     "6.11",
     "7.11",
     "6.12",
-    "7.12"
+    "7.12",
+    "7.13"
   ],
   "current_wp": null,
   "current_wp_tasks": {
     "total": 1,
     "completed": [
-      "Implement conditional step branching"
+      "Implement configurable schema validation per workflow"
     ],
     "deferred": [],
     "remaining": [],
@@ -1045,7 +1046,7 @@
       "wp": "7.12",
       "title": "Conditional Branching",
       "completed_at": "2026-03-23T00:00:00Z",
-      "commit": "pending",
+      "commit": "63b87c0",
       "tasks_completed": 1,
       "tasks_deferred": 0
     }

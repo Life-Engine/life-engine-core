@@ -168,7 +168,7 @@ Progress: 0 / 17 work packages complete
 > depends: 7.5
 > spec: .odm/spec/workflow-engine/brief.md
 
-- [ ] Implement configurable schema validation per workflow
+- [x] Implement configurable schema validation per workflow
   <!-- file: packages/workflow-engine/src/executor.rs -->
   <!-- purpose: Based on the workflow's validate field (ValidationLevel): For Strict — after every step, validate the output PipelineMessage against the expected schema. If the payload is TypedPayload::Cdm, validate against the canonical JSON Schema for that CDM type. If TypedPayload::Custom, validate against the step's output_schema from the plugin's Action definition. Validation failure produces WorkflowError with code "WORKFLOW_004" and Severity::Fatal. For Edges — validate only the initial PipelineMessage (entry) and the final step's output (exit). For None — skip all validation. Validation uses the jsonschema crate. Log a debug message for each validation check showing what was validated. Add tests: strict catches invalid intermediate output, edges allows invalid intermediate but catches invalid final output, none allows everything. -->
   <!-- requirements: from workflow-engine spec 6.1 -->

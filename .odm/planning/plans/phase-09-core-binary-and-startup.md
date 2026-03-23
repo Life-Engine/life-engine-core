@@ -15,7 +15,7 @@ This phase depends on all previous phases (types, traits, crypto, SDK, storage, 
 
 > spec: .odm/spec/binary-and-startup/brief.md
 
-Progress: 5 / 11 work packages complete
+Progress: 6 / 11 work packages complete
 
 ---
 
@@ -77,13 +77,13 @@ Progress: 5 / 11 work packages complete
 ## 9.6 — Storage Backend Initialization
 > spec: .odm/spec/binary-and-startup/brief.md
 
-- [ ] Implement storage backend initialization call in Core
+- [x] Implement storage backend initialization call in Core
   <!-- file: apps/core/src/main.rs -->
   <!-- purpose: During startup step 4 (initialize storage), call StorageBackend::init() with the derived key and the [storage] config section. Core does not know about SQLCipher internals — it uses the StorageBackend trait. Handle initialization errors with clear messages: if the key is wrong (SQLCipher can't decrypt), suggest checking the passphrase; if the database file doesn't exist, log that a new database is being created; if permissions are insufficient, report the path and required permissions. Wrap the StorageBackend in Arc for sharing across modules. Log "Storage initialized" with database path (but not key) at info level. -->
   <!-- requirements: 4.1, 4.4 -->
   <!-- leverage: packages/storage-sqlite from Phase 5 -->
 
-- [ ] Implement SQLCipher storage backend init in the storage crate
+- [x] Implement SQLCipher storage backend init in the storage crate
   <!-- file: packages/storage-sqlite/src/lib.rs -->
   <!-- purpose: Implement the StorageBackend::init() associated function for SqliteStorage: (1) extract path from the config section, (2) open the SQLCipher database with the derived key, (3) run PRAGMA key with the hex-encoded key, (4) enable WAL mode, (5) create tables if they don't exist using schema DDL, (6) run any pending schema migrations (compare current schema version with expected), (7) return the initialized SqliteStorage. If the database file doesn't exist, create it. If the key is wrong, return a clear error (SQLCipher will fail to read the database header). -->
   <!-- requirements: 4.1, 4.2, 4.3, 4.4 -->

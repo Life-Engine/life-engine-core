@@ -136,6 +136,43 @@ impl SqliteStorage {
         Self::from_connection(conn)
     }
 
+    /// Open (or create) an encrypted database using a pre-derived 32-byte key.
+    ///
+    /// Unlike [`open_encrypted`] which takes a passphrase and derives the key
+    /// internally, this method accepts a key already derived via
+    /// `life_engine_crypto::derive_key()`. This is the preferred path for
+    /// Core startup where key derivation happens as a separate step.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database cannot be opened or the key is wrong.
+    pub fn open_with_key(path: &Path, key: &[u8; 32]) -> anyhow::Result<Self> {
+        let hex_key = hex::encode(key);
+
+        let conn = Connection::open(path)?;
+
+        // PRAGMA key must be the very first statement after open.
+        let pragma_key = format!("PRAGMA key = \"x'{hex_key}'\";");
+        conn.execute_batch(&pragma_key)?;
+
+        // Verify the key is correct by reading the database header.
+        conn.execute_batch("SELECT count(*) FROM sqlite_master;")
+            .map_err(|e| {
+                let msg = e.to_string();
+                if msg.contains("not a database") || msg.contains("file is encrypted") {
+                    anyhow::anyhow!(
+                        "unable to decrypt database — check passphrase. \
+                         If the passphrase changed, the database cannot be opened \
+                         with the new key."
+                    )
+                } else {
+                    anyhow::anyhow!("database verification failed: {e}")
+                }
+            })?;
+
+        Self::from_connection(conn)
+    }
+
     /// Subscribe to change notifications.  Returns a broadcast receiver.
     #[allow(dead_code)]
     pub fn subscribe(&self) -> broadcast::Receiver<ChangeEvent> {

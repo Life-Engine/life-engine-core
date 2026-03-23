@@ -139,19 +139,47 @@ async fn main() -> anyhow::Result<()> {
 
     // 4b. Initialise storage (file-backed when data_dir is configured).
     let storage = match derived_key {
-        Some(_key) => {
+        Some(ref key) => {
             tracing::info!(path = %db_path.display(), "opening encrypted storage with derived key");
-            // TODO(9.6): Pass derived key to StorageBackend::init() once implemented.
-            // For now, open unencrypted storage as a placeholder until WP 9.6 wires
-            // the key into SQLCipher PRAGMA.
-            Arc::new(sqlite_storage::SqliteStorage::open(&db_path)?)
+            match sqlite_storage::SqliteStorage::open_with_key(&db_path, key) {
+                Ok(s) => Arc::new(s),
+                Err(e) => {
+                    let msg = e.to_string();
+                    if msg.contains("unable to decrypt") {
+                        tracing::error!(
+                            path = %db_path.display(),
+                            "storage initialization failed — check passphrase"
+                        );
+                        anyhow::bail!(
+                            "Cannot open encrypted database at {}: {}. \
+                             Verify LIFE_ENGINE_STORAGE_PASSPHRASE or storage.passphrase is correct.",
+                            db_path.display(),
+                            msg
+                        );
+                    } else if msg.contains("permission denied") || msg.contains("readonly") {
+                        tracing::error!(
+                            path = %db_path.display(),
+                            "insufficient permissions to open database"
+                        );
+                        anyhow::bail!(
+                            "Cannot open database at {}: {}. \
+                             Check file permissions.",
+                            db_path.display(),
+                            msg
+                        );
+                    } else {
+                        return Err(e);
+                    }
+                }
+            }
         }
         None if config.storage.encryption => {
-            tracing::info!(path = %db_path.display(), "opening encrypted storage");
+            tracing::info!(path = %db_path.display(), "encryption enabled but no passphrase — deferring to /api/storage/init");
             // Encrypted storage without startup passphrase requires the /api/storage/init endpoint.
             Arc::new(sqlite_storage::SqliteStorage::open_in_memory()?)
         }
         None => {
+            tracing::info!(path = %db_path.display(), "opening unencrypted storage");
             Arc::new(sqlite_storage::SqliteStorage::open(&db_path)?)
         }
     };

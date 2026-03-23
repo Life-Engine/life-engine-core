@@ -120,7 +120,7 @@ Progress: 0 / 17 work packages complete
 > depends: 7.5
 > spec: .odm/spec/workflow-engine/brief.md
 
-- [ ] Implement skip error strategy
+- [x] Implement skip error strategy
   <!-- file: packages/workflow-engine/src/executor.rs -->
   <!-- purpose: When a step fails and its on_error strategy is Skip: log a warning with the step index, plugin ID, action, and error message using tracing::warn!, skip the failed step entirely, pass the previous step's PipelineMessage (the input to the failed step, not its output) as input to the next step. The pipeline continues as if the failed step was never in the chain. Add tests: step 2 of 3 fails with skip → step 3 receives step 1's output (not step 2's), warning is logged, pipeline completes successfully. Test edge case: first step fails with skip → second step receives the initial PipelineMessage. -->
   <!-- requirements: from workflow-engine spec 4.2 -->

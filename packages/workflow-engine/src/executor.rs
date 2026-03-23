@@ -11,7 +11,7 @@ use life_engine_types::{MessageMetadata, PipelineMessage, SchemaValidated, Typed
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use crate::error::WorkflowError;
@@ -334,14 +334,16 @@ impl PipelineExecutor {
                             });
                         }
                         ErrorStrategyType::Skip => {
-                            // Skip strategy will be implemented in WP 7.9.
-                            // For now, fall through to halt behavior.
-                            return Err(WorkflowError::StepHalted {
-                                step_index: index,
-                                plugin: step.plugin.clone(),
-                                action: step.action.clone(),
-                                cause: plugin_error.to_string(),
-                            });
+                            warn!(
+                                workflow_id = %workflow.id,
+                                step_index = index,
+                                plugin = %step.plugin,
+                                action = %step.action,
+                                error = %plugin_error,
+                                "step failed with skip strategy — skipping and continuing"
+                            );
+                            // Pass the previous step's output (current_message) to the next step.
+                            // current_message is unchanged — the failed step's output is discarded.
                         }
                         ErrorStrategyType::Retry => {
                             // Retry strategy will be implemented in WP 7.10.
@@ -1045,6 +1047,103 @@ mod tests {
         }
         // step-c should not have been called
         assert_eq!(mock.call_count.load(Ordering::SeqCst), 2);
+    }
+
+    // --- Skip error strategy tests (WP 7.9) ---
+
+    #[tokio::test]
+    async fn skip_strategy_continues_pipeline_on_failure() {
+        // Step 2 of 3 fails with skip → step 3 receives step 1's output
+        let mock = Arc::new(FailingPluginExecutor::new(1)); // fail on second call
+        let executor = PipelineExecutor::new(mock.clone());
+        let workflow = make_workflow(vec![
+            make_step("step-a", "act"),
+            make_step_with_strategy("step-b", "act", ErrorStrategyType::Skip),
+            make_step("step-c", "act"),
+        ]);
+
+        let result = executor
+            .execute_workflow(&workflow, make_test_message())
+            .await;
+
+        assert!(result.is_ok());
+        // All 3 steps should have been attempted (step-a, step-b fails, step-c)
+        assert_eq!(mock.call_count.load(Ordering::SeqCst), 3);
+    }
+
+    #[tokio::test]
+    async fn skip_strategy_passes_previous_output_to_next_step() {
+        // Step 2 fails with skip → step 3 receives step 1's output (not step 2's)
+        // FailingPluginExecutor: on success sets payload to {"executed_by": "<plugin>.<action>"}
+        let mock = Arc::new(FailingPluginExecutor::new(1)); // fail on second call
+        let executor = PipelineExecutor::new(mock.clone());
+        let workflow = make_workflow(vec![
+            make_step("step-a", "act"),
+            make_step_with_strategy("step-b", "act", ErrorStrategyType::Skip),
+            make_step("step-c", "act"),
+        ]);
+
+        let result = executor
+            .execute_workflow(&workflow, make_test_message())
+            .await
+            .unwrap();
+
+        // step-c received step-a's output (step-b was skipped).
+        // FailingPluginExecutor sets payload to {"executed_by": "<plugin>.<action>"} on success,
+        // so step-c's output is {"executed_by": "step-c.act"}.
+        let payload_json = serde_json::to_value(&result.payload).unwrap();
+        let data = &payload_json["data"];
+        assert_eq!(data["executed_by"], "step-c.act");
+
+        // All 3 steps were attempted
+        assert_eq!(mock.call_count.load(Ordering::SeqCst), 3);
+    }
+
+    #[tokio::test]
+    async fn skip_strategy_first_step_fails_passes_initial_message() {
+        // First step fails with skip → second step receives the initial PipelineMessage
+        let mock = Arc::new(FailingPluginExecutor::new(0)); // fail immediately
+        let executor = PipelineExecutor::new(mock.clone());
+        let workflow = make_workflow(vec![
+            make_step_with_strategy("step-a", "act", ErrorStrategyType::Skip),
+            make_step("step-b", "act"),
+        ]);
+
+        let result = executor
+            .execute_workflow(&workflow, make_test_message())
+            .await;
+
+        assert!(result.is_ok());
+        // step-a failed (1 call), step-b succeeded (1 call) = 2 total
+        assert_eq!(mock.call_count.load(Ordering::SeqCst), 2);
+
+        // step-b received the initial message (not step-a's output)
+        let result = result.unwrap();
+        let payload_json = serde_json::to_value(&result.payload).unwrap();
+        let data = &payload_json["data"];
+        assert_eq!(data["executed_by"], "step-b.act");
+    }
+
+    #[tokio::test]
+    async fn skip_strategy_pipeline_completes_successfully() {
+        // A skipped step should not cause the pipeline to report failure
+        let mock = Arc::new(FailingPluginExecutor::new(0));
+        let executor = PipelineExecutor::new(mock);
+        let workflow = make_workflow(vec![
+            make_step_with_strategy("failing-plugin", "crash", ErrorStrategyType::Skip),
+        ]);
+
+        let result = executor
+            .execute_workflow(&workflow, make_test_message())
+            .await;
+
+        // Pipeline should complete successfully even though the only step failed
+        assert!(result.is_ok());
+        // The result should be the initial message passed through unchanged
+        let msg = result.unwrap();
+        let payload_json = serde_json::to_value(&msg.payload).unwrap();
+        let data = &payload_json["data"];
+        assert_eq!(data["input"], true);
     }
 
     #[tokio::test]

@@ -262,7 +262,7 @@ Progress: 5 / 24 work packages complete
 > depends: 10.19
 > spec: .odm/spec/migration-format/brief.md
 
-- [ ] Implement post-transform version stamping
+- [x] Implement post-transform version stamping
   <!-- file: packages/storage-sqlite/src/migration/version.rs -->
   <!-- purpose: After a successful transform, update the record's version column in the plugin_data table to the migration entry's to version. This must happen within the same SQLite transaction as the data update to ensure atomicity. Implement pub fn stamp_version(tx: &Transaction, record_id: &str, new_version: &str) -> Result<()> that runs UPDATE plugin_data SET version = ? WHERE id = ?. After stamping, the record will not match the from range of the same migration entry on subsequent startups, preventing re-migration. Verify idempotency: running migrations twice produces the same result (already-migrated records are skipped because their version no longer matches the from range). Add tests: (1) version is updated after successful transform, (2) version update is atomic with data update, (3) re-running migration skips already-migrated records. -->
   <!-- requirements: 4.4 -->

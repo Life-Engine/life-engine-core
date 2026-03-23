@@ -151,13 +151,14 @@
     "10.17",
     "10.18",
     "10.19",
-    "10.20"
+    "10.20",
+    "10.21"
   ],
   "current_wp": null,
   "current_wp_tasks": {
     "total": 1,
     "completed": [
-      "Set up canonical migration file structure and startup trigger"
+      "Implement post-transform version stamping"
     ],
     "deferred": [],
     "remaining": [],
@@ -1360,6 +1361,14 @@
       "wp": "10.20",
       "title": "Canonical Migration Path",
       "completed_at": "2026-03-23T16:00:00Z",
+      "commit": "5c2ceae",
+      "tasks_completed": 1,
+      "tasks_deferred": 0
+    },
+    {
+      "wp": "10.21",
+      "title": "Version Column Update",
+      "completed_at": "2026-03-23T18:00:00Z",
       "commit": "pending",
       "tasks_completed": 1,
       "tasks_deferred": 0

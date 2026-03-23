@@ -34,7 +34,7 @@ Progress: 0 / 12 work packages complete
 ## 6.2 — Auth Error Types
 > spec: .odm/spec/auth-and-pocket-id/brief.md
 
-- [ ] Define AuthError enum implementing EngineError trait
+- [x] Define AuthError enum implementing EngineError trait
   <!-- file: packages/auth/src/error.rs -->
   <!-- purpose: Define AuthError enum with variants: TokenMissing (no auth header present, code "AUTH_001", Severity::Fatal), TokenExpired (JWT past exp claim, code "AUTH_002", Severity::Fatal), TokenInvalid (signature verification failed or malformed JWT, code "AUTH_003", Severity::Fatal), ProviderUnreachable (cannot reach OIDC issuer for key refresh, code "AUTH_004", Severity::Retryable), ConfigInvalid (invalid auth configuration, code "AUTH_005", Severity::Fatal), RateLimited { retry_after: u64 } (too many failed attempts from this IP, code "AUTH_006", Severity::Fatal — includes seconds until retry allowed), KeyRevoked (API key has been revoked, code "AUTH_007", Severity::Fatal), KeyInvalid (API key not found or wrong hash, code "AUTH_008", Severity::Fatal). Implement EngineError trait: code() returns the AUTH_xxx code, severity() returns the appropriate Severity, source_module() returns "auth". Implement std::error::Error and Display with human-readable messages. -->
   <!-- requirements: 1.2 -->
@@ -45,13 +45,13 @@ Progress: 0 / 12 work packages complete
 ## 6.3 — Auth Config and Types
 > spec: .odm/spec/auth-and-pocket-id/brief.md
 
-- [ ] Define AuthConfig struct for TOML deserialization
+- [x] Define AuthConfig struct for TOML deserialization
   <!-- file: packages/auth/src/config.rs -->
   <!-- purpose: Define AuthConfig struct with serde Deserialize: provider (String — "pocket-id" or "api-key"), issuer (Option<String> — OIDC issuer URL, required for pocket-id), audience (Option<String> — expected JWT audience claim), jwks_refresh_interval (Option<u64> — seconds between JWKS key refresh, default 3600). Implement validation: if provider is "pocket-id", issuer must be present; if provider is "api-key", issuer is ignored. Add Default impl with provider = "pocket-id". -->
   <!-- requirements: 2.1 -->
   <!-- leverage: none -->
 
-- [ ] Define auth identity and token types
+- [x] Define auth identity and token types
   <!-- file: packages/auth/src/types.rs -->
   <!-- purpose: Define AuthIdentity struct: user_id (String — subject claim from JWT or API key owner), provider (String — "pocket-id" or "api-key"), scopes (Vec<String> — authorized scopes), authenticated_at (DateTime<Utc>). Define AuthToken enum: Bearer(String) for JWT tokens, ApiKey(String) for API keys. Define ApiKeyRecord struct for storage: id (Uuid), name (String — human-readable label), key_hash (String — salted SHA-256 hash of the key), salt (String — unique salt per key), scopes (Vec<String>), created_at (DateTime<Utc>), expires_at (Option<DateTime<Utc>>), revoked (bool), last_used (Option<DateTime<Utc>>). Define Scope enum or use strings: "admin", "read", "write", "sync". All types derive Serialize, Deserialize, Debug, Clone. -->
   <!-- requirements: 8.1, 8.2, 8.3 -->
@@ -62,7 +62,7 @@ Progress: 0 / 12 work packages complete
 ## 6.4 — AuthProvider Trait
 > spec: .odm/spec/auth-and-pocket-id/brief.md
 
-- [ ] Define AuthProvider trait and factory function
+- [x] Define AuthProvider trait and factory function
   <!-- file: packages/auth/src/lib.rs -->
   <!-- purpose: Define pub trait AuthProvider: Send + Sync with methods: async fn validate_token(&self, token: &str) -> Result<AuthIdentity, AuthError> for JWT validation, async fn validate_key(&self, key: &str) -> Result<AuthIdentity, AuthError> for API key validation, async fn revoke_key(&self, key_id: Uuid) -> Result<(), AuthError> for API key revocation. Define pub async fn create_auth_provider(config: AuthConfig) -> Result<Box<dyn AuthProvider>, AuthError> factory function that reads the config and returns either a PocketIdProvider or ApiKeyProvider instance. The factory function is called once during Core startup. The returned provider is wrapped in Arc for sharing across transport tasks. -->
   <!-- requirements: 2.1, 2.2, 2.3, 2.4 -->

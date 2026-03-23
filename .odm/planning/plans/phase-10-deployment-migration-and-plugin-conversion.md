@@ -22,7 +22,7 @@ Progress: 0 / 24 work packages complete
 ## 10.1 — Docker Image
 > spec: .odm/spec/deployment-modes/brief.md
 
-- [ ] Create multi-stage Dockerfile for Core based on Alpine Linux
+- [x] Create multi-stage Dockerfile for Core based on Alpine Linux
   <!-- file: deploy/Dockerfile -->
   <!-- purpose: Define a multi-stage Dockerfile: Stage 1 (builder): FROM rust:1.85-alpine AS builder, install musl-dev and build dependencies, copy Cargo workspace files and source, run cargo build --release --bin life-engine-core targeting x86_64-unknown-linux-musl for a fully static binary. Stage 2 (runtime): FROM alpine:3.20, copy the release binary from builder, create /data, /plugins, /workflows directories with appropriate permissions, create a non-root user (life-engine:life-engine), set ENTRYPOINT to the binary. The final image should be under 50 MB. Include health check: HEALTHCHECK CMD wget --spider http://localhost:3000/health || exit 1. Expose default port 3000. Set working directory to /app. -->
   <!-- requirements: 3.1, 3.6 -->

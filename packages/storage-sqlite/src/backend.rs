@@ -3,6 +3,7 @@
 use chrono::Utc;
 use rusqlite::{params, params_from_iter};
 use serde_json;
+use tracing::warn;
 use uuid::Uuid;
 
 use life_engine_types::{
@@ -10,6 +11,7 @@ use life_engine_types::{
     StorageQuery, TypedPayload,
 };
 
+use crate::audit::{self, AuditEvent, AuditEventType};
 use crate::credentials;
 use crate::error::StorageError;
 use crate::validation;
@@ -85,6 +87,15 @@ fn parse_payload(
                 serde_json::from_str(data_json)?;
             Ok(TypedPayload::Custom(v))
         }
+    }
+}
+
+/// Log an audit event, warning on failure instead of propagating the error.
+///
+/// Audit logging must never block or fail a storage operation.
+fn try_log_audit(conn: &rusqlite::Connection, event: AuditEvent) {
+    if let Err(e) = audit::log_event(conn, event) {
+        warn!("audit log write failed: {e}");
     }
 }
 
@@ -205,6 +216,21 @@ impl SqliteStorage {
 
             let payload = parse_payload(&collection, &data_json, self.master_key())?;
 
+            // Audit credential reads.
+            if collection == "credentials" {
+                try_log_audit(
+                    &self.conn,
+                    AuditEvent {
+                        event_type: AuditEventType::CredentialAccess,
+                        plugin_id: Some(query.plugin_id.clone()),
+                        details: serde_json::json!({
+                            "credential_id": id,
+                            "operation": "read"
+                        }),
+                    },
+                );
+            }
+
             let correlation_id =
                 Uuid::parse_str(&id).unwrap_or_else(|_| Uuid::new_v4());
 
@@ -263,6 +289,21 @@ impl SqliteStorage {
                     params![id, plugin_id, collection, data_json, now, now],
                 )?;
 
+                // Audit credential writes.
+                if collection == "credentials" {
+                    try_log_audit(
+                        &self.conn,
+                        AuditEvent {
+                            event_type: AuditEventType::CredentialModify,
+                            plugin_id: Some(plugin_id),
+                            details: serde_json::json!({
+                                "credential_id": id,
+                                "operation": "insert"
+                            }),
+                        },
+                    );
+                }
+
                 Ok(())
             }
             StorageMutation::Update {
@@ -313,6 +354,21 @@ impl SqliteStorage {
                     params![data_json, now, id_str, plugin_id, version_i64],
                 )?;
 
+                // Audit credential writes.
+                if rows_affected > 0 && collection == "credentials" {
+                    try_log_audit(
+                        &self.conn,
+                        AuditEvent {
+                            event_type: AuditEventType::CredentialModify,
+                            plugin_id: Some(plugin_id.clone()),
+                            details: serde_json::json!({
+                                "credential_id": id_str,
+                                "operation": "update"
+                            }),
+                        },
+                    );
+                }
+
                 if rows_affected == 0 {
                     // Either the record doesn't exist or the version has changed.
                     return Err(StorageError::ConcurrencyConflict {
@@ -325,15 +381,30 @@ impl SqliteStorage {
             }
             StorageMutation::Delete {
                 plugin_id,
-                collection: _,
+                collection,
                 id,
             } => {
                 let id_str = id.to_string();
 
-                self.conn.execute(
+                let rows_affected = self.conn.execute(
                     "DELETE FROM plugin_data WHERE id = ?1 AND plugin_id = ?2",
                     params![id_str, plugin_id],
                 )?;
+
+                // Audit credential writes.
+                if rows_affected > 0 && collection == "credentials" {
+                    try_log_audit(
+                        &self.conn,
+                        AuditEvent {
+                            event_type: AuditEventType::CredentialModify,
+                            plugin_id: Some(plugin_id),
+                            details: serde_json::json!({
+                                "credential_id": id_str,
+                                "operation": "delete"
+                            }),
+                        },
+                    );
+                }
 
                 Ok(())
             }
@@ -1461,5 +1532,155 @@ mod tests {
             },
             _ => panic!("expected Cdm"),
         }
+    }
+
+    // --- Audit logging integration tests ---
+
+    fn audit_count(storage: &SqliteStorage) -> i64 {
+        storage
+            .conn
+            .query_row("SELECT count(*) FROM audit_log", [], |row| row.get(0))
+            .unwrap()
+    }
+
+    fn last_audit_event(storage: &SqliteStorage) -> (String, Option<String>, String) {
+        storage
+            .conn
+            .query_row(
+                "SELECT event_type, plugin_id, details FROM audit_log ORDER BY rowid DESC LIMIT 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap()
+    }
+
+    fn sample_credential_json(id: &str) -> String {
+        serde_json::json!({
+            "id": id,
+            "name": "Test Token",
+            "credential_type": "oauth_token",
+            "service": "test-service",
+            "claims": {
+                "access_token": "ya29.a0AfH6SMB",
+                "refresh_token": "1//0eXyz",
+                "token_type": "Bearer",
+                "expires_in": 3600
+            },
+            "source": "test-plugin",
+            "source_id": "cred-1",
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z"
+        })
+        .to_string()
+    }
+
+    #[test]
+    fn audit_credential_read_logs_access() {
+        let storage = setup_db();
+        let cred_json = sample_credential_json("00000000-0000-0000-0000-000000000099");
+        // Store an encrypted credential directly.
+        let encrypted =
+            crate::credentials::encrypt_credential(&storage.master_key, &cred_json).unwrap();
+        insert_row(
+            &storage,
+            "00000000-0000-0000-0000-000000000099",
+            "plugin-a",
+            "credentials",
+            &encrypted,
+        );
+
+        assert_eq!(audit_count(&storage), 0);
+
+        let query = StorageQuery {
+            collection: "credentials".into(),
+            plugin_id: "plugin-a".into(),
+            filters: vec![],
+            sort: vec![],
+            limit: None,
+            offset: None,
+        };
+        let results = storage.execute_query(query).unwrap();
+        assert_eq!(results.len(), 1);
+
+        // Verify audit entry was created.
+        assert_eq!(audit_count(&storage), 1);
+        let (event_type, plugin_id, details) = last_audit_event(&storage);
+        assert_eq!(event_type, "credential_access");
+        assert_eq!(plugin_id.as_deref(), Some("plugin-a"));
+        let details: serde_json::Value = serde_json::from_str(&details).unwrap();
+        assert_eq!(details["operation"], "read");
+        assert_eq!(details["credential_id"], "00000000-0000-0000-0000-000000000099");
+    }
+
+    #[test]
+    fn audit_credential_insert_logs_modify() {
+        let storage = setup_db();
+        let cred_json = sample_credential_json("00000000-0000-0000-0000-000000000088");
+        let cred: life_engine_types::Credential = serde_json::from_str(&cred_json).unwrap();
+        let msg = PipelineMessage {
+            metadata: MessageMetadata {
+                correlation_id: Uuid::new_v4(),
+                source: "test".into(),
+                timestamp: Utc::now(),
+                auth_context: None,
+            },
+            payload: TypedPayload::Cdm(Box::new(CdmType::Credential(cred))),
+        };
+
+        let mutation = StorageMutation::Insert {
+            plugin_id: "plugin-a".into(),
+            collection: "credentials".into(),
+            data: msg,
+        };
+        storage.execute_mutation(mutation).unwrap();
+
+        assert_eq!(audit_count(&storage), 1);
+        let (event_type, plugin_id, details) = last_audit_event(&storage);
+        assert_eq!(event_type, "credential_modify");
+        assert_eq!(plugin_id.as_deref(), Some("plugin-a"));
+        let details: serde_json::Value = serde_json::from_str(&details).unwrap();
+        assert_eq!(details["operation"], "insert");
+    }
+
+    #[test]
+    fn audit_non_credential_operations_do_not_log() {
+        let storage = setup_db();
+        let task_json = serde_json::json!({
+            "id": "00000000-0000-0000-0000-000000000001",
+            "title": "Test task",
+            "description": null,
+            "status": "pending",
+            "priority": "medium",
+            "due_date": null,
+            "completed_at": null,
+            "tags": [],
+            "assignee": null,
+            "parent_id": null,
+            "source": "test",
+            "source_id": "t-1",
+            "extensions": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z"
+        });
+        insert_row(
+            &storage,
+            "00000000-0000-0000-0000-000000000001",
+            "plugin-a",
+            "tasks",
+            &task_json.to_string(),
+        );
+
+        let query = StorageQuery {
+            collection: "tasks".into(),
+            plugin_id: "plugin-a".into(),
+            filters: vec![],
+            sort: vec![],
+            limit: None,
+            offset: None,
+        };
+        storage.execute_query(query).unwrap();
+
+        // No audit entries for non-credential operations.
+        assert_eq!(audit_count(&storage), 0);
     }
 }

@@ -152,7 +152,7 @@ Progress: 0 / 16 work packages complete
 > depends: 5.10, 5.9
 > spec: .odm/spec/data-layer/brief.md
 
-- [ ] Wire audit logging into storage operations
+- [x] Wire audit logging into storage operations
   <!-- file: packages/storage-sqlite/src/backend.rs -->
   <!-- purpose: After credential reads, log AuditEventType::CredentialAccess with the credential ID and requesting plugin_id. After credential writes, log AuditEventType::CredentialModify with the credential ID, operation type (insert/update/delete), and requesting plugin_id. After plugin load events (called by the plugin system), log AuditEventType::PluginLoad. After permission changes (capability modifications), log AuditEventType::PermissionChange. Audit logging must not block the main operation — log failures are warned but do not cause the storage operation to fail. Add tests verifying audit entries are created for credential access and modification. -->
   <!-- requirements: 7.2, 7.3, 7.4 -->

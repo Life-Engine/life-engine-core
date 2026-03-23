@@ -71,7 +71,7 @@ Progress: 0 / 17 work packages complete
 > depends: 7.2
 > spec: .odm/spec/workflow-engine/brief.md
 
-- [ ] Implement pipeline executor for sequential step execution
+- [x] Implement pipeline executor for sequential step execution
   <!-- file: packages/workflow-engine/src/executor.rs -->
   <!-- purpose: Define PipelineExecutor struct holding a reference to the plugin execution bridge (trait-based, not concrete). Implement pub async fn execute_workflow(&self, workflow: &WorkflowDef, initial_message: PipelineMessage) -> Result<PipelineMessage, WorkflowError>. Logic: (1) start with the initial PipelineMessage, (2) for each step in workflow.steps, call the plugin execution bridge with (step.plugin, step.action, current_message), (3) capture the returned PipelineMessage as input for the next step, (4) return the final step's output as the workflow result. Define a PluginExecutor trait with async fn execute(plugin_id: &str, action: &str, input: PipelineMessage) -> Result<PipelineMessage, Box<dyn EngineError>> — the plugin system (Phase 8) will implement this trait. For now, the executor depends on this trait abstraction. Log each step execution: step index, plugin ID, action name. -->
   <!-- requirements: from workflow-engine spec 3.1 -->

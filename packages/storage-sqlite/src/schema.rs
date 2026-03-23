@@ -52,8 +52,31 @@ CREATE INDEX IF NOT EXISTS idx_audit_timestamp
 /// Retention period for audit log entries, in days.
 pub const AUDIT_RETENTION_DAYS: u32 = 90;
 
+/// DDL for the `quarantine` table — records that failed migration transforms.
+///
+/// When an individual record cannot be migrated (WASM transform failure or
+/// schema validation failure), it is stored here for admin review and retry.
+///
+/// Index:
+/// - `idx_quarantine_plugin_collection` — for listing quarantined records per plugin/collection.
+pub const QUARANTINE_DDL: &str = "\
+CREATE TABLE IF NOT EXISTS quarantine (
+    id              TEXT PRIMARY KEY,
+    record_data     TEXT NOT NULL,
+    plugin_id       TEXT NOT NULL,
+    collection      TEXT NOT NULL,
+    from_version    TEXT NOT NULL,
+    to_version      TEXT NOT NULL,
+    error_message   TEXT NOT NULL,
+    timestamp       TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_quarantine_plugin_collection
+    ON quarantine(plugin_id, collection);
+";
+
 /// All schema DDL statements in application order.
-pub const ALL_DDL: &[&str] = &[PLUGIN_DATA_DDL, AUDIT_LOG_DDL];
+pub const ALL_DDL: &[&str] = &[PLUGIN_DATA_DDL, AUDIT_LOG_DDL, QUARANTINE_DDL];
 
 #[cfg(test)]
 mod tests {
@@ -157,6 +180,45 @@ mod tests {
             .unwrap();
 
         assert_eq!(version, 1);
+    }
+
+    #[test]
+    fn quarantine_ddl_creates_table_and_index() {
+        let conn = Connection::open_in_memory().expect("open in-memory db");
+        conn.execute_batch(QUARANTINE_DDL)
+            .expect("quarantine DDL should execute without error");
+
+        let columns: Vec<String> = conn
+            .prepare("PRAGMA table_info(quarantine)")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(1))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+
+        assert_eq!(
+            columns,
+            vec![
+                "id",
+                "record_data",
+                "plugin_id",
+                "collection",
+                "from_version",
+                "to_version",
+                "error_message",
+                "timestamp"
+            ]
+        );
+
+        let indexes: Vec<String> = conn
+            .prepare("PRAGMA index_list(quarantine)")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(1))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+
+        assert!(indexes.contains(&"idx_quarantine_plugin_collection".to_string()));
     }
 
     #[test]

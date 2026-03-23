@@ -11,6 +11,7 @@ pub mod config;
 pub mod credentials;
 pub mod error;
 pub mod export;
+pub mod migration;
 pub mod schema;
 pub mod types;
 pub mod validation;

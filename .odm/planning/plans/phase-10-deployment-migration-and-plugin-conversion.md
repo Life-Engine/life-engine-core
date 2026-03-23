@@ -15,7 +15,7 @@ This phase depends on Phase 9 (completed Core binary). The deployment modes shar
 
 > spec: .odm/spec/deployment-modes/brief.md, .odm/spec/migration-format/brief.md
 
-Progress: 4 / 24 work packages complete
+Progress: 5 / 24 work packages complete
 
 ---
 
@@ -204,7 +204,7 @@ Progress: 4 / 24 work packages complete
 ## 10.16 — Quarantine Table and Operations
 > spec: .odm/spec/migration-format/brief.md
 
-- [ ] Create quarantine table schema and CRUD operations
+- [x] Create quarantine table schema and CRUD operations
   <!-- file: packages/storage-sqlite/src/migration/quarantine.rs -->
   <!-- purpose: Define CREATE TABLE quarantine with columns: id (TEXT PRIMARY KEY — UUID), record_data (TEXT NOT NULL — the original JSON record that failed to migrate), plugin_id (TEXT NOT NULL), collection (TEXT NOT NULL), from_version (TEXT NOT NULL — version the record was at), to_version (TEXT NOT NULL — version the migration was targeting), error_message (TEXT NOT NULL — why the transform failed), timestamp (TEXT NOT NULL — ISO 8601 when quarantined). Implement pub async fn quarantine_record(db, record, plugin_id, collection, from_version, to_version, error) -> Result<Uuid> that inserts a record into quarantine and returns its ID. Implement pub async fn list_quarantined(db, plugin_id, collection) -> Result<Vec<QuarantinedRecord>> for admin review. Implement pub async fn retry_quarantined(db, quarantine_id) -> Result<serde_json::Value> that retrieves a quarantined record for re-migration. Records stay in quarantine until explicitly retried or deleted by an admin. -->
   <!-- requirements: 5.1, 5.2, 5.3 -->

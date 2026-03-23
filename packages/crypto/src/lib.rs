@@ -10,6 +10,7 @@ pub mod types;
 
 pub use encryption::{decrypt, encrypt};
 pub use error::CryptoError;
+pub use kdf::{derive_key, generate_salt};
 
 #[cfg(test)]
 mod tests;

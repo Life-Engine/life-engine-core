@@ -116,7 +116,7 @@ Progress: 0 / 10 work packages complete
 ## 3.9 — Argon2id Key Derivation
 > spec: .odm/spec/binary-and-startup/brief.md
 
-- [ ] Implement Argon2id key derivation function
+- [x] Implement Argon2id key derivation function
   <!-- file: packages/crypto/src/kdf.rs -->
   <!-- purpose: Implement pub fn derive_key(passphrase: &str, salt: &[u8]) -> Result<[u8; 32]> using Argon2id with parameters: memory_cost = 65536 (64 MB), time_cost = 3 iterations, parallelism = 4 lanes, output length = 32 bytes. These parameters match the ARCHITECTURE.md and binary-and-startup spec requirements. Also implement pub fn generate_salt() -> [u8; 16] using OsRng. Use the argon2 crate. Add unit tests: same passphrase + salt produces same key (deterministic), different passphrases produce different keys, different salts produce different keys, output is exactly 32 bytes. Re-export from lib.rs. -->
   <!-- requirements: from binary-and-startup spec 3.1, 3.2 -->

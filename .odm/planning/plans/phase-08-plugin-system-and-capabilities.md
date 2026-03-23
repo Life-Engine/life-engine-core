@@ -299,7 +299,7 @@ Progress: 13 / 22 work packages complete
 > depends: 8.12
 > spec: .odm/spec/plugin-system/brief.md
 
-- [ ] Add crash isolation integration tests
+- [x] Add crash isolation integration tests
   <!-- file: packages/plugin-system/tests/crash_isolation.rs -->
   <!-- purpose: Create a test WASM plugin that deliberately panics during execute. Load it alongside a well-behaved test plugin. Test cases: (1) the panicking plugin's execution returns an error — it does not crash Core, (2) the error is logged with the panicking plugin's ID, (3) the well-behaved plugin continues to execute normally after the crash, (4) the PluginManager can unload and optionally reload the crashed plugin, (5) WASM memory isolation ensures the crash doesn't corrupt other plugins' state. These tests validate Extism's sandboxing guarantees. -->
   <!-- requirements: from plugin-system spec 3.3, 3.4, 3.5 -->

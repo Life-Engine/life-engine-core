@@ -127,14 +127,14 @@
     "8.13",
     "8.14",
     "8.15",
-    "8.16"
+    "8.16",
+    "8.17"
   ],
   "current_wp": null,
   "current_wp_tasks": {
-    "total": 2,
+    "total": 1,
     "completed": [
-      "Add synchronous capability check inside each host function",
-      "Add runtime capability enforcement tests"
+      "Add crash isolation integration tests"
     ],
     "deferred": [],
     "remaining": [],
@@ -1145,8 +1145,16 @@
       "wp": "8.16",
       "title": "Runtime Capability Checks",
       "completed_at": "2026-03-23T00:00:00Z",
-      "commit": "pending",
+      "commit": "2ac881f",
       "tasks_completed": 2,
+      "tasks_deferred": 0
+    },
+    {
+      "wp": "8.17",
+      "title": "Crash Isolation Verification",
+      "completed_at": "2026-03-23T00:00:00Z",
+      "commit": "PENDING",
+      "tasks_completed": 1,
       "tasks_deferred": 0
     }
   ]

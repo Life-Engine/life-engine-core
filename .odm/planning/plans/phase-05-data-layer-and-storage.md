@@ -63,7 +63,7 @@ Progress: 0 / 16 work packages complete
 > depends: 5.1, 5.2
 > spec: .odm/spec/data-layer/brief.md
 
-- [ ] Implement StorageBackend::mutate to translate StorageMutation to SQL
+- [x] Implement StorageBackend::mutate to translate StorageMutation to SQL
   <!-- file: packages/storage-sqlite/src/backend.rs -->
   <!-- purpose: Implement the mutate method on SqliteStorage. For StorageMutation::Insert: INSERT INTO plugin_data (id, plugin_id, collection, data, version, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?). Generate UUID for id, serialize PipelineMessage payload to JSON for data column, set version to 1, set timestamps to now. For StorageMutation::Update: UPDATE plugin_data SET data = ?, version = version + 1, updated_at = ? WHERE id = ? AND plugin_id = ? AND version = ?. The WHERE version = ? clause implements optimistic concurrency — if the version has changed since the caller read it, the update affects 0 rows and returns a ConcurrencyConflict error. For StorageMutation::Delete: DELETE FROM plugin_data WHERE id = ? AND plugin_id = ?. The plugin_id check ensures a plugin can only delete its own data. All mutations use parameterized queries. Wrap each mutation in a transaction. -->
   <!-- requirements: 2.1, 2.3, 2.4, 2.5 -->

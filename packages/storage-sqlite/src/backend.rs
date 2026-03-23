@@ -1,12 +1,13 @@
 //! StorageBackend trait implementation for SQLite.
 
 use chrono::Utc;
-use rusqlite::params_from_iter;
+use rusqlite::{params, params_from_iter};
 use serde_json;
 use uuid::Uuid;
 
 use life_engine_types::{
-    CdmType, FilterOp, MessageMetadata, PipelineMessage, SortDirection, StorageQuery, TypedPayload,
+    CdmType, FilterOp, MessageMetadata, PipelineMessage, SortDirection, StorageMutation,
+    StorageQuery, TypedPayload,
 };
 
 use crate::error::StorageError;
@@ -178,6 +179,100 @@ impl SqliteStorage {
 
         Ok(results)
     }
+
+    /// Execute a write mutation, translating `StorageMutation` into SQL.
+    ///
+    /// Each mutation is wrapped in a transaction. Insert generates a new UUID
+    /// and sets version to 1. Update uses optimistic concurrency via a
+    /// `WHERE version = ?` clause. Delete scopes by both `id` and `plugin_id`.
+    pub fn execute_mutation(&self, mutation: StorageMutation) -> Result<(), StorageError> {
+        match mutation {
+            StorageMutation::Insert {
+                plugin_id,
+                collection,
+                data,
+            } => {
+                let id = Uuid::new_v4().to_string();
+                let now = Utc::now().to_rfc3339();
+                let data_json = serialize_payload(&data.payload)?;
+
+                self.conn.execute(
+                    "INSERT INTO plugin_data \
+                     (id, plugin_id, collection, data, version, created_at, updated_at) \
+                     VALUES (?1, ?2, ?3, ?4, 1, ?5, ?6)",
+                    params![id, plugin_id, collection, data_json, now, now],
+                )?;
+
+                Ok(())
+            }
+            StorageMutation::Update {
+                plugin_id,
+                collection: _,
+                id,
+                data,
+                expected_version,
+            } => {
+                let now = Utc::now().to_rfc3339();
+                let data_json = serialize_payload(&data.payload)?;
+                let id_str = id.to_string();
+                let version_i64 = expected_version as i64;
+
+                let rows_affected = self.conn.execute(
+                    "UPDATE plugin_data \
+                     SET data = ?1, version = version + 1, updated_at = ?2 \
+                     WHERE id = ?3 AND plugin_id = ?4 AND version = ?5",
+                    params![data_json, now, id_str, plugin_id, version_i64],
+                )?;
+
+                if rows_affected == 0 {
+                    // Either the record doesn't exist or the version has changed.
+                    return Err(StorageError::ConcurrencyConflict {
+                        id: id_str,
+                        expected: expected_version,
+                    });
+                }
+
+                Ok(())
+            }
+            StorageMutation::Delete {
+                plugin_id,
+                collection: _,
+                id,
+            } => {
+                let id_str = id.to_string();
+
+                self.conn.execute(
+                    "DELETE FROM plugin_data WHERE id = ?1 AND plugin_id = ?2",
+                    params![id_str, plugin_id],
+                )?;
+
+                Ok(())
+            }
+        }
+    }
+}
+
+/// Serialize a `TypedPayload` to a JSON string for storage in the `data` column.
+fn serialize_payload(payload: &TypedPayload) -> Result<String, StorageError> {
+    match payload {
+        TypedPayload::Cdm(cdm) => match cdm.as_ref() {
+            CdmType::Event(v) => Ok(serde_json::to_string(v)?),
+            CdmType::Task(v) => Ok(serde_json::to_string(v)?),
+            CdmType::Contact(v) => Ok(serde_json::to_string(v)?),
+            CdmType::Note(v) => Ok(serde_json::to_string(v)?),
+            CdmType::Email(v) => Ok(serde_json::to_string(v)?),
+            CdmType::File(v) => Ok(serde_json::to_string(v)?),
+            CdmType::Credential(v) => Ok(serde_json::to_string(v)?),
+            CdmType::EventBatch(v) => Ok(serde_json::to_string(v)?),
+            CdmType::TaskBatch(v) => Ok(serde_json::to_string(v)?),
+            CdmType::ContactBatch(v) => Ok(serde_json::to_string(v)?),
+            CdmType::NoteBatch(v) => Ok(serde_json::to_string(v)?),
+            CdmType::EmailBatch(v) => Ok(serde_json::to_string(v)?),
+            CdmType::FileBatch(v) => Ok(serde_json::to_string(v)?),
+            CdmType::CredentialBatch(v) => Ok(serde_json::to_string(v)?),
+        },
+        TypedPayload::Custom(v) => Ok(serde_json::to_string(v)?),
+    }
 }
 
 /// Convert a `serde_json::Value` to a string representation for LIKE patterns.
@@ -214,7 +309,7 @@ fn json_value_to_boxed_sql(v: &serde_json::Value) -> Box<dyn rusqlite::types::To
 mod tests {
     use super::*;
     use crate::schema;
-    use life_engine_types::{QueryFilter, SortField};
+    use life_engine_types::{QueryFilter, SortField, StorageMutation};
     use rusqlite::Connection;
 
     fn setup_db() -> SqliteStorage {
@@ -553,5 +648,252 @@ mod tests {
 
         let results = storage.execute_query(query).unwrap();
         assert!(results.is_empty());
+    }
+
+    // --- Mutation tests ---
+
+    fn make_pipeline_message(title: &str) -> PipelineMessage {
+        let task: life_engine_types::Task = serde_json::from_value(serde_json::json!({
+            "id": "00000000-0000-0000-0000-000000000001",
+            "title": title,
+            "description": null,
+            "status": "pending",
+            "priority": "medium",
+            "due_date": null,
+            "completed_at": null,
+            "tags": [],
+            "assignee": null,
+            "parent_id": null,
+            "source": "test",
+            "source_id": "t-1",
+            "extensions": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z"
+        }))
+        .unwrap();
+        PipelineMessage {
+            metadata: MessageMetadata {
+                correlation_id: Uuid::new_v4(),
+                source: "test".into(),
+                timestamp: Utc::now(),
+                auth_context: None,
+            },
+            payload: TypedPayload::Cdm(Box::new(CdmType::Task(task))),
+        }
+    }
+
+    #[test]
+    fn mutate_insert_creates_record() {
+        let storage = setup_db();
+        let msg = make_pipeline_message("Buy groceries");
+
+        storage
+            .execute_mutation(StorageMutation::Insert {
+                plugin_id: "plugin-a".into(),
+                collection: "tasks".into(),
+                data: msg,
+            })
+            .unwrap();
+
+        let query = StorageQuery {
+            collection: "tasks".into(),
+            plugin_id: "plugin-a".into(),
+            filters: vec![],
+            sort: vec![],
+            limit: None,
+            offset: None,
+        };
+        let results = storage.execute_query(query).unwrap();
+        assert_eq!(results.len(), 1);
+    }
+
+    #[test]
+    fn mutate_insert_sets_version_to_one() {
+        let storage = setup_db();
+        let msg = make_pipeline_message("Task V1");
+
+        storage
+            .execute_mutation(StorageMutation::Insert {
+                plugin_id: "plug".into(),
+                collection: "tasks".into(),
+                data: msg,
+            })
+            .unwrap();
+
+        let version: i64 = storage
+            .conn
+            .query_row(
+                "SELECT version FROM plugin_data WHERE plugin_id = 'plug'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(version, 1);
+    }
+
+    #[test]
+    fn mutate_update_increments_version() {
+        let storage = setup_db();
+        // Insert a row directly so we know the id and version.
+        let id = "00000000-0000-0000-0000-aaaaaaaaaaaa";
+        let task_json = serde_json::json!({
+            "id": id,
+            "title": "Original",
+            "description": null,
+            "status": "pending",
+            "priority": "medium",
+            "due_date": null,
+            "completed_at": null,
+            "tags": [],
+            "assignee": null,
+            "parent_id": null,
+            "source": "test",
+            "source_id": "t-1",
+            "extensions": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z"
+        });
+        insert_row(&storage, id, "plug", "tasks", &task_json.to_string());
+
+        let updated_msg = make_pipeline_message("Updated");
+
+        storage
+            .execute_mutation(StorageMutation::Update {
+                plugin_id: "plug".into(),
+                collection: "tasks".into(),
+                id: Uuid::parse_str(id).unwrap(),
+                data: updated_msg,
+                expected_version: 1,
+            })
+            .unwrap();
+
+        let version: i64 = storage
+            .conn
+            .query_row(
+                "SELECT version FROM plugin_data WHERE id = ?1",
+                params![id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(version, 2);
+    }
+
+    #[test]
+    fn mutate_update_concurrency_conflict() {
+        let storage = setup_db();
+        let id = "00000000-0000-0000-0000-bbbbbbbbbbbb";
+        let task_json = serde_json::json!({
+            "id": id,
+            "title": "Original",
+            "description": null,
+            "status": "pending",
+            "priority": "medium",
+            "due_date": null,
+            "completed_at": null,
+            "tags": [],
+            "assignee": null,
+            "parent_id": null,
+            "source": "test",
+            "source_id": "t-1",
+            "extensions": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z"
+        });
+        insert_row(&storage, id, "plug", "tasks", &task_json.to_string());
+
+        let msg = make_pipeline_message("Stale update");
+
+        // Use wrong expected_version (99 instead of 1).
+        let result = storage.execute_mutation(StorageMutation::Update {
+            plugin_id: "plug".into(),
+            collection: "tasks".into(),
+            id: Uuid::parse_str(id).unwrap(),
+            data: msg,
+            expected_version: 99,
+        });
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(
+            err,
+            StorageError::ConcurrencyConflict { .. }
+        ));
+    }
+
+    #[test]
+    fn mutate_delete_removes_record() {
+        let storage = setup_db();
+        let id = "00000000-0000-0000-0000-cccccccccccc";
+        let task_json = serde_json::json!({
+            "id": id,
+            "title": "To delete",
+            "description": null,
+            "status": "pending",
+            "priority": "medium",
+            "due_date": null,
+            "completed_at": null,
+            "tags": [],
+            "assignee": null,
+            "parent_id": null,
+            "source": "test",
+            "source_id": "t-1",
+            "extensions": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z"
+        });
+        insert_row(&storage, id, "plug", "tasks", &task_json.to_string());
+
+        storage
+            .execute_mutation(StorageMutation::Delete {
+                plugin_id: "plug".into(),
+                collection: "tasks".into(),
+                id: Uuid::parse_str(id).unwrap(),
+            })
+            .unwrap();
+
+        let count: i64 = storage
+            .conn
+            .query_row("SELECT count(*) FROM plugin_data", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn mutate_delete_scoped_by_plugin_id() {
+        let storage = setup_db();
+        let id = "00000000-0000-0000-0000-dddddddddddd";
+        let task_json = serde_json::json!({
+            "id": id,
+            "title": "Owned by A",
+            "description": null,
+            "status": "pending",
+            "priority": "medium",
+            "due_date": null,
+            "completed_at": null,
+            "tags": [],
+            "assignee": null,
+            "parent_id": null,
+            "source": "test",
+            "source_id": "t-1",
+            "extensions": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z"
+        });
+        insert_row(&storage, id, "plugin-a", "tasks", &task_json.to_string());
+
+        // Attempt delete with wrong plugin_id — should not remove the row.
+        storage
+            .execute_mutation(StorageMutation::Delete {
+                plugin_id: "plugin-b".into(),
+                collection: "tasks".into(),
+                id: Uuid::parse_str(id).unwrap(),
+            })
+            .unwrap();
+
+        let count: i64 = storage
+            .conn
+            .query_row("SELECT count(*) FROM plugin_data", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 1, "record should not be deleted by wrong plugin_id");
     }
 }

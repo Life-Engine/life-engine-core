@@ -33,6 +33,15 @@ pub enum StorageError {
     /// Initialization failed.
     #[error("initialization failed: {0}")]
     InitFailed(String),
+
+    /// Optimistic concurrency conflict — the record version has changed.
+    #[error("concurrency conflict: record {id} expected version {expected} but was modified")]
+    ConcurrencyConflict {
+        /// The record identifier.
+        id: String,
+        /// The version the caller expected.
+        expected: u64,
+    },
 }
 
 impl EngineError for StorageError {
@@ -45,12 +54,14 @@ impl EngineError for StorageError {
             StorageError::PermissionDenied(_) => "STORAGE_005",
             StorageError::InvalidConfig(_) => "STORAGE_006",
             StorageError::InitFailed(_) => "STORAGE_007",
+            StorageError::ConcurrencyConflict { .. } => "STORAGE_008",
         }
     }
 
     fn severity(&self) -> Severity {
         match self {
             StorageError::NotFound(_) => Severity::Warning,
+            StorageError::ConcurrencyConflict { .. } => Severity::Retryable,
             _ => Severity::Fatal,
         }
     }

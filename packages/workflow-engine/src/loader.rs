@@ -1,8 +1,12 @@
-//! Workflow definition loader — scans a directory for YAML files and parses workflow definitions.
+//! Workflow definition loader and trigger registry.
+//!
+//! Scans a directory for YAML files, parses workflow definitions, and builds
+//! an immutable trigger registry for endpoint, event, and schedule lookups.
 
 use std::collections::HashMap;
 use std::path::Path;
 
+use cron::Schedule;
 use tracing::info;
 
 use crate::config::WorkflowConfig;
@@ -150,6 +154,137 @@ fn validate_workflow(workflow: &WorkflowDef, filename: &str) -> Result<(), Workf
     }
 
     Ok(())
+}
+
+/// HTTP method extracted from an endpoint trigger string (e.g., "POST /email/sync").
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum HttpMethod {
+    Get,
+    Post,
+    Put,
+    Patch,
+    Delete,
+}
+
+impl HttpMethod {
+    /// Parse an HTTP method string (case-insensitive).
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.to_uppercase().as_str() {
+            "GET" => Some(Self::Get),
+            "POST" => Some(Self::Post),
+            "PUT" => Some(Self::Put),
+            "PATCH" => Some(Self::Patch),
+            "DELETE" => Some(Self::Delete),
+            _ => None,
+        }
+    }
+}
+
+/// Immutable trigger registry built from loaded workflow definitions.
+///
+/// Maps endpoint triggers, event triggers, and schedule triggers to their
+/// corresponding workflow definitions for fast lookup at runtime.
+pub struct TriggerRegistry {
+    /// Maps (HTTP method, path) to the workflow definition.
+    endpoints: HashMap<(HttpMethod, String), WorkflowDef>,
+    /// Maps event name to a list of workflows (multiple workflows can share an event).
+    events: HashMap<String, Vec<WorkflowDef>>,
+    /// Cron-triggered workflows with their parsed schedule.
+    schedules: Vec<(Schedule, WorkflowDef)>,
+}
+
+impl TriggerRegistry {
+    /// Build a trigger registry from a list of workflow definitions.
+    ///
+    /// Parses endpoint trigger strings into (method, path) pairs, groups event
+    /// triggers, and parses cron expressions for schedule triggers.
+    pub fn build(workflows: Vec<WorkflowDef>) -> Result<Self, WorkflowError> {
+        let mut endpoints: HashMap<(HttpMethod, String), WorkflowDef> = HashMap::new();
+        let mut events: HashMap<String, Vec<WorkflowDef>> = HashMap::new();
+        let mut schedules: Vec<(Schedule, WorkflowDef)> = Vec::new();
+
+        for workflow in workflows {
+            if let Some(ref endpoint_str) = workflow.trigger.endpoint {
+                let (method, path) = Self::parse_endpoint(endpoint_str, &workflow.id)?;
+                endpoints.insert((method, path), workflow.clone());
+            }
+
+            if let Some(ref event_name) = workflow.trigger.event {
+                events
+                    .entry(event_name.clone())
+                    .or_default()
+                    .push(workflow.clone());
+            }
+
+            if let Some(ref cron_expr) = workflow.trigger.schedule {
+                let schedule: Schedule =
+                    cron_expr.parse().map_err(|e: cron::error::Error| {
+                        WorkflowError::InvalidDefinition {
+                            workflow_id: workflow.id.clone(),
+                            reason: format!("invalid cron expression '{}': {}", cron_expr, e),
+                        }
+                    })?;
+                schedules.push((schedule, workflow.clone()));
+            }
+        }
+
+        Ok(Self {
+            endpoints,
+            events,
+            schedules,
+        })
+    }
+
+    /// Look up a workflow by HTTP method and path.
+    pub fn find_endpoint(&self, method: &str, path: &str) -> Option<&WorkflowDef> {
+        let http_method = HttpMethod::parse(method)?;
+        self.endpoints.get(&(http_method, path.to_string()))
+    }
+
+    /// Look up all workflows triggered by an event name.
+    pub fn find_event(&self, event_name: &str) -> Vec<&WorkflowDef> {
+        self.events
+            .get(event_name)
+            .map(|wfs| wfs.iter().collect())
+            .unwrap_or_default()
+    }
+
+    /// Get all schedule-triggered workflows with their parsed cron expressions.
+    pub fn get_schedules(&self) -> &[(Schedule, WorkflowDef)] {
+        &self.schedules
+    }
+
+    /// Parse an endpoint string like "POST /email/sync" into (HttpMethod, path).
+    fn parse_endpoint(
+        endpoint: &str,
+        workflow_id: &str,
+    ) -> Result<(HttpMethod, String), WorkflowError> {
+        let parts: Vec<&str> = endpoint.splitn(2, ' ').collect();
+        if parts.len() != 2 {
+            return Err(WorkflowError::InvalidDefinition {
+                workflow_id: workflow_id.to_string(),
+                reason: format!(
+                    "endpoint trigger '{}' must be in 'METHOD /path' format",
+                    endpoint
+                ),
+            });
+        }
+        let method = HttpMethod::parse(parts[0]).ok_or_else(|| WorkflowError::InvalidDefinition {
+            workflow_id: workflow_id.to_string(),
+            reason: format!("unsupported HTTP method '{}' in endpoint trigger", parts[0]),
+        })?;
+        Ok((method, parts[1].to_string()))
+    }
+}
+
+impl std::fmt::Debug for TriggerRegistry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TriggerRegistry")
+            .field("endpoints", &self.endpoints.len())
+            .field("events", &self.events.len())
+            .field("schedules", &self.schedules.len())
+            .finish()
+    }
 }
 
 #[cfg(test)]
@@ -410,5 +545,250 @@ workflows:
         };
         let workflows = load_workflows(&config).unwrap();
         assert_eq!(workflows.len(), 2);
+    }
+
+    // --- TriggerRegistry tests ---
+
+    fn build_registry_from_yaml(dir: &Path, files: &[(&str, &str)]) -> TriggerRegistry {
+        for (name, content) in files {
+            write_yaml(dir, name, content);
+        }
+        let config = WorkflowConfig {
+            path: dir.to_str().unwrap().into(),
+        };
+        let workflows = load_workflows(&config).unwrap();
+        TriggerRegistry::build(workflows).unwrap()
+    }
+
+    #[test]
+    fn registry_endpoint_lookup_by_method_and_path() {
+        let dir = TempDir::new().unwrap();
+        let registry = build_registry_from_yaml(
+            dir.path(),
+            &[(
+                "api.yaml",
+                r#"
+workflows:
+  email-sync:
+    id: email-sync
+    name: Email Sync
+    trigger:
+      endpoint: "POST /email/sync"
+    steps:
+      - plugin: email-fetcher
+        action: fetch
+  get-status:
+    id: get-status
+    name: Get Status
+    trigger:
+      endpoint: "GET /status"
+    steps:
+      - plugin: status
+        action: check
+"#,
+            )],
+        );
+
+        let found = registry.find_endpoint("POST", "/email/sync");
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().id, "email-sync");
+
+        let found = registry.find_endpoint("GET", "/status");
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().id, "get-status");
+    }
+
+    #[test]
+    fn registry_endpoint_missing_returns_none() {
+        let dir = TempDir::new().unwrap();
+        let registry = build_registry_from_yaml(
+            dir.path(),
+            &[(
+                "api.yaml",
+                r#"
+workflows:
+  email-sync:
+    id: email-sync
+    name: Email Sync
+    trigger:
+      endpoint: "POST /email/sync"
+    steps:
+      - plugin: email-fetcher
+        action: fetch
+"#,
+            )],
+        );
+
+        assert!(registry.find_endpoint("GET", "/email/sync").is_none());
+        assert!(registry.find_endpoint("POST", "/nonexistent").is_none());
+    }
+
+    #[test]
+    fn registry_event_lookup_returns_multiple_workflows() {
+        let dir = TempDir::new().unwrap();
+        let registry = build_registry_from_yaml(
+            dir.path(),
+            &[(
+                "events.yaml",
+                r#"
+workflows:
+  handler-a:
+    id: handler-a
+    name: Handler A
+    trigger:
+      event: "webhook.email.received"
+    steps:
+      - plugin: p1
+        action: a1
+  handler-b:
+    id: handler-b
+    name: Handler B
+    trigger:
+      event: "webhook.email.received"
+    steps:
+      - plugin: p2
+        action: a2
+  handler-c:
+    id: handler-c
+    name: Handler C
+    trigger:
+      event: "other.event"
+    steps:
+      - plugin: p3
+        action: a3
+"#,
+            )],
+        );
+
+        let matches = registry.find_event("webhook.email.received");
+        assert_eq!(matches.len(), 2);
+        let ids: Vec<&str> = matches.iter().map(|w| w.id.as_str()).collect();
+        assert!(ids.contains(&"handler-a"));
+        assert!(ids.contains(&"handler-b"));
+
+        let other = registry.find_event("other.event");
+        assert_eq!(other.len(), 1);
+        assert_eq!(other[0].id, "handler-c");
+    }
+
+    #[test]
+    fn registry_event_missing_returns_empty() {
+        let dir = TempDir::new().unwrap();
+        let registry = build_registry_from_yaml(
+            dir.path(),
+            &[(
+                "events.yaml",
+                r#"
+workflows:
+  handler:
+    id: handler
+    name: Handler
+    trigger:
+      event: "some.event"
+    steps:
+      - plugin: p1
+        action: a1
+"#,
+            )],
+        );
+
+        let matches = registry.find_event("nonexistent.event");
+        assert!(matches.is_empty());
+    }
+
+    #[test]
+    fn registry_schedule_enumeration() {
+        let dir = TempDir::new().unwrap();
+        let registry = build_registry_from_yaml(
+            dir.path(),
+            &[(
+                "schedules.yaml",
+                r#"
+workflows:
+  daily-backup:
+    id: daily-backup
+    name: Daily Backup
+    trigger:
+      schedule: "0 0 2 * * *"
+    steps:
+      - plugin: backup
+        action: run
+  hourly-sync:
+    id: hourly-sync
+    name: Hourly Sync
+    trigger:
+      schedule: "0 0 * * * *"
+    steps:
+      - plugin: sync
+        action: run
+"#,
+            )],
+        );
+
+        let schedules = registry.get_schedules();
+        assert_eq!(schedules.len(), 2);
+        let ids: Vec<&str> = schedules.iter().map(|(_, w)| w.id.as_str()).collect();
+        assert!(ids.contains(&"daily-backup"));
+        assert!(ids.contains(&"hourly-sync"));
+    }
+
+    #[test]
+    fn registry_rejects_invalid_cron_expression() {
+        let dir = TempDir::new().unwrap();
+        write_yaml(
+            dir.path(),
+            "bad-cron.yaml",
+            r#"
+workflows:
+  bad-schedule:
+    id: bad-schedule
+    name: Bad Schedule
+    trigger:
+      schedule: "not a cron"
+    steps:
+      - plugin: p1
+        action: a1
+"#,
+        );
+
+        let config = WorkflowConfig {
+            path: dir.path().to_str().unwrap().into(),
+        };
+        let workflows = load_workflows(&config).unwrap();
+        let err = TriggerRegistry::build(workflows).unwrap_err();
+        assert!(
+            matches!(err, WorkflowError::InvalidDefinition { .. }),
+            "expected InvalidDefinition, got: {err}"
+        );
+    }
+
+    #[test]
+    fn registry_rejects_invalid_endpoint_format() {
+        let dir = TempDir::new().unwrap();
+        write_yaml(
+            dir.path(),
+            "bad-endpoint.yaml",
+            r#"
+workflows:
+  bad-ep:
+    id: bad-ep
+    name: Bad Endpoint
+    trigger:
+      endpoint: "/no-method"
+    steps:
+      - plugin: p1
+        action: a1
+"#,
+        );
+
+        let config = WorkflowConfig {
+            path: dir.path().to_str().unwrap().into(),
+        };
+        let workflows = load_workflows(&config).unwrap();
+        let err = TriggerRegistry::build(workflows).unwrap_err();
+        assert!(
+            matches!(err, WorkflowError::InvalidDefinition { .. }),
+            "expected InvalidDefinition, got: {err}"
+        );
     }
 }

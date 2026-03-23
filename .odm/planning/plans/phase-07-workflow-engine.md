@@ -58,7 +58,7 @@ Progress: 0 / 17 work packages complete
 > depends: 7.3
 > spec: .odm/spec/workflow-engine/brief.md
 
-- [ ] Build immutable trigger registry from loaded workflows
+- [x] Build immutable trigger registry from loaded workflows
   <!-- file: packages/workflow-engine/src/loader.rs -->
   <!-- file: packages/workflow-engine/src/types.rs -->
   <!-- purpose: Define TriggerRegistry struct with three internal maps: endpoints (HashMap<(HttpMethod, String), WorkflowDef> — maps HTTP method + path to workflow), events (HashMap<String, Vec<WorkflowDef>> — maps event name to list of workflows, multiple workflows can trigger on the same event), schedules (Vec<(CronExpression, WorkflowDef)> — list of cron-triggered workflows). Implement TriggerRegistry::build(workflows: Vec<WorkflowDef>) -> Result<TriggerRegistry> that populates all three maps from the workflow trigger definitions. Implement lookup methods: find_endpoint(method: &str, path: &str) -> Option<&WorkflowDef>, find_event(event_name: &str) -> Vec<&WorkflowDef>, get_schedules() -> &[(CronExpression, WorkflowDef)]. The registry is immutable after construction — rebuilt on workflow reload. Add tests: endpoint lookup by method+path, event lookup returns multiple workflows, schedule enumeration, missing endpoint returns None. -->

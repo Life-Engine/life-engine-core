@@ -46,7 +46,7 @@ Progress: 0 / 17 work packages complete
 > depends: 7.2
 > spec: .odm/spec/workflow-engine/brief.md
 
-- [ ] Implement workflow directory scanning and YAML parsing
+- [x] Implement workflow directory scanning and YAML parsing
   <!-- file: packages/workflow-engine/src/loader.rs -->
   <!-- purpose: Implement pub fn load_workflows(config: &WorkflowConfig) -> Result<Vec<WorkflowDef>, WorkflowError>. Logic: (1) scan the configured directory for all *.yaml and *.yml files, (2) parse each file using serde_yaml into a top-level struct containing a workflows map (HashMap<String, WorkflowDef>), (3) validate required fields: every workflow must have an id and at least one step, (4) validate each step references a plugin and action, (5) detect duplicate workflow IDs across all files — reject with WORKFLOW_001 error identifying both files, (6) detect duplicate endpoint triggers across all files — reject with WORKFLOW_002 error, (7) return the flattened Vec<WorkflowDef>. Produce clear errors with the filename and line context for parse failures. Log info-level summary: "Loaded N workflows from M files". -->
   <!-- requirements: from workflow-engine spec 2.1 -->

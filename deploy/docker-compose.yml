@@ -2,7 +2,7 @@ services:
   core:
     build:
       context: ../
-      dockerfile: apps/core/Dockerfile
+      dockerfile: deploy/Dockerfile
     ports:
       - "3750:3750"
     environment:
@@ -10,15 +10,22 @@ services:
       LIFE_ENGINE_CORE_PORT: "3750"
       LIFE_ENGINE_CORE_LOG_LEVEL: "info"
       LIFE_ENGINE_CORE_DATA_DIR: "/data"
+      LIFE_ENGINE_STORAGE_PATH: "/data/core.db"
+      LIFE_ENGINE_STORAGE_PASSPHRASE: "${LIFE_ENGINE_STORAGE_PASSPHRASE}"
       LIFE_ENGINE_AUTH_PROVIDER: "local-token"
+      LIFE_ENGINE_TRANSPORTS_REST_PORT: "3750"
     volumes:
-      - core-data:/data
+      - ./data:/data
+      - ./plugins:/plugins
+      - ./workflows:/workflows
+      - ./config.toml:/app/config.toml:ro
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:3750/api/system/health"]
       interval: 30s
       timeout: 5s
       retries: 3
-
-volumes:
-  core-data:

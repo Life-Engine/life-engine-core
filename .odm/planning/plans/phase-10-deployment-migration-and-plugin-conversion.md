@@ -15,7 +15,7 @@ This phase depends on Phase 9 (completed Core binary). The deployment modes shar
 
 > spec: .odm/spec/deployment-modes/brief.md, .odm/spec/migration-format/brief.md
 
-Progress: 0 / 24 work packages complete
+Progress: 2 / 24 work packages complete
 
 ---
 
@@ -33,7 +33,7 @@ Progress: 0 / 24 work packages complete
 ## 10.2 — Docker Compose Configuration
 > spec: .odm/spec/deployment-modes/brief.md
 
-- [ ] Create docker-compose.yml with volume mounts and environment configuration
+- [x] Create docker-compose.yml with volume mounts and environment configuration
   <!-- file: deploy/docker-compose.yml -->
   <!-- purpose: Define Core service: build from deploy/Dockerfile, volumes for persistent data (./data:/data for database, ./plugins:/plugins for WASM plugins, ./workflows:/workflows for YAML workflow files, ./config.toml:/app/config.toml for configuration), environment variables for config overrides (LIFE_ENGINE_STORAGE_PATH=/data/core.db, LIFE_ENGINE_STORAGE_PASSPHRASE from .env file, LIFE_ENGINE_TRANSPORTS_REST_PORT=3000), port mapping (3000:3000), restart policy (unless-stopped), resource limits (memory: 256M for default, adjustable), healthcheck referencing the container's health endpoint. Include a .env.example file documenting all available environment variables. -->
   <!-- requirements: 3.2, 3.3, 3.4, 3.5 -->

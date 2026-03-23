@@ -14,6 +14,7 @@ members = [
     "packages/storage-sqlite",
     "packages/auth",
     "packages/workflow-engine",
+    "packages/plugin-system",
 
     # Transport packages
     "packages/transport-rest",

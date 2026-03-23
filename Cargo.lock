@@ -3952,6 +3952,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "life-engine-plugin-system"
+version = "0.1.0"
+dependencies = [
+ "life-engine-traits",
+ "life-engine-types",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "toml 0.8.23",
+ "tracing",
+]
+
+[[package]]
 name = "life-engine-storage-sqlite"
 version = "0.1.0"
 dependencies = [
@@ -4112,6 +4127,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
+ "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "tracing",

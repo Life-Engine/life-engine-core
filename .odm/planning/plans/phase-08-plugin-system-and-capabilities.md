@@ -15,20 +15,20 @@ This phase depends on Phase 3 (traits, capabilities), Phase 4 (plugin SDK), Phas
 
 > spec: .odm/spec/plugin-system/brief.md, .odm/spec/capability-enforcement/brief.md
 
-Progress: 0 / 22 work packages complete
+Progress: 1 / 22 work packages complete
 
 ---
 
 ## 8.1 — Plugin Directory Scanner
 > spec: .odm/spec/plugin-system/brief.md
 
-- [ ] Implement directory scanner that discovers plugin subdirectories
+- [x] Implement directory scanner that discovers plugin subdirectories
   <!-- file: packages/plugin-system/src/discovery.rs -->
   <!-- purpose: Implement pub fn scan_plugins_directory(path: &Path) -> Result<Vec<DiscoveredPlugin>, PluginError>. Logic: (1) verify the plugins directory exists, (2) iterate subdirectories, (3) for each subdirectory, check if both plugin.wasm and manifest.toml exist, (4) if both present, create a DiscoveredPlugin { path, wasm_path, manifest_path }, (5) if one is missing, log a warning with the directory name and which file is missing, skip it, (6) if neither exists, silently skip (probably not a plugin directory). Define DiscoveredPlugin struct with path (PathBuf), wasm_path (PathBuf), manifest_path (PathBuf). Return the list sorted by directory name for deterministic loading order. Log info: "Discovered N plugins in {path}". -->
   <!-- requirements: from plugin-system spec 1.1, 1.2, 1.3 -->
   <!-- leverage: none -->
 
-- [ ] Add directory scanner tests
+- [x] Add directory scanner tests
   <!-- file: packages/plugin-system/src/discovery.rs -->
   <!-- purpose: Create a temporary directory structure in tests. Test cases: (1) directory with plugin.wasm + manifest.toml is discovered, (2) directory with only manifest.toml is skipped with warning, (3) directory with only plugin.wasm is skipped with warning, (4) empty plugins directory returns empty Vec, (5) nested directories are not recursively scanned (only immediate children), (6) non-directory entries (files) in the plugins directory are ignored. -->
   <!-- requirements: from plugin-system spec 1.1, 1.2, 1.3 -->

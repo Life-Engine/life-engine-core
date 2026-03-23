@@ -15,7 +15,7 @@ This phase depends on Phase 3 (traits, capabilities), Phase 4 (plugin SDK), Phas
 
 > spec: .odm/spec/plugin-system/brief.md, .odm/spec/capability-enforcement/brief.md
 
-Progress: 4 / 22 work packages complete
+Progress: 5 / 22 work packages complete
 
 ---
 
@@ -94,13 +94,13 @@ Progress: 4 / 22 work packages complete
 > depends: 8.4, 8.3
 > spec: .odm/spec/plugin-system/brief.md
 
-- [ ] Implement storage read and write host functions
+- [x] Implement storage read and write host functions
   <!-- file: packages/plugin-system/src/host_functions/storage.rs -->
   <!-- purpose: Implement host_storage_read host function: (1) deserialize the plugin's request from WASM memory (contains collection name, query filters), (2) check that the calling plugin has storage:read capability in its ApprovedCapabilities, (3) if not approved, return serialized CapabilityViolation error, (4) construct a StorageQuery with the plugin's ID and delegate to StorageBackend::execute(), (5) serialize the Vec<PipelineMessage> result back to WASM memory. Implement host_storage_write host function: (1) deserialize the mutation request (insert/update/delete), (2) check storage:write capability, (3) construct a StorageMutation with the plugin's ID and delegate to StorageBackend::mutate(), (4) serialize the result. Both functions are registered as Extism host functions with the plugin's context (plugin_id, capabilities, storage backend reference). -->
   <!-- requirements: from plugin-system spec 5.4, 6.2 -->
   <!-- leverage: StorageBackend from Phase 5 -->
 
-- [ ] Add storage host function tests
+- [x] Add storage host function tests
   <!-- file: packages/plugin-system/src/host_functions/storage.rs -->
   <!-- purpose: Test cases: (1) read succeeds with storage:read capability, (2) write succeeds with storage:write capability, (3) read without storage:read returns CAP_002 error, (4) write without storage:write returns CAP_002 error, (5) plugin_id is correctly scoped in the StorageQuery, (6) query results are correctly serialized back to WASM format. Use mock StorageBackend for tests. -->
   <!-- requirements: from plugin-system spec 5.4, 5.9, 6.2 -->

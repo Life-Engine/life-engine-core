@@ -18,6 +18,9 @@ semver = { workspace = true }
 extism = { workspace = true }
 
 [dev-dependencies]
+async-trait = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
 wat = "1"
 tempfile = { workspace = true }
 tokio = { workspace = true }

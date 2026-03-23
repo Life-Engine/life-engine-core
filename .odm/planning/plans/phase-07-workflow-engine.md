@@ -180,7 +180,7 @@ Progress: 0 / 17 work packages complete
 > depends: 7.4
 > spec: .odm/spec/workflow-engine/brief.md
 
-- [ ] Implement event bus for async event-driven workflow triggering
+- [x] Implement event bus for async event-driven workflow triggering
   <!-- file: packages/workflow-engine/src/event_bus.rs -->
   <!-- purpose: Define EventBus struct using tokio::sync::broadcast channel for event distribution. Implement pub async fn emit(&self, event_name: String, payload: serde_json::Value) that: (1) looks up matching workflows in the TriggerRegistry, (2) for each matching workflow, spawn a new tokio task to execute it with an Event TriggerContext, (3) log the event emission and number of triggered workflows. Implement pub fn subscribe(&self) -> broadcast::Receiver<(String, serde_json::Value)> for components that want to listen to all events (e.g., logging, metrics). System events to emit: "plugin.loaded", "plugin.error", "workflow.completed", "workflow.failed", "storage.error". The event bus is thread-safe (Arc<EventBus>) and shared across the workflow engine, plugin system, and transports. Add tests: emit event triggers matching workflow, emit event with no matching workflows is a no-op, multiple workflows matching same event all execute independently. -->
   <!-- requirements: from workflow-engine spec 7.1 -->

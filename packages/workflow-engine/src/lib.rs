@@ -11,6 +11,7 @@ pub mod types;
 pub use config::WorkflowConfig;
 pub use error::WorkflowError;
 pub use loader::{load_workflows, HttpMethod, TriggerRegistry};
+pub use event_bus::EventBus;
 pub use executor::{
     build_initial_message, JobStatus, NoOpEventEmitter, PipelineExecutor, PluginExecutor,
     WorkflowEventEmitter,

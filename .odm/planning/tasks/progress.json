@@ -117,13 +117,14 @@
     "7.11",
     "6.12",
     "7.12",
-    "7.13"
+    "7.13",
+    "7.14"
   ],
   "current_wp": null,
   "current_wp_tasks": {
     "total": 1,
     "completed": [
-      "Implement configurable schema validation per workflow"
+      "Implement event bus for async event-driven workflow triggering"
     ],
     "deferred": [],
     "remaining": [],
@@ -1055,6 +1056,14 @@
       "title": "Pipeline Validation",
       "completed_at": "2026-03-23T00:00:00Z",
       "commit": "9ce4e71",
+      "tasks_completed": 1,
+      "tasks_deferred": 0
+    },
+    {
+      "wp": "7.14",
+      "title": "Event Bus",
+      "completed_at": "2026-03-23T00:00:00Z",
+      "commit": "pending",
       "tasks_completed": 1,
       "tasks_deferred": 0
     }

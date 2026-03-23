@@ -156,7 +156,7 @@ Progress: 0 / 12 work packages complete
 ## 6.12 — Plugin Auth Inheritance
 > spec: .odm/spec/auth-and-pocket-id/brief.md
 
-- [ ] Verify pipeline messages carry authenticated identity through plugin execution
+- [x] Verify pipeline messages carry authenticated identity through plugin execution
   <!-- file: packages/auth/src/tests/identity_test.rs -->
   <!-- purpose: Write integration tests verifying: (1) when a transport validates a request, the resulting AuthIdentity is attached to the PipelineMessage's metadata.auth_context field as serialized JSON, (2) when the workflow engine passes PipelineMessage to a plugin step, the auth_context is preserved, (3) plugins can read the auth_context from the PipelineMessage metadata but cannot modify it (auth_context is set by the transport layer and immutable through the pipeline), (4) credential storage operations require the identity in auth_context to have appropriate scopes, (5) unauthenticated requests (health endpoint) have auth_context = None. These tests verify the end-to-end auth inheritance chain: transport → workflow → plugin. -->
   <!-- requirements: 6.1, 6.2, 6.3 -->

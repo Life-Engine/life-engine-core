@@ -8,6 +8,8 @@ description = "YAML-defined workflow execution engine for Life Engine"
 [dependencies]
 life-engine-types = { path = "../types" }
 life-engine-traits = { path = "../traits" }
+life-engine-storage-sqlite = { path = "../storage-sqlite" }
+rusqlite = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }

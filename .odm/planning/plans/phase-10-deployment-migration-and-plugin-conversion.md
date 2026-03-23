@@ -238,7 +238,7 @@ Progress: 5 / 24 work packages complete
 > depends: 10.15, 10.16, 10.17, 10.18
 > spec: .odm/spec/migration-format/brief.md
 
-- [ ] Implement the core migration execution loop
+- [x] Implement the core migration execution loop
   <!-- file: packages/workflow-engine/src/migration/engine.rs -->
   <!-- purpose: Implement pub async fn run_migrations(storage: &dyn StorageBackend, wasm_path: &Path, entries: &[MigrationEntry], plugin_id: &str, db_path: &Path, data_dir: &Path) -> Result<MigrationResult>. Logic: (1) create a pre-migration backup via create_backup(), (2) for each MigrationEntry in ascending version order: (a) query all records in the target collection with version matching the from range, (b) begin a SQLite transaction, (c) for each matching record: call run_transform() with the record's JSON data, if transform succeeds: validate the output against the collection's schema (canonical or private), update the record's data and version column in plugin_data, increment migrated count; if transform fails: insert the record into quarantine with the error message, increment quarantined count, (d) commit the transaction (all-or-nothing per migration entry), (3) log the migration result (migrated count, quarantined count, duration) to migration_log, (4) return MigrationResult with counts and backup path. Define MigrationResult struct: migrated (u64), quarantined (u64), duration_ms (u64), backup_path (PathBuf), entries_applied (Vec<String>). If a migration entry has zero matching records, skip it silently. -->
   <!-- requirements: 4.1, 4.2, 4.3, 4.4, 9.1, 9.2 -->

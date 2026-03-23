@@ -4,10 +4,12 @@ use thiserror::Error;
 
 use life_engine_traits::{EngineError, Severity};
 
+pub mod engine;
 pub mod manifest;
 pub mod runner;
 pub mod validate;
 
+pub use engine::{run_migrations, MigrationResult};
 pub use manifest::{parse_migration_entries, parse_migration_entries_from_str, MigrationEntry};
 pub use runner::{run_transform, run_transform_from_bytes};
 pub use validate::{validate_wasm_exports, validate_wasm_exports_from_bytes};

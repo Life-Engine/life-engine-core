@@ -149,13 +149,14 @@
     "10.15",
     "10.16",
     "10.17",
-    "10.18"
+    "10.18",
+    "10.19"
   ],
   "current_wp": null,
   "current_wp_tasks": {
     "total": 1,
     "completed": [
-      "Implement pre-migration SQLite backup mechanism"
+      "Implement the core migration execution loop"
     ],
     "deferred": [],
     "remaining": [],
@@ -1342,6 +1343,14 @@
       "wp": "10.18",
       "title": "Pre-Migration Backup",
       "completed_at": "2026-03-23T12:00:00Z",
+      "commit": "acd96bf",
+      "tasks_completed": 1,
+      "tasks_deferred": 0
+    },
+    {
+      "wp": "10.19",
+      "title": "Migration Execution Engine",
+      "completed_at": "2026-03-23T14:00:00Z",
       "commit": "pending",
       "tasks_completed": 1,
       "tasks_deferred": 0

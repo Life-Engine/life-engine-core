@@ -117,7 +117,7 @@ Progress: 0 / 16 work packages complete
 > depends: 5.6
 > spec: .odm/spec/data-layer/brief.md
 
-- [ ] Allow extensions field on canonical collection records without validation
+- [x] Allow extensions field on canonical collection records without validation
   <!-- file: packages/storage-sqlite/src/validation.rs -->
   <!-- purpose: When validating canonical collection records, allow an "extensions" field containing arbitrary nested JSON without validating its internal structure against the canonical schema. The extensions field is an object where keys are reverse-domain plugin namespaces and values are arbitrary JSON. The canonical schema's additionalProperties: false should NOT reject the extensions field — add it as an explicitly allowed optional property in the validation logic (or use a schema that permits it). Verify that writing a canonical record with extensions works, reading it back preserves extensions, and updating without specifying extensions preserves existing extension data (merge semantics). Credentials collection has no extensions field — verify writes with extensions on Credentials are rejected. -->
   <!-- requirements: 4.4 -->

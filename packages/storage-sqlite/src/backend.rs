@@ -257,7 +257,17 @@ impl SqliteStorage {
                 expected_version,
             } => {
                 let now = Utc::now().to_rfc3339();
-                let data_json = serialize_payload(&data.payload)?;
+                let mut data_json = serialize_payload(&data.payload)?;
+
+                // For canonical collections (except credentials), preserve
+                // existing extensions when the update payload omits them.
+                if validation::is_canonical(&collection) && collection != "credentials" {
+                    data_json = merge_existing_extensions(
+                        &self.conn,
+                        &id.to_string(),
+                        &data_json,
+                    )?;
+                }
 
                 if validation::is_canonical(&collection) {
                     validation::validate_canonical(&collection, &data_json)?;
@@ -306,6 +316,48 @@ impl SqliteStorage {
             }
         }
     }
+}
+
+/// Merge existing extensions into the new data when the update omits them.
+///
+/// If the new payload has `extensions: null` (or missing) and the existing
+/// record in the database has a non-null extensions object, the existing
+/// extensions are copied into the new payload. This implements the
+/// "update without specifying extensions preserves them" semantics.
+fn merge_existing_extensions(
+    conn: &rusqlite::Connection,
+    record_id: &str,
+    new_data_json: &str,
+) -> Result<String, StorageError> {
+    let mut new_data: serde_json::Value = serde_json::from_str(new_data_json)?;
+
+    // If the new payload already has non-null extensions, no merge needed.
+    if let Some(ext) = new_data.get("extensions") {
+        if !ext.is_null() {
+            return Ok(new_data_json.to_string());
+        }
+    }
+
+    // Look up existing record's extensions from the database.
+    let existing_extensions: Option<serde_json::Value> = conn
+        .query_row(
+            "SELECT json_extract(data, '$.extensions') FROM plugin_data WHERE id = ?1",
+            params![record_id],
+            |row| {
+                let raw: Option<String> = row.get(0)?;
+                Ok(raw.and_then(|s| serde_json::from_str(&s).ok()))
+            },
+        )
+        .unwrap_or(None);
+
+    if let Some(ext) = existing_extensions {
+        if !ext.is_null() {
+            new_data["extensions"] = ext;
+            return Ok(serde_json::to_string(&new_data)?);
+        }
+    }
+
+    Ok(new_data_json.to_string())
 }
 
 /// Serialize a `TypedPayload` to a JSON string for storage in the `data` column.
@@ -1070,5 +1122,154 @@ mod tests {
             .query_row("SELECT count(*) FROM plugin_data", [], |row| row.get(0))
             .unwrap();
         assert_eq!(count, 1, "cross-plugin delete must not remove the record");
+    }
+
+    // --- Extensions support tests ---
+
+    fn make_event_json(title: &str, extensions: Option<serde_json::Value>) -> String {
+        serde_json::json!({
+            "id": "550e8400-e29b-41d4-a716-446655440000",
+            "title": title,
+            "start": "2026-03-23T09:00:00Z",
+            "source": "test-plugin",
+            "source_id": "ev-1",
+            "extensions": extensions,
+            "created_at": "2026-03-23T00:00:00Z",
+            "updated_at": "2026-03-23T00:00:00Z"
+        })
+        .to_string()
+    }
+
+    fn make_event_pipeline_message(
+        title: &str,
+        extensions: Option<serde_json::Value>,
+    ) -> PipelineMessage {
+        let event: life_engine_types::CalendarEvent = serde_json::from_value(serde_json::json!({
+            "id": "550e8400-e29b-41d4-a716-446655440000",
+            "title": title,
+            "start": "2026-03-23T09:00:00Z",
+            "source": "test-plugin",
+            "source_id": "ev-1",
+            "extensions": extensions,
+            "created_at": "2026-03-23T00:00:00Z",
+            "updated_at": "2026-03-23T00:00:00Z"
+        }))
+        .unwrap();
+        PipelineMessage {
+            metadata: MessageMetadata {
+                correlation_id: Uuid::new_v4(),
+                source: "test".into(),
+                timestamp: Utc::now(),
+                auth_context: None,
+            },
+            payload: TypedPayload::Cdm(Box::new(CdmType::Event(event))),
+        }
+    }
+
+    #[test]
+    fn extensions_round_trip_preserves_data() {
+        let storage = setup_db();
+        let ext = serde_json::json!({
+            "com.example.plugin": { "custom_field": "value", "count": 42 }
+        });
+        let id = "550e8400-e29b-41d4-a716-446655440000";
+        insert_row(&storage, id, "plugin-a", "events", &make_event_json("Meeting", Some(ext.clone())));
+
+        let query = StorageQuery {
+            collection: "events".into(),
+            plugin_id: "plugin-a".into(),
+            filters: vec![],
+            sort: vec![],
+            limit: None,
+            offset: None,
+        };
+        let results = storage.execute_query(query).unwrap();
+        assert_eq!(results.len(), 1);
+
+        match &results[0].payload {
+            TypedPayload::Cdm(cdm) => match cdm.as_ref() {
+                CdmType::Event(event) => {
+                    assert_eq!(event.extensions, Some(ext), "extensions should round-trip");
+                }
+                _ => panic!("expected Event"),
+            },
+            _ => panic!("expected Cdm"),
+        }
+    }
+
+    #[test]
+    fn update_without_extensions_preserves_existing() {
+        let storage = setup_db();
+        let ext = serde_json::json!({
+            "com.example.plugin": { "custom_field": "preserved" }
+        });
+        let id = "550e8400-e29b-41d4-a716-446655440000";
+        insert_row(&storage, id, "plugin-a", "events", &make_event_json("Original", Some(ext.clone())));
+
+        // Update with extensions: None — should preserve existing extensions.
+        let updated_msg = make_event_pipeline_message("Updated Title", None);
+        storage
+            .execute_mutation(StorageMutation::Update {
+                plugin_id: "plugin-a".into(),
+                collection: "events".into(),
+                id: Uuid::parse_str(id).unwrap(),
+                data: updated_msg,
+                expected_version: 1,
+            })
+            .unwrap();
+
+        // Read back and verify extensions were preserved.
+        let raw: String = storage
+            .conn
+            .query_row(
+                "SELECT data FROM plugin_data WHERE id = ?1",
+                params![id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(
+            parsed["extensions"], ext,
+            "existing extensions should be preserved when update omits them"
+        );
+        assert_eq!(parsed["title"], "Updated Title");
+    }
+
+    #[test]
+    fn update_with_new_extensions_replaces() {
+        let storage = setup_db();
+        let old_ext = serde_json::json!({
+            "com.example.plugin": { "old": true }
+        });
+        let new_ext = serde_json::json!({
+            "com.example.plugin": { "new": true }
+        });
+        let id = "550e8400-e29b-41d4-a716-446655440000";
+        insert_row(&storage, id, "plugin-a", "events", &make_event_json("Event", Some(old_ext)));
+
+        let updated_msg = make_event_pipeline_message("Event", Some(new_ext.clone()));
+        storage
+            .execute_mutation(StorageMutation::Update {
+                plugin_id: "plugin-a".into(),
+                collection: "events".into(),
+                id: Uuid::parse_str(id).unwrap(),
+                data: updated_msg,
+                expected_version: 1,
+            })
+            .unwrap();
+
+        let raw: String = storage
+            .conn
+            .query_row(
+                "SELECT data FROM plugin_data WHERE id = ?1",
+                params![id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(
+            parsed["extensions"], new_ext,
+            "explicitly provided extensions should replace existing"
+        );
     }
 }

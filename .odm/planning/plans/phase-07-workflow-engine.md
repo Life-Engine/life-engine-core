@@ -22,7 +22,7 @@ Progress: 0 / 17 work packages complete
 ## 7.1 — Crate Scaffold
 > spec: .odm/spec/workflow-engine/brief.md
 
-- [ ] Set up workflow-engine crate with standard layout and dependencies
+- [x] Set up workflow-engine crate with standard layout and dependencies
   <!-- file: packages/workflow-engine/Cargo.toml -->
   <!-- file: packages/workflow-engine/src/lib.rs -->
   <!-- purpose: Ensure Cargo.toml has name = "life-engine-workflow-engine" with dependencies on life-engine-types (workspace), life-engine-traits (workspace), serde (workspace), serde_json (workspace), serde_yaml = "0.9" (workflow YAML parsing), tokio (workspace with rt-multi-thread, sync, time features), tracing (workspace), thiserror (workspace), uuid (workspace), chrono (workspace), cron = "0.13" (cron expression parsing). Ensure src/lib.rs declares modules: config, error, types, loader, executor, event_bus, scheduler, and re-exports the public API: WorkflowEngine (main entry point), WorkflowConfig. Ensure src/config.rs has WorkflowConfig struct with path (String — directory containing YAML files). Ensure src/error.rs has WorkflowError enum implementing EngineError with codes WORKFLOW_001 through WORKFLOW_010. Verify crate compiles with no warnings. -->

@@ -15,7 +15,7 @@ This phase depends on all previous phases (types, traits, crypto, SDK, storage, 
 
 > spec: .odm/spec/binary-and-startup/brief.md
 
-Progress: 3 / 11 work packages complete
+Progress: 4 / 11 work packages complete
 
 ---
 
@@ -55,7 +55,7 @@ Progress: 3 / 11 work packages complete
 ## 9.4 — Config Loading and Validation Tests
 > spec: .odm/spec/binary-and-startup/brief.md
 
-- [ ] Add comprehensive config tests
+- [x] Add comprehensive config tests
   <!-- file: apps/core/tests/config_test.rs -->
   <!-- purpose: Test cases: (1) valid config.toml loads and parses correctly, (2) LIFE_ENGINE_STORAGE_PATH env var overrides storage.path from TOML, (3) env vars take precedence over TOML values, (4) missing config file creates default config, (5) missing required field (storage) returns ConfigError::MissingSection, (6) invalid TOML syntax returns parse error with line/column, (7) sensitive values are redacted in log output (test by capturing tracing output), (8) multiple validation errors are collected and reported together, (9) zero configured transports produces a warning but not an error. Use tempdir for test config files and std::env::set_var for env var tests (with cleanup). -->
   <!-- requirements: 1.1, 1.2, 1.4, 2.1, 2.2, 2.5 -->

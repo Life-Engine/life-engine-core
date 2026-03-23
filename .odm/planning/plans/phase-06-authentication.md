@@ -134,7 +134,7 @@ Progress: 0 / 12 work packages complete
 ## 6.10 — API Key Management
 > spec: .odm/spec/auth-and-pocket-id/brief.md
 
-- [ ] Implement API key CRUD handlers
+- [x] Implement API key CRUD handlers
   <!-- file: packages/auth/src/handlers/keys.rs -->
   <!-- purpose: Implement pub async fn create_key(storage: &dyn StorageBackend, name: String, scopes: Vec<String>, expires_at: Option<DateTime<Utc>>) -> Result<(String, ApiKeyRecord), AuthError> that: (1) generates a cryptographically random 32-byte key, (2) encodes as URL-safe base64 string (the raw key shown to user once), (3) generates a random 16-byte salt, (4) hashes the key with SHA-256 + salt using packages/crypto, (5) creates an ApiKeyRecord with the hash and salt (never the raw key), (6) stores in the "credentials" collection via StorageBackend with CredentialType::ApiKey, (7) returns the raw key string and the record. Implement pub async fn list_keys(storage) -> Result<Vec<ApiKeyRecord>> that returns metadata only (no hashes). Implement pub async fn revoke_key(storage, key_id) -> Result<()> that sets revoked = true. Implement validate_key(storage, raw_key) -> Result<AuthIdentity> that: hashes the provided key with each stored key's salt, compares using constant-time comparison, checks not revoked and not expired, updates last_used timestamp. -->
   <!-- requirements: 7.1, 7.2, 7.3, 7.4 -->

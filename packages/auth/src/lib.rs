@@ -5,7 +5,10 @@
 //! The auth module is initialized once during Core startup and shared
 //! with all transports via `Arc<dyn AuthProvider>`.
 
+use std::sync::Arc;
+
 use async_trait::async_trait;
+use life_engine_traits::StorageBackend;
 use uuid::Uuid;
 
 pub mod config;
@@ -15,6 +18,7 @@ pub mod types;
 
 pub use config::AuthConfig;
 pub use error::AuthError;
+pub use handlers::keys::{create_key, list_keys, revoke_key, validate_key};
 pub use handlers::rate_limit::RateLimiter;
 pub use handlers::validate::validate_request;
 pub use types::{ApiKeyRecord, AuthIdentity, AuthToken};
@@ -42,6 +46,7 @@ pub trait AuthProvider: Send + Sync {
 /// should be wrapped in `Arc` for sharing across transport tasks.
 pub async fn create_auth_provider(
     config: AuthConfig,
+    storage: Option<Arc<dyn StorageBackend>>,
 ) -> Result<Box<dyn AuthProvider>, AuthError> {
     config.validate().map_err(AuthError::ConfigInvalid)?;
 
@@ -51,7 +56,12 @@ pub async fn create_auth_provider(
             Ok(Box::new(provider))
         }
         "api-key" => {
-            let provider = handlers::keys::ApiKeyProvider::new();
+            let storage = storage.ok_or_else(|| {
+                AuthError::ConfigInvalid(
+                    "api-key provider requires a storage backend".to_string(),
+                )
+            })?;
+            let provider = handlers::keys::ApiKeyProvider::new(storage);
             Ok(Box::new(provider))
         }
         other => Err(AuthError::ConfigInvalid(format!(

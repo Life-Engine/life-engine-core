@@ -15,14 +15,14 @@ This phase depends on Phase 2 (types) and Phase 3 (traits, crypto). Phase 5 (dat
 
 > spec: .odm/spec/plugin-sdk-rs/brief.md
 
-Progress: 0 / 7 work packages complete
+Progress: 1 / 7 work packages complete
 
 ---
 
 ## 4.1 — Type and Trait Re-exports
 > spec: .odm/spec/plugin-sdk-rs/brief.md
 
-- [ ] Configure plugin-sdk Cargo.toml dependencies and re-export all public types
+- [x] Configure plugin-sdk Cargo.toml dependencies and re-export all public types
   <!-- file: packages/plugin-sdk/Cargo.toml -->
   <!-- file: packages/plugin-sdk/src/lib.rs -->
   <!-- purpose: Add dependencies on life-engine-types and life-engine-traits in Cargo.toml using workspace path references. In lib.rs, re-export all public types from life-engine-types: all 7 CDM structs (CalendarEvent, Task, Contact, Note, Email, FileMetadata, Credential) and their supporting types (enums, nested structs), PipelineMessage, MessageMetadata, TypedPayload, CdmType, SchemaValidated, StorageQuery, StorageMutation, QueryFilter, FilterOp, SortField, SortDirection. Re-export from life-engine-traits: Plugin trait, Action struct, EngineError trait, Severity enum, StorageBackend trait, Capability enum, CapabilityViolation. Create a prelude module that re-exports the most commonly used types for ergonomic imports. Verify downstream consumers can import everything from the SDK without adding types or traits as direct dependencies by writing a compile-only test. -->

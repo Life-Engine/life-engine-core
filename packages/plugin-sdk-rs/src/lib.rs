@@ -58,17 +58,29 @@ pub use life_engine_types::{
     // Pipeline message types
     CdmType, MessageMetadata, PipelineMessage, SchemaValidated, SchemaValidationError,
     TypedPayload,
+    // Storage query and mutation types
+    FilterOp, QueryFilter, SortDirection, SortField, StorageMutation, StorageQuery,
     // Extension namespace validation
     validate_extension_namespace, ExtensionError,
 };
 
+// Re-export all infrastructure traits and types from the traits crate.
+// Note: The traits crate `Capability` is re-exported as `WasmCapability` to avoid
+// conflicting with the existing SDK `Capability` enum used by `CorePlugin`.
+pub use life_engine_traits;
+pub use life_engine_traits::{
+    Action, EngineError, Plugin, Severity, StorageBackend,
+    Capability as WasmCapability, CapabilityViolation,
+};
+
 /// Convenience prelude for plugin authors.
 ///
-/// Import everything needed to implement a `CorePlugin`:
+/// Import everything needed to implement a plugin:
 /// ```rust,ignore
 /// use life_engine_plugin_sdk::prelude::*;
 /// ```
 pub mod prelude {
+    // Native plugin types (CorePlugin-based)
     pub use crate::credential_store::{CredentialStore, StoredCredential};
     pub use crate::traits::CorePlugin;
     pub use crate::types::{
@@ -77,5 +89,20 @@ pub mod prelude {
     };
     pub use anyhow::Result;
     pub use async_trait::async_trait;
-    pub use life_engine_types::{CdmType, MessageMetadata, PipelineMessage, TypedPayload};
+
+    // CDM and pipeline types
+    pub use life_engine_types::{
+        CdmType, MessageMetadata, PipelineMessage, SchemaValidated, TypedPayload,
+    };
+
+    // Storage types
+    pub use life_engine_types::{
+        FilterOp, QueryFilter, SortDirection, SortField, StorageMutation, StorageQuery,
+    };
+
+    // WASM plugin traits and types (from life-engine-traits)
+    pub use life_engine_traits::{
+        Action, EngineError, Plugin, Severity, StorageBackend,
+        Capability as WasmCapability, CapabilityViolation,
+    };
 }

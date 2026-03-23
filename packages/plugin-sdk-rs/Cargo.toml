@@ -7,6 +7,7 @@ description = "Rust SDK for building Life Engine Core plugins"
 
 [dependencies]
 life-engine-types = { path = "../types" }
+life-engine-traits = { path = "../traits" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 async-trait = { workspace = true }

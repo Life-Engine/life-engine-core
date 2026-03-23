@@ -73,7 +73,7 @@ pub async fn host_http_request(
             plugin_id = %ctx.plugin_id,
             "http:outbound capability violation"
         );
-        return Err(PluginError::CapabilityViolation(format!(
+        return Err(PluginError::RuntimeCapabilityViolation(format!(
             "plugin '{}' lacks capability 'http:outbound'",
             ctx.plugin_id
         )));
@@ -250,7 +250,7 @@ mod tests {
         let result = host_http_request(&ctx, &input).await;
 
         let err = result.unwrap_err();
-        assert!(matches!(err, PluginError::CapabilityViolation(_)));
+        assert!(matches!(err, PluginError::RuntimeCapabilityViolation(_)));
         assert!(err.to_string().contains("http:outbound"));
         assert!(err.to_string().contains("test-plugin"));
     }

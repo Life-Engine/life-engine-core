@@ -40,7 +40,7 @@ pub async fn host_storage_read(
             plugin_id = %ctx.plugin_id,
             "storage:read capability violation"
         );
-        return Err(PluginError::CapabilityViolation(format!(
+        return Err(PluginError::RuntimeCapabilityViolation(format!(
             "plugin '{}' lacks capability 'storage:read'",
             ctx.plugin_id
         )));
@@ -95,7 +95,7 @@ pub async fn host_storage_write(
             plugin_id = %ctx.plugin_id,
             "storage:write capability violation"
         );
-        return Err(PluginError::CapabilityViolation(format!(
+        return Err(PluginError::RuntimeCapabilityViolation(format!(
             "plugin '{}' lacks capability 'storage:write'",
             ctx.plugin_id
         )));
@@ -369,7 +369,7 @@ mod tests {
         let result = host_storage_read(&ctx, &input).await;
 
         let err = result.unwrap_err();
-        assert!(matches!(err, PluginError::CapabilityViolation(_)));
+        assert!(matches!(err, PluginError::RuntimeCapabilityViolation(_)));
         assert!(err.to_string().contains("storage:read"));
         assert!(err.to_string().contains("test-plugin"));
     }
@@ -385,7 +385,7 @@ mod tests {
         let result = host_storage_write(&ctx, &input).await;
 
         let err = result.unwrap_err();
-        assert!(matches!(err, PluginError::CapabilityViolation(_)));
+        assert!(matches!(err, PluginError::RuntimeCapabilityViolation(_)));
         assert!(err.to_string().contains("storage:write"));
         assert!(err.to_string().contains("test-plugin"));
     }

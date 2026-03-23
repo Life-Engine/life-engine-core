@@ -31,9 +31,13 @@ pub enum PluginError {
     #[error("failed to load WASM binary: {0}")]
     WasmLoadFailed(String),
 
-    /// Capability violation at load time.
+    /// Capability violation at load time (CAP_001).
     #[error("capability violation: {0}")]
     CapabilityViolation(String),
+
+    /// Capability violation at runtime — defence-in-depth check (CAP_002).
+    #[error("runtime capability violation: {0}")]
+    RuntimeCapabilityViolation(String),
 
     /// Plugin execution failed.
     #[error("plugin execution failed: {0}")]
@@ -56,7 +60,8 @@ impl EngineError for PluginError {
             PluginError::ManifestInvalid(_) => "PLUGIN_003",
             PluginError::ManifestMissingField { .. } => "PLUGIN_004",
             PluginError::WasmLoadFailed(_) => "PLUGIN_005",
-            PluginError::CapabilityViolation(_) => "PLUGIN_006",
+            PluginError::CapabilityViolation(_) => "CAP_001",
+            PluginError::RuntimeCapabilityViolation(_) => "CAP_002",
             PluginError::ExecutionFailed(_) => "PLUGIN_007",
             PluginError::LifecycleError(_) => "PLUGIN_008",
             PluginError::Io(_) => "PLUGIN_009",
@@ -71,6 +76,7 @@ impl EngineError for PluginError {
             PluginError::ManifestMissingField { .. } => Severity::Fatal,
             PluginError::WasmLoadFailed(_) => Severity::Fatal,
             PluginError::CapabilityViolation(_) => Severity::Fatal,
+            PluginError::RuntimeCapabilityViolation(_) => Severity::Fatal,
             PluginError::ExecutionFailed(_) => Severity::Retryable,
             PluginError::LifecycleError(_) => Severity::Fatal,
             PluginError::Io(_) => Severity::Retryable,

@@ -57,7 +57,7 @@ pub async fn host_events_emit(
             plugin_id = %ctx.plugin_id,
             "events:emit capability violation"
         );
-        return Err(PluginError::CapabilityViolation(format!(
+        return Err(PluginError::RuntimeCapabilityViolation(format!(
             "plugin '{}' lacks capability 'events:emit'",
             ctx.plugin_id
         )));
@@ -102,7 +102,7 @@ pub async fn host_events_subscribe(
             plugin_id = %ctx.plugin_id,
             "events:subscribe capability violation"
         );
-        return Err(PluginError::CapabilityViolation(format!(
+        return Err(PluginError::RuntimeCapabilityViolation(format!(
             "plugin '{}' lacks capability 'events:subscribe'",
             ctx.plugin_id
         )));
@@ -256,7 +256,7 @@ mod tests {
         let result = host_events_emit(&ctx, &input).await;
 
         let err = result.unwrap_err();
-        assert!(matches!(err, PluginError::CapabilityViolation(_)));
+        assert!(matches!(err, PluginError::RuntimeCapabilityViolation(_)));
         assert!(err.to_string().contains("events:emit"));
         assert!(err.to_string().contains("test-plugin"));
 
@@ -275,7 +275,7 @@ mod tests {
         let result = host_events_subscribe(&ctx, &input).await;
 
         let err = result.unwrap_err();
-        assert!(matches!(err, PluginError::CapabilityViolation(_)));
+        assert!(matches!(err, PluginError::RuntimeCapabilityViolation(_)));
         assert!(err.to_string().contains("events:subscribe"));
         assert!(err.to_string().contains("test-plugin"));
 

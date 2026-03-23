@@ -126,14 +126,15 @@
     "8.12",
     "8.13",
     "8.14",
-    "8.15"
+    "8.15",
+    "8.16"
   ],
   "current_wp": null,
   "current_wp_tasks": {
     "total": 2,
     "completed": [
-      "Inject host functions per-plugin based on approved capabilities",
-      "Add host function injection tests"
+      "Add synchronous capability check inside each host function",
+      "Add runtime capability enforcement tests"
     ],
     "deferred": [],
     "remaining": [],
@@ -1130,6 +1131,22 @@
       "completed_at": "2026-03-23T00:00:00Z",
       "commit": "d9fb27c",
       "tasks_completed": 1,
+      "tasks_deferred": 0
+    },
+    {
+      "wp": "8.15",
+      "title": "Host Function Injection Gating",
+      "completed_at": "2026-03-23T00:00:00Z",
+      "commit": "5ddf189",
+      "tasks_completed": 2,
+      "tasks_deferred": 0
+    },
+    {
+      "wp": "8.16",
+      "title": "Runtime Capability Checks",
+      "completed_at": "2026-03-23T00:00:00Z",
+      "commit": "pending",
+      "tasks_completed": 2,
       "tasks_deferred": 0
     }
   ]

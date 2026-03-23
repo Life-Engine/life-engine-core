@@ -34,7 +34,7 @@ pub fn host_config_read(ctx: &ConfigHostContext) -> Result<Vec<u8>, PluginError>
             plugin_id = %ctx.plugin_id,
             "config:read capability violation"
         );
-        return Err(PluginError::CapabilityViolation(format!(
+        return Err(PluginError::RuntimeCapabilityViolation(format!(
             "plugin '{}' lacks capability 'config:read'",
             ctx.plugin_id
         )));
@@ -114,7 +114,7 @@ mod tests {
         let result = host_config_read(&ctx);
 
         let err = result.unwrap_err();
-        assert!(matches!(err, PluginError::CapabilityViolation(_)));
+        assert!(matches!(err, PluginError::RuntimeCapabilityViolation(_)));
         assert!(err.to_string().contains("config:read"));
         assert!(err.to_string().contains("test-plugin"));
     }

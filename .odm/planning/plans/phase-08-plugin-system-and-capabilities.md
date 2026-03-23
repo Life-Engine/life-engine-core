@@ -15,7 +15,7 @@ This phase depends on Phase 3 (traits, capabilities), Phase 4 (plugin SDK), Phas
 
 > spec: .odm/spec/plugin-system/brief.md, .odm/spec/capability-enforcement/brief.md
 
-Progress: 12 / 22 work packages complete
+Progress: 13 / 22 work packages complete
 
 ---
 
@@ -278,7 +278,7 @@ Progress: 12 / 22 work packages complete
 ## 8.16 — Runtime Capability Checks
 > spec: .odm/spec/capability-enforcement/brief.md
 
-- [ ] Add synchronous capability check inside each host function
+- [x] Add synchronous capability check inside each host function
   <!-- file: packages/plugin-system/src/host_functions/storage.rs -->
   <!-- file: packages/plugin-system/src/host_functions/config.rs -->
   <!-- file: packages/plugin-system/src/host_functions/events.rs -->
@@ -287,7 +287,7 @@ Progress: 12 / 22 work packages complete
   <!-- requirements: from capability-enforcement spec 3.1, 3.2, 3.3, 3.4 -->
   <!-- leverage: host functions from WPs 8.5-8.8 -->
 
-- [ ] Add runtime capability enforcement tests
+- [x] Add runtime capability enforcement tests
   <!-- file: packages/plugin-system/tests/runtime_capability_test.rs -->
   <!-- purpose: Test cases: (1) approved capability allows host function execution and returns data, (2) unapproved capability returns Fatal EngineError with CAP_002 code, (3) the check is synchronous — no async waiting, (4) error message includes the capability name and plugin ID. Use direct host function calls with mock contexts rather than full WASM execution for these unit tests. -->
   <!-- requirements: from capability-enforcement spec 3.1, 3.2, 3.3, 3.4, 3.5, 4.5 -->

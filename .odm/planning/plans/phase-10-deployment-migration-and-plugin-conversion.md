@@ -169,7 +169,7 @@ Progress: 4 / 24 work packages complete
 > depends: 10.12
 > spec: .odm/spec/migration-format/brief.md
 
-- [ ] Add overlap detection for migration from ranges
+- [x] Add overlap detection for migration from ranges
   <!-- file: packages/workflow-engine/src/migration/manifest.rs -->
   <!-- purpose: After parsing all migration entries for a plugin, check for overlapping from ranges within the same collection. Two entries overlap if any concrete version could match both from ranges (e.g., "1.x" and "1.0.x" overlap because 1.0.5 matches both). If overlap is detected, reject the plugin update with a MigrationError including both conflicting entries and an example version that matches both. This prevents ambiguous migration paths where Core can't determine which transform to apply. Add tests: (1) non-overlapping ranges pass (1.x->2.0.0, 2.x->3.0.0), (2) overlapping ranges fail (1.x->2.0.0, 1.0.x->1.1.0), (3) same from range with different collections is allowed, (4) exact version ranges never overlap with each other. -->
   <!-- requirements: 1.4 -->

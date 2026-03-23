@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "last_updated": "2026-03-23T00:00:08Z",
+  "last_updated": "2026-03-23T00:00:09Z",
   "completed_wps": [
     "1.1",
     "1.2",
@@ -143,13 +143,14 @@
     "10.9",
     "10.10",
     "10.11",
-    "10.12"
+    "10.12",
+    "10.13"
   ],
   "current_wp": null,
   "current_wp_tasks": {
     "total": 1,
     "completed": [
-      "Implement manifest.toml migration entry parsing and validation"
+      "Add overlap detection for migration from ranges"
     ],
     "deferred": [],
     "remaining": [],
@@ -1288,6 +1289,14 @@
       "wp": "10.12",
       "title": "Migration Manifest Validation",
       "completed_at": "2026-03-23T00:00:08Z",
+      "commit": "660afca",
+      "tasks_completed": 1,
+      "tasks_deferred": 0
+    },
+    {
+      "wp": "10.13",
+      "title": "Migration Entry Overlap Detection",
+      "completed_at": "2026-03-23T00:00:09Z",
       "commit": "pending",
       "tasks_completed": 1,
       "tasks_deferred": 0

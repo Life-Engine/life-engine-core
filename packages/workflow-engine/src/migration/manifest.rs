@@ -117,6 +117,7 @@ pub fn parse_migration_entries_from_str(
         });
     }
 
+    validate_no_overlapping_ranges(&entries)?;
     validate_chain_contiguity(&entries)?;
 
     Ok(entries)
@@ -259,6 +260,116 @@ fn validate_collection_name(name: &str, entry_index: usize) -> Result<(), Migrat
     }
 
     Ok(())
+}
+
+/// Parsed representation of a simplified semver range for overlap comparison.
+#[derive(Debug)]
+enum VersionRange {
+    /// `major.x` — matches all versions with the given major.
+    MajorWildcard(u64),
+    /// `major.minor.x` — matches all versions with given major.minor.
+    MinorWildcard(u64, u64),
+    /// `major.minor.patch` — matches exactly one version.
+    Exact(u64, u64, u64),
+}
+
+impl VersionRange {
+    fn parse(from: &str) -> Self {
+        let parts: Vec<&str> = from.split('.').collect();
+        match parts.len() {
+            2 => {
+                let major = parts[0].parse().unwrap_or(0);
+                VersionRange::MajorWildcard(major)
+            }
+            3 if parts[2] == "x" => {
+                let major = parts[0].parse().unwrap_or(0);
+                let minor = parts[1].parse().unwrap_or(0);
+                VersionRange::MinorWildcard(major, minor)
+            }
+            3 => {
+                let major = parts[0].parse().unwrap_or(0);
+                let minor = parts[1].parse().unwrap_or(0);
+                let patch = parts[2].parse().unwrap_or(0);
+                VersionRange::Exact(major, minor, patch)
+            }
+            _ => VersionRange::Exact(0, 0, 0),
+        }
+    }
+
+    /// Returns true if any concrete version could match both `self` and `other`.
+    fn overlaps(&self, other: &VersionRange) -> bool {
+        match (self, other) {
+            (VersionRange::MajorWildcard(m1), VersionRange::MajorWildcard(m2)) => m1 == m2,
+            (VersionRange::MajorWildcard(m1), VersionRange::MinorWildcard(m2, _))
+            | (VersionRange::MinorWildcard(m2, _), VersionRange::MajorWildcard(m1)) => m1 == m2,
+            (VersionRange::MajorWildcard(m1), VersionRange::Exact(m2, _, _))
+            | (VersionRange::Exact(m2, _, _), VersionRange::MajorWildcard(m1)) => m1 == m2,
+            (VersionRange::MinorWildcard(m1, n1), VersionRange::MinorWildcard(m2, n2)) => {
+                m1 == m2 && n1 == n2
+            }
+            (VersionRange::MinorWildcard(m1, n1), VersionRange::Exact(m2, n2, _))
+            | (VersionRange::Exact(m2, n2, _), VersionRange::MinorWildcard(m1, n1)) => {
+                m1 == m2 && n1 == n2
+            }
+            (VersionRange::Exact(m1, n1, p1), VersionRange::Exact(m2, n2, p2)) => {
+                m1 == m2 && n1 == n2 && p1 == p2
+            }
+        }
+    }
+
+    /// Returns an example concrete version that matches this range.
+    fn example_version(&self) -> String {
+        match self {
+            VersionRange::MajorWildcard(m) => format!("{m}.0.0"),
+            VersionRange::MinorWildcard(m, n) => format!("{m}.{n}.0"),
+            VersionRange::Exact(m, n, p) => format!("{m}.{n}.{p}"),
+        }
+    }
+}
+
+/// Validate that no two migration entries within the same collection have overlapping `from` ranges.
+fn validate_no_overlapping_ranges(entries: &[MigrationEntry]) -> Result<(), MigrationError> {
+    let mut by_collection: std::collections::HashMap<&str, Vec<&MigrationEntry>> =
+        std::collections::HashMap::new();
+
+    for entry in entries {
+        by_collection
+            .entry(entry.collection.as_str())
+            .or_default()
+            .push(entry);
+    }
+
+    for (collection, chain) in &by_collection {
+        for i in 0..chain.len() {
+            for j in (i + 1)..chain.len() {
+                let range_a = VersionRange::parse(&chain[i].from);
+                let range_b = VersionRange::parse(&chain[j].from);
+
+                if range_a.overlaps(&range_b) {
+                    let example = find_overlap_example(&range_a, &range_b);
+                    return Err(MigrationError::ManifestValidation(format!(
+                        "overlapping 'from' ranges in collection '{collection}': \
+                         '{}' and '{}' both match version {example}",
+                        chain[i].from, chain[j].from
+                    )));
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Find a concrete version that matches both ranges (for error messages).
+fn find_overlap_example(a: &VersionRange, b: &VersionRange) -> String {
+    // Pick the more specific range's example — it will match both since they overlap.
+    match (a, b) {
+        (VersionRange::Exact(_, _, _), _) => a.example_version(),
+        (_, VersionRange::Exact(_, _, _)) => b.example_version(),
+        (VersionRange::MinorWildcard(_, _), _) => a.example_version(),
+        (_, VersionRange::MinorWildcard(_, _)) => b.example_version(),
+        _ => a.example_version(),
+    }
 }
 
 /// Validate that migration entries within the same collection form a contiguous chain.
@@ -711,5 +822,163 @@ collection = "events"
 "#;
         let entries = parse_migration_entries_from_str(toml).unwrap();
         assert_eq!(entries.len(), 2);
+    }
+
+    // --- Overlap detection tests ---
+
+    #[test]
+    fn non_overlapping_ranges_pass() {
+        let toml = r#"
+[[migrations]]
+from = "1.x"
+to = "2.0.0"
+transform = "migrate_v1_v2"
+description = "v1 to v2"
+collection = "events"
+
+[[migrations]]
+from = "2.x"
+to = "3.0.0"
+transform = "migrate_v2_v3"
+description = "v2 to v3"
+collection = "events"
+"#;
+        let entries = parse_migration_entries_from_str(toml).unwrap();
+        assert_eq!(entries.len(), 2);
+    }
+
+    #[test]
+    fn overlapping_major_and_minor_wildcard_fails() {
+        let toml = r#"
+[[migrations]]
+from = "1.x"
+to = "2.0.0"
+transform = "migrate_a"
+description = "a"
+collection = "events"
+
+[[migrations]]
+from = "1.0.x"
+to = "1.1.0"
+transform = "migrate_b"
+description = "b"
+collection = "events"
+"#;
+        let err = parse_migration_entries_from_str(toml).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("overlapping"), "expected overlap error, got: {msg}");
+        assert!(msg.contains("1.x"));
+        assert!(msg.contains("1.0.x"));
+    }
+
+    #[test]
+    fn same_from_range_different_collections_allowed() {
+        let toml = r#"
+[[migrations]]
+from = "1.x"
+to = "2.0.0"
+transform = "migrate_events"
+description = "events migration"
+collection = "events"
+
+[[migrations]]
+from = "1.x"
+to = "2.0.0"
+transform = "migrate_tasks"
+description = "tasks migration"
+collection = "tasks"
+"#;
+        let entries = parse_migration_entries_from_str(toml).unwrap();
+        assert_eq!(entries.len(), 2);
+    }
+
+    #[test]
+    fn exact_version_ranges_do_not_overlap() {
+        let toml = r#"
+[[migrations]]
+from = "1.0.0"
+to = "1.0.1"
+transform = "migrate_a"
+description = "a"
+collection = "events"
+
+[[migrations]]
+from = "1.0.1"
+to = "1.0.2"
+transform = "migrate_b"
+description = "b"
+collection = "events"
+"#;
+        let entries = parse_migration_entries_from_str(toml).unwrap();
+        assert_eq!(entries.len(), 2);
+    }
+
+    #[test]
+    fn identical_exact_versions_overlap() {
+        let toml = r#"
+[[migrations]]
+from = "1.0.0"
+to = "1.1.0"
+transform = "migrate_a"
+description = "a"
+collection = "events"
+
+[[migrations]]
+from = "1.0.0"
+to = "2.0.0"
+transform = "migrate_b"
+description = "b"
+collection = "events"
+"#;
+        let err = parse_migration_entries_from_str(toml).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("overlapping"), "expected overlap error, got: {msg}");
+    }
+
+    #[test]
+    fn non_overlapping_minor_wildcards_pass() {
+        let toml = r#"
+[[migrations]]
+from = "1.0.x"
+to = "1.1.0"
+transform = "migrate_a"
+description = "a"
+collection = "events"
+
+[[migrations]]
+from = "1.1.x"
+to = "1.2.0"
+transform = "migrate_b"
+description = "b"
+collection = "events"
+"#;
+        let entries = parse_migration_entries_from_str(toml).unwrap();
+        assert_eq!(entries.len(), 2);
+    }
+
+    #[test]
+    fn overlap_error_includes_example_version() {
+        let toml = r#"
+[[migrations]]
+from = "1.x"
+to = "2.0.0"
+transform = "migrate_a"
+description = "a"
+collection = "events"
+
+[[migrations]]
+from = "1.0.x"
+to = "1.1.0"
+transform = "migrate_b"
+description = "b"
+collection = "events"
+"#;
+        let err = parse_migration_entries_from_str(toml).unwrap_err();
+        let msg = err.to_string();
+        // The error should include an example version that matches both ranges
+        assert!(
+            msg.contains("1.0.0"),
+            "expected example version in error, got: {msg}"
+        );
     }
 }

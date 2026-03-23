@@ -851,9 +851,20 @@ impl CoreConfig {
             || self.core.host == "::1";
         if !is_localhost && !self.network.behind_proxy && !self.network.tls.enabled {
             return Err(CoreError::Config(
-                "TLS is required for non-localhost bind addresses; \
-                 configure [network.tls] with cert_path and key_path, \
-                 or set network.behind_proxy = true if behind a reverse proxy"
+                "Refusing to start: non-localhost bind address requires TLS configuration \
+                 or network.behind_proxy = true"
+                    .into(),
+            )
+            .into());
+        }
+
+        // Enforce real authentication for non-localhost addresses.
+        // local-token is a development-only provider — network-facing instances
+        // must use oidc or webauthn to prevent accidental unauthenticated exposure.
+        if !is_localhost && self.auth.provider == "local-token" {
+            return Err(CoreError::Config(
+                "Refusing to start: non-localhost bind address requires a network-safe \
+                 auth provider (oidc or webauthn); local-token is for localhost development only"
                     .into(),
             )
             .into());

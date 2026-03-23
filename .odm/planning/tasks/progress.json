@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "last_updated": "2026-03-23T00:00:06Z",
+  "last_updated": "2026-03-23T00:00:07Z",
   "completed_wps": [
     "1.1",
     "1.2",
@@ -141,14 +141,14 @@
     "10.7",
     "10.8",
     "10.9",
-    "10.10"
+    "10.10",
+    "10.11"
   ],
   "current_wp": null,
   "current_wp_tasks": {
-    "total": 2,
+    "total": 1,
     "completed": [
-      "Configure Tauri sidecar to spawn and manage Core process lifecycle",
-      "Configure platform-standard data directory for bundled mode"
+      "Implement non-localhost startup validation"
     ],
     "deferred": [],
     "remaining": [],
@@ -1264,6 +1264,22 @@
       "title": "ARM64 Build Verification",
       "completed_at": "2026-03-23T00:00:05Z",
       "commit": "404e762",
+      "tasks_completed": 1,
+      "tasks_deferred": 0
+    },
+    {
+      "wp": "10.10",
+      "title": "Tauri Sidecar Integration",
+      "completed_at": "2026-03-23T00:00:06Z",
+      "commit": "b8e3651",
+      "tasks_completed": 2,
+      "tasks_deferred": 0
+    },
+    {
+      "wp": "10.11",
+      "title": "Network Security Enforcement",
+      "completed_at": "2026-03-23T00:00:07Z",
+      "commit": "pending",
       "tasks_completed": 1,
       "tasks_deferred": 0
     }

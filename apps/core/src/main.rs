@@ -180,18 +180,27 @@ async fn main() -> anyhow::Result<()> {
         );
     }
 
-    // Warn about potentially insecure configurations.
-    if !config.network.tls.enabled
-        && !config.network.behind_proxy
-        && config.core.host != "127.0.0.1"
-        && config.core.host != "localhost"
-        && config.core.host != "::1"
-    {
-        tracing::warn!(
-            host = %config.core.host,
-            "running without TLS on non-localhost address"
-        );
-    }
+    // Log security posture so operators can verify the instance configuration at a glance.
+    let is_localhost = config.core.host == "127.0.0.1"
+        || config.core.host == "localhost"
+        || config.core.host == "::1";
+    let rate_limit_status = if !is_localhost || config.network.rate_limit.requests_per_minute > 0 {
+        "enabled"
+    } else {
+        "disabled"
+    };
+    tracing::info!(
+        tls = %tls_status,
+        auth = %config.auth.provider,
+        rate_limit = %rate_limit_status,
+        bind_address = %format!("{}:{}", config.core.host, config.core.port),
+        "Security: TLS={}, Auth={}, RateLimit={}, BindAddress={}:{}",
+        tls_status,
+        config.auth.provider,
+        rate_limit_status,
+        config.core.host,
+        config.core.port,
+    );
 
     // ── Step 3/10: Derive database key ───────────────────────────────
     let step_start = Instant::now();

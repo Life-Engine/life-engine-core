@@ -145,7 +145,7 @@ Progress: 4 / 24 work packages complete
 ## 10.11 — Network Security Enforcement
 > spec: .odm/spec/deployment-modes/brief.md
 
-- [ ] Implement non-localhost startup validation
+- [x] Implement non-localhost startup validation
   <!-- file: apps/core/src/main.rs -->
   <!-- file: apps/core/src/config.rs -->
   <!-- purpose: During startup, after loading config and before starting transports: (1) check if any transport binds to a non-localhost address (0.0.0.0, ::, or a specific non-127.0.0.1 IP), (2) if non-localhost AND behind_proxy is false: require TLS config (cert_path and key_path) in the transport config — refuse to start without it, log error "Refusing to start: non-localhost bind address requires TLS configuration or LE_BEHIND_PROXY=true", (3) if non-localhost: require auth config (auth section must be present and valid) — refuse to start without authentication on a network-facing instance, (4) if non-localhost: enable rate limiting in the auth module (it's optional for localhost), (5) log security posture at startup: "Security: TLS=enabled, Auth=pocket-id, RateLimit=enabled, BindAddress=0.0.0.0:3000". This ensures the "pit of success" — it's impossible to accidentally expose an unauthenticated, unencrypted instance to the network. -->

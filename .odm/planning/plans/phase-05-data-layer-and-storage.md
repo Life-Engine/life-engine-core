@@ -39,7 +39,7 @@ Progress: 0 / 16 work packages complete
 ## 5.2 — SQLCipher Database Initialization
 > spec: .odm/spec/data-layer/brief.md
 
-- [ ] Implement database open with SQLCipher encryption and WAL mode
+- [x] Implement database open with SQLCipher encryption and WAL mode
   <!-- file: packages/storage-sqlite/src/lib.rs -->
   <!-- purpose: Implement pub async fn init(config: toml::Value, key: [u8; 32]) -> Result<SqliteStorage> that: (1) extracts database path from config, (2) opens SQLCipher database using rusqlite with bundled-sqlcipher feature, (3) sets PRAGMA key using the 32-byte key derived from Argon2id (convert to hex string for SQLCipher), (4) sets PRAGMA journal_mode = WAL for concurrent read performance, (5) sets PRAGMA foreign_keys = ON, (6) runs schema DDL from schema.rs to create tables if they don't exist, (7) returns SqliteStorage struct wrapping the connection. Handle initialization errors with clear messages: wrong key (unable to decrypt), missing file (create new), permission denied. The key parameter comes from packages/crypto::derive_key() called by Core during startup — this crate does not call derive_key itself. -->
   <!-- requirements: 5.1, 5.2, 5.3, 5.4 -->

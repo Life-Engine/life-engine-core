@@ -172,7 +172,7 @@ Progress: 0 / 11 work packages complete
 ## 2.11 — Schema Versioning Verification Script
 > spec: .odm/spec/canonical-data-models/brief.md
 
-- [ ] Add script to verify additive-only schema changes between versions
+- [x] Add script to verify additive-only schema changes between versions
   <!-- file: scripts/check-schema-compat.sh -->
   <!-- purpose: Write a shell script that compares JSON Schema files between the current version and the previous git tag. Check for breaking changes: required fields removed, field types changed, enum values removed, field renamed. Allow additive changes: new optional fields, new enum values, new collections. Exit with non-zero code and clear error message if breaking changes detected. Accept the previous tag as an argument (e.g., ./scripts/check-schema-compat.sh v0.1.0). Use jq for JSON diffing. Print a summary of changes found (added fields, added enums, new collections). -->
   <!-- requirements: 5.1, 5.2 -->

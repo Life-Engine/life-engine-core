@@ -1392,18 +1392,53 @@ pub mod startup {
         #[serde(default = "default_plugins_path")]
         pub path: String,
 
-        /// Per-plugin configuration sections, keyed by plugin ID.
+        /// Per-plugin instance configurations, keyed by plugin ID.
         ///
-        /// Each value is validated against the plugin's declared config schema
-        /// and passed to the plugin at load time.
+        /// Each entry contains approved capabilities for third-party plugins
+        /// and plugin-specific configuration values passed via the `config:read`
+        /// host function.
         #[serde(default)]
-        pub config: HashMap<String, toml::Value>,
+        pub config: HashMap<String, PluginInstanceConfig>,
     }
 
     impl Default for PluginsConfig {
         fn default() -> Self {
             Self {
                 path: default_plugins_path(),
+                config: HashMap::new(),
+            }
+        }
+    }
+
+    /// Per-plugin instance configuration.
+    ///
+    /// Parsed from `[plugins.config.<plugin-id>]` sections in `config.toml`.
+    /// The `approved_capabilities` field lists capability strings that the
+    /// operator has approved for third-party plugins. All other keys are
+    /// collected as plugin-specific configuration values.
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct PluginInstanceConfig {
+        /// Approved capability strings for third-party plugins.
+        ///
+        /// First-party plugins are auto-granted all declared capabilities
+        /// regardless of this list. Valid values: `"storage:read"`,
+        /// `"storage:write"`, `"http:outbound"`, `"events:emit"`,
+        /// `"events:subscribe"`, `"config:read"`.
+        #[serde(default)]
+        pub approved_capabilities: Vec<String>,
+
+        /// Plugin-specific configuration values.
+        ///
+        /// All keys other than `approved_capabilities` are collected here
+        /// and passed to the plugin via the `config:read` host function.
+        #[serde(flatten)]
+        pub config: HashMap<String, toml::Value>,
+    }
+
+    impl Default for PluginInstanceConfig {
+        fn default() -> Self {
+            Self {
+                approved_capabilities: Vec::new(),
                 config: HashMap::new(),
             }
         }
@@ -1492,6 +1527,7 @@ path = "/etc/life-engine/workflows"
 path = "/opt/life-engine/plugins"
 
 [plugins.config.connector-email]
+approved_capabilities = ["storage:read", "storage:write", "http:outbound"]
 imap_host = "mail.example.com"
 imap_port = 993
 
@@ -1535,10 +1571,21 @@ format = "pretty"
             assert_eq!(config.plugins.config.len(), 2);
             assert!(config.plugins.config.contains_key("connector-email"));
             assert_eq!(
+                config.plugins.config["connector-email"].approved_capabilities,
+                vec!["storage:read", "storage:write", "http:outbound"]
+            );
+            assert_eq!(
                 config.plugins.config["connector-email"]
+                    .config
                     .get("imap_port")
                     .and_then(|v| v.as_integer()),
                 Some(993)
+            );
+            // connector-calendar has no approved_capabilities
+            assert!(
+                config.plugins.config["connector-calendar"]
+                    .approved_capabilities
+                    .is_empty()
             );
 
             // Logging.
@@ -1585,12 +1632,14 @@ key = "value-b"
             assert_eq!(config.plugins.config.len(), 2);
             assert_eq!(
                 config.plugins.config["plugin-a"]
+                    .config
                     .get("key")
                     .and_then(|v| v.as_str()),
                 Some("value-a")
             );
             assert_eq!(
                 config.plugins.config["plugin-b"]
+                    .config
                     .get("key")
                     .and_then(|v| v.as_str()),
                 Some("value-b")
@@ -1974,6 +2023,82 @@ path = ""
                 .and_then(|v| v.get("c"))
                 .and_then(|v| v.as_str());
             assert_eq!(val, Some("hello"));
+        }
+
+        // ---- WP 8.13: Plugin config section parser tests ----
+
+        #[test]
+        fn plugins_path_parsed_correctly() {
+            let toml_str = r#"
+[plugins]
+path = "/custom/plugins"
+"#;
+            let config: CoreConfig = toml::from_str(toml_str).unwrap();
+            assert_eq!(config.plugins.path, "/custom/plugins");
+        }
+
+        #[test]
+        fn per_plugin_approved_capabilities_extracted() {
+            let toml_str = r#"
+[plugins.config.connector-email]
+approved_capabilities = ["storage:read", "storage:write", "http:outbound"]
+poll_interval = "5m"
+"#;
+            let config: CoreConfig = toml::from_str(toml_str).unwrap();
+            let email_cfg = &config.plugins.config["connector-email"];
+            assert_eq!(
+                email_cfg.approved_capabilities,
+                vec!["storage:read", "storage:write", "http:outbound"]
+            );
+        }
+
+        #[test]
+        fn plugin_specific_config_values_accessible() {
+            let toml_str = r#"
+[plugins.config.connector-email]
+approved_capabilities = ["storage:read"]
+imap_host = "mail.example.com"
+imap_port = 993
+use_tls = true
+"#;
+            let config: CoreConfig = toml::from_str(toml_str).unwrap();
+            let email_cfg = &config.plugins.config["connector-email"];
+            assert_eq!(
+                email_cfg.config.get("imap_host").and_then(|v| v.as_str()),
+                Some("mail.example.com")
+            );
+            assert_eq!(
+                email_cfg.config.get("imap_port").and_then(|v| v.as_integer()),
+                Some(993)
+            );
+            assert_eq!(
+                email_cfg.config.get("use_tls").and_then(|v| v.as_bool()),
+                Some(true)
+            );
+            // approved_capabilities should NOT be in the config HashMap
+            assert!(email_cfg.config.get("approved_capabilities").is_none());
+        }
+
+        #[test]
+        fn missing_plugins_section_uses_defaults() {
+            let config: CoreConfig = toml::from_str("").unwrap();
+            assert_eq!(config.plugins.path, "plugins");
+            assert!(config.plugins.config.is_empty());
+        }
+
+        #[test]
+        fn plugin_with_no_approved_capabilities_gets_empty_vec() {
+            let toml_str = r#"
+[plugins.config.my-plugin]
+some_key = "some_value"
+"#;
+            let config: CoreConfig = toml::from_str(toml_str).unwrap();
+            let plugin_cfg = &config.plugins.config["my-plugin"];
+            assert!(plugin_cfg.approved_capabilities.is_empty());
+            assert_eq!(
+                plugin_cfg.config.get("some_key").and_then(|v| v.as_str()),
+                Some("some_value")
+            );
         }
     }
 }

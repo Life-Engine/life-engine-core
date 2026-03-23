@@ -232,13 +232,13 @@ Progress: 10 / 22 work packages complete
 > depends: 8.2
 > spec: .odm/spec/plugin-system/brief.md
 
-- [ ] Extend Core config to parse plugin-specific sections
+- [x] Extend Core config to parse plugin-specific sections
   <!-- file: apps/core/src/config.rs -->
   <!-- purpose: Define PluginConfig struct with fields: path (String — plugins directory path, default "./plugins"), plugins (HashMap<String, PluginInstanceConfig>). Define PluginInstanceConfig struct: approved_capabilities (Vec<String> — list of capability strings for third-party plugins), config (Option<toml::Value> — plugin-specific config values). Parse from the [plugins] section of config.toml. Example: [plugins] path = "./plugins", [plugins.connector-email] approved_capabilities = ["storage:read", "storage:write", "http:outbound"], poll_interval = "5m". The approved_capabilities list is used by the capability approval checker. Plugin-specific config values (like poll_interval) are passed to the plugin via the config:read host function. -->
   <!-- requirements: from plugin-system spec 5.2, 6.3 -->
   <!-- leverage: existing apps/core/src/config.rs -->
 
-- [ ] Add plugin config parsing tests
+- [x] Add plugin config parsing tests
   <!-- file: apps/core/src/config.rs -->
   <!-- purpose: Test cases: (1) plugins path is parsed correctly, (2) per-plugin approved_capabilities are extracted as Vec<String>, (3) plugin-specific config values are accessible as toml::Value, (4) missing [plugins] section uses defaults (path = "./plugins", empty plugin map), (5) plugin with no approved_capabilities gets empty Vec. -->
   <!-- requirements: from plugin-system spec 5.2, 6.3 -->

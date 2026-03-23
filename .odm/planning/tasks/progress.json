@@ -123,14 +123,15 @@
     "7.16",
     "7.17",
     "8.11",
-    "8.12"
+    "8.12",
+    "8.13"
   ],
   "current_wp": null,
   "current_wp_tasks": {
     "total": 2,
     "completed": [
-      "Implement execution bridge between workflow engine and plugin WASM",
-      "Add plugin execution tests"
+      "Extend Core config to parse plugin-specific sections",
+      "Add plugin config parsing tests"
     ],
     "deferred": [],
     "remaining": [],
@@ -1108,6 +1109,14 @@
     {
       "wp": "8.12",
       "title": "Plugin Execution Bridge",
+      "completed_at": "2026-03-23T00:00:00Z",
+      "commit": "b82e952",
+      "tasks_completed": 2,
+      "tasks_deferred": 0
+    },
+    {
+      "wp": "8.13",
+      "title": "Plugin Config Section Parser",
       "completed_at": "2026-03-23T00:00:00Z",
       "commit": "pending",
       "tasks_completed": 2,

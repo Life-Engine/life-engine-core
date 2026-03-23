@@ -68,11 +68,24 @@ struct PluginsConfig {
     #[serde(default = "default_plugins_path")]
     path: String,
     #[serde(default)]
-    config: HashMap<String, toml::Value>,
+    config: HashMap<String, PluginInstanceConfig>,
 }
 impl Default for PluginsConfig {
     fn default() -> Self {
         Self { path: default_plugins_path(), config: HashMap::new() }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct PluginInstanceConfig {
+    #[serde(default)]
+    approved_capabilities: Vec<String>,
+    #[serde(flatten)]
+    config: HashMap<String, toml::Value>,
+}
+impl Default for PluginInstanceConfig {
+    fn default() -> Self {
+        Self { approved_capabilities: Vec::new(), config: HashMap::new() }
     }
 }
 

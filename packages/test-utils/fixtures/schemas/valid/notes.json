@@ -1,0 +1,18 @@
+{
+  "id": "d4e5f6a7-b8c9-0123-def0-123456789abc",
+  "title": "Architecture Decision Record: Plugin System",
+  "body": "# Plugin System ADR\n\nWe decided to use WASM for plugin isolation because it provides:\n\n- Memory safety\n- Cross-platform support\n- Capability-based security",
+  "tags": ["architecture", "plugins", "adr"],
+  "format": "markdown",
+  "pinned": true,
+  "source": "obsidian",
+  "source_id": "obsidian-note-42",
+  "extensions": {
+    "com.obsidian.plugin": {
+      "vault": "life-engine",
+      "folder": "ADRs"
+    }
+  },
+  "created_at": "2026-01-15T08:00:00Z",
+  "updated_at": "2026-03-23T10:00:00Z"
+}

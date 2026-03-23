@@ -1,0 +1,93 @@
+[
+  {
+    "_comment": "Missing required field: title",
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "start": "2026-03-24T09:00:00Z",
+    "source": "google-calendar",
+    "source_id": "gcal-evt-001",
+    "created_at": "2026-03-20T12:00:00Z",
+    "updated_at": "2026-03-23T08:30:00Z"
+  },
+  {
+    "_comment": "Invalid UUID format for id",
+    "id": "not-a-valid-uuid",
+    "title": "Bad Event",
+    "start": "2026-03-24T09:00:00Z",
+    "source": "google-calendar",
+    "source_id": "gcal-evt-002",
+    "created_at": "2026-03-20T12:00:00Z",
+    "updated_at": "2026-03-23T08:30:00Z"
+  },
+  {
+    "_comment": "Invalid datetime format for start",
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "title": "Bad Date Event",
+    "start": "March 24, 2026",
+    "source": "google-calendar",
+    "source_id": "gcal-evt-003",
+    "created_at": "2026-03-20T12:00:00Z",
+    "updated_at": "2026-03-23T08:30:00Z"
+  },
+  {
+    "_comment": "Invalid enum value for status",
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "title": "Bad Status Event",
+    "start": "2026-03-24T09:00:00Z",
+    "status": "maybe",
+    "source": "google-calendar",
+    "source_id": "gcal-evt-004",
+    "created_at": "2026-03-20T12:00:00Z",
+    "updated_at": "2026-03-23T08:30:00Z"
+  },
+  {
+    "_comment": "Invalid recurrence frequency enum",
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "title": "Bad Recurrence Event",
+    "start": "2026-03-24T09:00:00Z",
+    "recurrence": {
+      "frequency": "biweekly",
+      "interval": 1
+    },
+    "source": "google-calendar",
+    "source_id": "gcal-evt-005",
+    "created_at": "2026-03-20T12:00:00Z",
+    "updated_at": "2026-03-23T08:30:00Z"
+  },
+  {
+    "_comment": "Invalid attendee status enum",
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "title": "Bad Attendee Event",
+    "start": "2026-03-24T09:00:00Z",
+    "attendees": [
+      {
+        "email": "alice@example.com",
+        "status": "unknown"
+      }
+    ],
+    "source": "google-calendar",
+    "source_id": "gcal-evt-006",
+    "created_at": "2026-03-20T12:00:00Z",
+    "updated_at": "2026-03-23T08:30:00Z"
+  },
+  {
+    "_comment": "Additional property not allowed (extra_field)",
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "title": "Extra Field Event",
+    "start": "2026-03-24T09:00:00Z",
+    "extra_field": "should not be here",
+    "source": "google-calendar",
+    "source_id": "gcal-evt-007",
+    "created_at": "2026-03-20T12:00:00Z",
+    "updated_at": "2026-03-23T08:30:00Z"
+  },
+  {
+    "_comment": "Wrong type for title (number instead of string)",
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "title": 42,
+    "start": "2026-03-24T09:00:00Z",
+    "source": "google-calendar",
+    "source_id": "gcal-evt-008",
+    "created_at": "2026-03-20T12:00:00Z",
+    "updated_at": "2026-03-23T08:30:00Z"
+  }
+]

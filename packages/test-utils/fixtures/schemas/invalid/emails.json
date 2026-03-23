@@ -1,0 +1,92 @@
+[
+  {
+    "_comment": "Missing required field: from",
+    "id": "e5f6a7b8-c9d0-1234-ef01-23456789abcd",
+    "subject": "Missing Sender",
+    "to": [{"address": "bob@example.com"}],
+    "date": "2026-03-23T15:30:00Z",
+    "source": "gmail",
+    "source_id": "gmail-001",
+    "created_at": "2026-03-23T15:30:00Z",
+    "updated_at": "2026-03-23T16:00:00Z"
+  },
+  {
+    "_comment": "Missing required field: to",
+    "id": "e5f6a7b8-c9d0-1234-ef01-23456789abcd",
+    "subject": "Missing Recipients",
+    "from": {"address": "alice@example.com"},
+    "date": "2026-03-23T15:30:00Z",
+    "source": "gmail",
+    "source_id": "gmail-002",
+    "created_at": "2026-03-23T15:30:00Z",
+    "updated_at": "2026-03-23T16:00:00Z"
+  },
+  {
+    "_comment": "Invalid datetime format for date",
+    "id": "e5f6a7b8-c9d0-1234-ef01-23456789abcd",
+    "subject": "Bad Date Email",
+    "from": {"address": "alice@example.com"},
+    "to": [{"address": "bob@example.com"}],
+    "date": "last tuesday",
+    "source": "gmail",
+    "source_id": "gmail-003",
+    "created_at": "2026-03-23T15:30:00Z",
+    "updated_at": "2026-03-23T16:00:00Z"
+  },
+  {
+    "_comment": "Wrong type for attachments (object instead of array)",
+    "id": "e5f6a7b8-c9d0-1234-ef01-23456789abcd",
+    "subject": "Bad Attachments Email",
+    "from": {"address": "alice@example.com"},
+    "to": [{"address": "bob@example.com"}],
+    "date": "2026-03-23T15:30:00Z",
+    "attachments": {"filename": "file.pdf"},
+    "source": "gmail",
+    "source_id": "gmail-004",
+    "created_at": "2026-03-23T15:30:00Z",
+    "updated_at": "2026-03-23T16:00:00Z"
+  },
+  {
+    "_comment": "Missing required attachment field: size_bytes",
+    "id": "e5f6a7b8-c9d0-1234-ef01-23456789abcd",
+    "subject": "Incomplete Attachment Email",
+    "from": {"address": "alice@example.com"},
+    "to": [{"address": "bob@example.com"}],
+    "date": "2026-03-23T15:30:00Z",
+    "attachments": [
+      {
+        "filename": "file.pdf",
+        "mime_type": "application/pdf"
+      }
+    ],
+    "source": "gmail",
+    "source_id": "gmail-005",
+    "created_at": "2026-03-23T15:30:00Z",
+    "updated_at": "2026-03-23T16:00:00Z"
+  },
+  {
+    "_comment": "Wrong type for read (string instead of boolean)",
+    "id": "e5f6a7b8-c9d0-1234-ef01-23456789abcd",
+    "subject": "Bad Read Flag Email",
+    "from": {"address": "alice@example.com"},
+    "to": [{"address": "bob@example.com"}],
+    "date": "2026-03-23T15:30:00Z",
+    "read": "true",
+    "source": "gmail",
+    "source_id": "gmail-006",
+    "created_at": "2026-03-23T15:30:00Z",
+    "updated_at": "2026-03-23T16:00:00Z"
+  },
+  {
+    "_comment": "Invalid UUID format for id",
+    "id": "xyz",
+    "subject": "Bad ID Email",
+    "from": {"address": "alice@example.com"},
+    "to": [{"address": "bob@example.com"}],
+    "date": "2026-03-23T15:30:00Z",
+    "source": "gmail",
+    "source_id": "gmail-007",
+    "created_at": "2026-03-23T15:30:00Z",
+    "updated_at": "2026-03-23T16:00:00Z"
+  }
+]

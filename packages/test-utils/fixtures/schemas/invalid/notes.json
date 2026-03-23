@@ -1,0 +1,63 @@
+[
+  {
+    "_comment": "Missing required field: body",
+    "id": "d4e5f6a7-b8c9-0123-def0-123456789abc",
+    "title": "Incomplete Note",
+    "source": "obsidian",
+    "source_id": "obs-001",
+    "created_at": "2026-01-15T08:00:00Z",
+    "updated_at": "2026-03-23T10:00:00Z"
+  },
+  {
+    "_comment": "Missing required field: title",
+    "id": "d4e5f6a7-b8c9-0123-def0-123456789abc",
+    "body": "Some content without a title.",
+    "source": "obsidian",
+    "source_id": "obs-002",
+    "created_at": "2026-01-15T08:00:00Z",
+    "updated_at": "2026-03-23T10:00:00Z"
+  },
+  {
+    "_comment": "Invalid enum value for format",
+    "id": "d4e5f6a7-b8c9-0123-def0-123456789abc",
+    "title": "Bad Format Note",
+    "body": "Content here.",
+    "format": "rtf",
+    "source": "obsidian",
+    "source_id": "obs-003",
+    "created_at": "2026-01-15T08:00:00Z",
+    "updated_at": "2026-03-23T10:00:00Z"
+  },
+  {
+    "_comment": "Wrong type for pinned (string instead of boolean)",
+    "id": "d4e5f6a7-b8c9-0123-def0-123456789abc",
+    "title": "Bad Pinned Note",
+    "body": "Content here.",
+    "pinned": "yes",
+    "source": "obsidian",
+    "source_id": "obs-004",
+    "created_at": "2026-01-15T08:00:00Z",
+    "updated_at": "2026-03-23T10:00:00Z"
+  },
+  {
+    "_comment": "Wrong type for tags (string instead of array)",
+    "id": "d4e5f6a7-b8c9-0123-def0-123456789abc",
+    "title": "Bad Tags Note",
+    "body": "Content here.",
+    "tags": "architecture",
+    "source": "obsidian",
+    "source_id": "obs-005",
+    "created_at": "2026-01-15T08:00:00Z",
+    "updated_at": "2026-03-23T10:00:00Z"
+  },
+  {
+    "_comment": "Invalid UUID format for id",
+    "id": "not-valid",
+    "title": "Bad ID Note",
+    "body": "Content here.",
+    "source": "obsidian",
+    "source_id": "obs-006",
+    "created_at": "2026-01-15T08:00:00Z",
+    "updated_at": "2026-03-23T10:00:00Z"
+  }
+]

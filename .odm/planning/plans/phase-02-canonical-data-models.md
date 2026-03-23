@@ -137,7 +137,7 @@ Progress: 0 / 11 work packages complete
 ## 2.8 — Schema Validation Test Fixtures
 > spec: .odm/spec/canonical-data-models/brief.md
 
-- [ ] Create valid and invalid JSON test fixtures for all 7 collections
+- [x] Create valid and invalid JSON test fixtures for all 7 collections
   <!-- file: packages/test-utils/fixtures/schemas/valid/ -->
   <!-- file: packages/test-utils/fixtures/schemas/invalid/ -->
   <!-- purpose: Create packages/test-utils/fixtures/schemas/valid/ directory with one JSON file per collection (events.json, tasks.json, contacts.json, notes.json, emails.json, files.json, credentials.json) containing a fully-populated valid record. Create packages/test-utils/fixtures/schemas/invalid/ directory with one JSON file per collection containing records that violate schema constraints: missing required fields, wrong types, invalid enum values, invalid UUID format, invalid datetime format. Each invalid file should contain an array of invalid records with a comment field explaining what is wrong. These fixtures are the canonical test data for schema validation. -->

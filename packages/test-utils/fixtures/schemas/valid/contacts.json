@@ -1,0 +1,60 @@
+{
+  "id": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+  "name": {
+    "given": "Alice",
+    "family": "Smith",
+    "prefix": "Dr",
+    "suffix": "PhD",
+    "middle": "Marie"
+  },
+  "emails": [
+    {
+      "address": "alice@example.com",
+      "type": "work",
+      "primary": true
+    },
+    {
+      "address": "alice.personal@example.com",
+      "type": "home",
+      "primary": false
+    }
+  ],
+  "phones": [
+    {
+      "number": "+14155551234",
+      "type": "mobile",
+      "primary": true
+    },
+    {
+      "number": "+14155555678",
+      "type": "work",
+      "primary": false
+    }
+  ],
+  "addresses": [
+    {
+      "street": "123 Main St",
+      "city": "San Francisco",
+      "region": "CA",
+      "postal_code": "94105",
+      "country": "US",
+      "type": "work"
+    }
+  ],
+  "organization": "Acme Corp",
+  "title": "Senior Engineer",
+  "birthday": "1990-06-15",
+  "photo_url": "https://example.com/photos/alice.jpg",
+  "notes": "Met at the 2025 conference. Interested in data pipelines.",
+  "groups": ["Engineering", "Conference Contacts"],
+  "source": "google-contacts",
+  "source_id": "gcontacts-abc123",
+  "extensions": {
+    "com.example.crm": {
+      "lead_score": 85,
+      "last_interaction": "2026-03-20"
+    }
+  },
+  "created_at": "2025-11-01T09:00:00Z",
+  "updated_at": "2026-03-23T11:00:00Z"
+}

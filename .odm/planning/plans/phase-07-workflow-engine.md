@@ -192,7 +192,7 @@ Progress: 0 / 17 work packages complete
 > depends: 7.4
 > spec: .odm/spec/workflow-engine/brief.md
 
-- [ ] Implement cron scheduler for time-based workflow triggering
+- [x] Implement cron scheduler for time-based workflow triggering
   <!-- file: packages/workflow-engine/src/scheduler.rs -->
   <!-- purpose: Define Scheduler struct that manages scheduled workflow execution. Implement pub async fn start(&self, registry: &TriggerRegistry, executor: Arc<PipelineExecutor>) that: (1) iterates all schedule entries from the registry, (2) for each cron expression, spawn a tokio task that loops: calculate next fire time from the cron expression using the cron crate, sleep until that time using tokio::time::sleep_until, then trigger the workflow with a Schedule TriggerContext, (3) if a scheduled workflow execution fails, emit a "workflow.failed" event via the event bus but continue scheduling — never stop the scheduler due to a workflow failure. Implement pub async fn stop(&self) that cancels all scheduled tasks using tokio::task::JoinHandle abort. Track each scheduled task's handle for graceful shutdown. Add tests: workflow fires at correct interval (use controlled time), failed workflow emits error event, scheduler continues after failure, stop cancels all tasks. -->
   <!-- requirements: from workflow-engine spec 7.2 -->

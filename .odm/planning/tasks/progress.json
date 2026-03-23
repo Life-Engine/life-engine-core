@@ -118,13 +118,14 @@
     "6.12",
     "7.12",
     "7.13",
-    "7.14"
+    "7.14",
+    "7.15"
   ],
   "current_wp": null,
   "current_wp_tasks": {
     "total": 1,
     "completed": [
-      "Implement event bus for async event-driven workflow triggering"
+      "Implement cron scheduler for time-based workflow triggering"
     ],
     "deferred": [],
     "remaining": [],
@@ -1064,6 +1065,14 @@
       "title": "Event Bus",
       "completed_at": "2026-03-23T00:00:00Z",
       "commit": "539833d",
+      "tasks_completed": 1,
+      "tasks_deferred": 0
+    },
+    {
+      "wp": "7.15",
+      "title": "Cron Scheduler",
+      "completed_at": "2026-03-23T00:00:00Z",
+      "commit": "PENDING",
       "tasks_completed": 1,
       "tasks_deferred": 0
     }

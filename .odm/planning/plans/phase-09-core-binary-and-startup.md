@@ -15,7 +15,7 @@ This phase depends on all previous phases (types, traits, crypto, SDK, storage, 
 
 > spec: .odm/spec/binary-and-startup/brief.md
 
-Progress: 8 / 11 work packages complete
+Progress: 9 / 11 work packages complete
 
 ---
 
@@ -128,7 +128,7 @@ Progress: 8 / 11 work packages complete
 ## 9.10 — Shutdown Integration Test
 > spec: .odm/spec/binary-and-startup/brief.md
 
-- [ ] Add shutdown integration test
+- [x] Add shutdown integration test
   <!-- file: apps/core/tests/shutdown_test.rs -->
   <!-- purpose: Start Core with a minimal config (SQLite in-memory, no transports). Send SIGTERM to the process. Verify: (1) process exits with code 0, (2) no error output on stderr, (3) shutdown log messages appear in order (transports, plugins, workflow engine, auth, storage), (4) the database connection is properly closed (no WAL file remaining or properly checkpointed). This test requires spawning Core as a subprocess using std::process::Command and sending signals via nix::sys::signal or libc. Use a timeout to catch hangs. -->
   <!-- requirements: 6.1, 6.7 -->

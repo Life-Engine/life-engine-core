@@ -84,3 +84,4 @@ urlencoding = "2"
 rcgen = "0.13"
 rsa = { version = "0.9", features = ["pkcs5", "pem"] }
 base64 = { workspace = true }
+libc = { workspace = true }

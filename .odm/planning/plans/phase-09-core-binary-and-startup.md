@@ -15,7 +15,7 @@ This phase depends on all previous phases (types, traits, crypto, SDK, storage, 
 
 > spec: .odm/spec/binary-and-startup/brief.md
 
-Progress: 4 / 11 work packages complete
+Progress: 5 / 11 work packages complete
 
 ---
 
@@ -66,7 +66,7 @@ Progress: 4 / 11 work packages complete
 ## 9.5 — Key Derivation Integration
 > spec: .odm/spec/binary-and-startup/brief.md
 
-- [ ] Wire Argon2id key derivation into Core startup
+- [x] Wire Argon2id key derivation into Core startup
   <!-- file: apps/core/src/main.rs -->
   <!-- purpose: During startup step 3 (derive database key), call life_engine_crypto::derive_key() with the master passphrase from config (storage.passphrase or LIFE_ENGINE_STORAGE_PASSPHRASE env var) and a salt (stored alongside the database or generated on first run). Store the derived 32-byte key in memory for passing to StorageBackend::init(). The passphrase is never stored — only the derived key is kept. The salt is stored in a file next to the database (e.g., data/salt.bin) or in the database header. On first run (no existing database): generate a random salt using life_engine_crypto::generate_salt(), derive the key, save the salt. On subsequent runs: read the existing salt, derive the key. Log "Database key derived" at info level (never log the key or passphrase). -->
   <!-- requirements: 3.1, 3.2 -->

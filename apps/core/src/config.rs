@@ -171,7 +171,7 @@ impl fmt::Debug for OidcSettings {
 }
 
 /// Storage settings.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct StorageSettings {
     /// The storage backend to use: "sqlite" (default) or "postgres".
     #[serde(default = "default_storage_backend")]
@@ -180,6 +180,13 @@ pub struct StorageSettings {
     /// Whether to enable SQLCipher encryption (SQLite only).
     #[serde(default = "default_encryption")]
     pub encryption: bool,
+
+    /// Master passphrase for database encryption (SQLite only).
+    ///
+    /// Can also be set via `LIFE_ENGINE_STORAGE_PASSPHRASE` env var.
+    /// The passphrase is never stored — only the derived key is kept in memory.
+    #[serde(default)]
+    pub passphrase: Option<String>,
 
     /// Argon2 key-derivation parameters (SQLite only).
     #[serde(default)]
@@ -190,11 +197,36 @@ pub struct StorageSettings {
     pub postgres: Option<PostgresSettings>,
 }
 
+impl fmt::Debug for StorageSettings {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("StorageSettings")
+            .field("backend", &self.backend)
+            .field("encryption", &self.encryption)
+            .field("passphrase", &self.passphrase.as_ref().map(|_| REDACTED))
+            .field("argon2", &self.argon2)
+            .field("postgres", &self.postgres)
+            .finish()
+    }
+}
+
+impl StorageSettings {
+    /// Resolves the master passphrase from config or `LIFE_ENGINE_STORAGE_PASSPHRASE` env var.
+    ///
+    /// The env var takes precedence over the config file value.
+    pub fn resolve_passphrase(&self) -> Option<String> {
+        std::env::var("LIFE_ENGINE_STORAGE_PASSPHRASE")
+            .ok()
+            .filter(|s| !s.is_empty())
+            .or_else(|| self.passphrase.clone())
+    }
+}
+
 impl Default for StorageSettings {
     fn default() -> Self {
         Self {
             backend: default_storage_backend(),
             encryption: default_encryption(),
+            passphrase: None,
             argon2: Argon2Settings::default(),
             postgres: None,
         }

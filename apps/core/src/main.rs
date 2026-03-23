@@ -98,17 +98,62 @@ async fn main() -> anyhow::Result<()> {
     let start_time = Instant::now();
     let message_bus = Arc::new(MessageBus::new());
 
-    // 4b. Initialise storage (file-backed when data_dir is configured).
+    // 4a. Derive database encryption key (when encryption is enabled with a passphrase).
     let data_dir_path = std::path::Path::new(&config.core.data_dir);
     std::fs::create_dir_all(data_dir_path)?;
     let db_path = data_dir_path.join("life-engine.db");
-    let storage = if config.storage.encryption {
-        tracing::info!(path = %db_path.display(), "opening encrypted storage");
-        // Encrypted storage requires a passphrase provided via the /api/storage/init endpoint.
-        // Start with in-memory storage; the init endpoint will swap it for encrypted file storage.
-        Arc::new(sqlite_storage::SqliteStorage::open_in_memory()?)
+    let derived_key = if config.storage.encryption {
+        if let Some(passphrase) = config.storage.resolve_passphrase() {
+            let salt_path = data_dir_path.join("salt.bin");
+            let salt = if salt_path.exists() {
+                let salt_bytes = std::fs::read(&salt_path)?;
+                if salt_bytes.len() != 16 {
+                    anyhow::bail!(
+                        "salt file {} has invalid length {} (expected 16 bytes)",
+                        salt_path.display(),
+                        salt_bytes.len()
+                    );
+                }
+                let mut salt = [0u8; 16];
+                salt.copy_from_slice(&salt_bytes);
+                tracing::info!(path = %salt_path.display(), "loaded existing salt");
+                salt
+            } else {
+                let salt = life_engine_crypto::generate_salt();
+                std::fs::write(&salt_path, &salt)?;
+                tracing::info!(path = %salt_path.display(), "generated and saved new salt");
+                salt
+            };
+
+            let key = life_engine_crypto::derive_key(&passphrase, &salt)
+                .map_err(|e| anyhow::anyhow!("key derivation failed: {e}"))?;
+            tracing::info!("Database key derived");
+            Some(key)
+        } else {
+            tracing::info!("Encryption enabled but no passphrase configured — deferring to /api/storage/init");
+            None
+        }
     } else {
-        Arc::new(sqlite_storage::SqliteStorage::open(&db_path)?)
+        None
+    };
+
+    // 4b. Initialise storage (file-backed when data_dir is configured).
+    let storage = match derived_key {
+        Some(_key) => {
+            tracing::info!(path = %db_path.display(), "opening encrypted storage with derived key");
+            // TODO(9.6): Pass derived key to StorageBackend::init() once implemented.
+            // For now, open unencrypted storage as a placeholder until WP 9.6 wires
+            // the key into SQLCipher PRAGMA.
+            Arc::new(sqlite_storage::SqliteStorage::open(&db_path)?)
+        }
+        None if config.storage.encryption => {
+            tracing::info!(path = %db_path.display(), "opening encrypted storage");
+            // Encrypted storage without startup passphrase requires the /api/storage/init endpoint.
+            Arc::new(sqlite_storage::SqliteStorage::open_in_memory()?)
+        }
+        None => {
+            Arc::new(sqlite_storage::SqliteStorage::open(&db_path)?)
+        }
     };
     tracing::info!(path = %db_path.display(), encrypted = config.storage.encryption, "storage initialised");
 

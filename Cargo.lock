@@ -3886,6 +3886,7 @@ dependencies = [
  "hyper-util",
  "jsonschema",
  "jsonwebtoken",
+ "life-engine-crypto",
  "life-engine-plugin-sdk",
  "life-engine-test-utils",
  "life-engine-types",

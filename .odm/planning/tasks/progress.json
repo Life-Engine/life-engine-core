@@ -874,6 +874,14 @@
       "commit": "d4368c4",
       "tasks_completed": 1,
       "tasks_deferred": 0
+    },
+    {
+      "wp": "4.6",
+      "title": "Action Type Definition",
+      "completed_at": "2026-03-23T00:00:00Z",
+      "commit": "f99c1e5",
+      "tasks_completed": 1,
+      "tasks_deferred": 0
     }
   ]
 }

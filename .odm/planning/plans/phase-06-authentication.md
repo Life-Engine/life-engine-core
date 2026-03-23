@@ -95,7 +95,7 @@ Progress: 0 / 12 work packages complete
 ## 6.7 — Auth Validation Pipeline
 > spec: .odm/spec/auth-and-pocket-id/brief.md
 
-- [ ] Implement the auth validation handler function
+- [x] Implement the auth validation handler function
   <!-- file: packages/auth/src/handlers/validate.rs -->
   <!-- purpose: Define pub async fn validate_request(provider: &dyn AuthProvider, auth_header: Option<&str>, rate_limiter: &RateLimiter, client_ip: &str) -> Result<AuthIdentity, AuthError>. Logic: (1) if auth_header is None, return AuthError::TokenMissing, (2) check rate_limiter — if IP is rate-limited, return AuthError::RateLimited with retry_after seconds, (3) parse the Authorization header: if starts with "Bearer ", extract token and call provider.validate_token(), if starts with "ApiKey ", extract key and call provider.validate_key(), otherwise return AuthError::TokenInvalid, (4) on validation failure, record failure in rate_limiter, then return the error, (5) on success, return AuthIdentity. This function is transport-agnostic — transports extract the Authorization header and client IP, then call this function. -->
   <!-- requirements: 4.1, 4.2, 4.3, 4.4, 4.5 -->

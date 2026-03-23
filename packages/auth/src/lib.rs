@@ -15,6 +15,8 @@ pub mod types;
 
 pub use config::AuthConfig;
 pub use error::AuthError;
+pub use handlers::rate_limit::RateLimiter;
+pub use handlers::validate::validate_request;
 pub use types::{ApiKeyRecord, AuthIdentity, AuthToken};
 
 /// Transport-agnostic authentication provider.

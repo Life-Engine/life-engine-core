@@ -7,11 +7,12 @@ use async_trait::async_trait;
 use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, TokenData, Validation};
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
-use tracing::debug;
+use tracing::{debug, warn};
 use uuid::Uuid;
 
 use crate::config::AuthConfig;
 use crate::error::AuthError;
+use crate::handlers::rate_limit::RateLimiter;
 use crate::types::AuthIdentity;
 use crate::AuthProvider;
 
@@ -386,4 +387,49 @@ fn base64_url_decode(input: &str) -> Result<Vec<u8>, AuthError> {
     URL_SAFE_NO_PAD
         .decode(input)
         .map_err(|e| AuthError::TokenInvalid(format!("base64url decode failed: {e}")))
+}
+
+/// Validate an incoming request's authorization credentials.
+///
+/// This is the transport-agnostic entry point for authentication. Transports
+/// extract the `Authorization` header value and client IP, then call this
+/// function. It handles rate limiting, credential parsing, and delegation
+/// to the appropriate provider method.
+///
+/// Returns the authenticated identity on success, or an auth error on failure.
+pub async fn validate_request(
+    provider: &dyn AuthProvider,
+    auth_header: Option<&str>,
+    rate_limiter: &RateLimiter,
+    client_ip: &str,
+) -> Result<AuthIdentity, AuthError> {
+    // 1. Check if the IP is rate-limited.
+    if let Some(retry_after) = rate_limiter.is_rate_limited(client_ip).await {
+        warn!(client_ip = %client_ip, retry_after, "rate-limited authentication attempt");
+        return Err(AuthError::RateLimited { retry_after });
+    }
+
+    // 2. Require an Authorization header.
+    let header = match auth_header {
+        Some(h) => h,
+        None => return Err(AuthError::TokenMissing),
+    };
+
+    // 3. Parse the scheme and delegate to the correct provider method.
+    let result = if let Some(token) = header.strip_prefix("Bearer ") {
+        provider.validate_token(token).await
+    } else if let Some(key) = header.strip_prefix("ApiKey ") {
+        provider.validate_key(key).await
+    } else {
+        Err(AuthError::TokenInvalid(
+            "unsupported authorization scheme".to_string(),
+        ))
+    };
+
+    // 4. On failure, record the failure in the rate limiter.
+    if result.is_err() {
+        rate_limiter.record_failure(client_ip).await;
+    }
+
+    result
 }

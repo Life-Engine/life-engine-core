@@ -106,7 +106,7 @@ Progress: 0 / 12 work packages complete
 ## 6.8 — Auth Validation Pipeline Tests
 > spec: .odm/spec/auth-and-pocket-id/brief.md
 
-- [ ] Add unit tests for auth validation pipeline
+- [x] Add unit tests for auth validation pipeline
   <!-- file: packages/auth/src/tests/validate_test.rs -->
   <!-- purpose: Test scenarios: (1) valid Bearer token returns AuthIdentity, (2) valid ApiKey returns AuthIdentity, (3) missing Authorization header returns AuthError::TokenMissing, (4) expired Bearer token returns AuthError::TokenExpired, (5) invalid Bearer token returns AuthError::TokenInvalid, (6) unknown Authorization scheme returns AuthError::TokenInvalid, (7) rate-limited IP returns AuthError::RateLimited with correct retry_after value, (8) failed validation records failure in rate limiter. Use a mock AuthProvider that returns configurable results. Create a real RateLimiter instance for rate limit tests. -->
   <!-- requirements: 4.1, 4.2, 4.3, 4.4, 4.5 -->

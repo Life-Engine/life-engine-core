@@ -15,7 +15,7 @@ This phase depends on Phase 3 (traits, capabilities), Phase 4 (plugin SDK), Phas
 
 > spec: .odm/spec/plugin-system/brief.md, .odm/spec/capability-enforcement/brief.md
 
-Progress: 9 / 22 work packages complete
+Progress: 10 / 22 work packages complete
 
 ---
 
@@ -178,13 +178,13 @@ Progress: 9 / 22 work packages complete
 > depends: 8.1, 8.2, 8.3, 8.4
 > spec: .odm/spec/plugin-system/brief.md
 
-- [ ] Implement plugin loader orchestrating the full loading flow
+- [x] Implement plugin loader orchestrating the full loading flow
   <!-- file: packages/plugin-system/src/loader.rs -->
   <!-- purpose: Implement pub async fn load_plugins(config: &PluginConfig, plugins_dir: &Path, storage: Arc<dyn StorageBackend>, event_bus: Arc<EventBus>) -> Result<Vec<PluginHandle>, PluginError>. Orchestration: (1) call scan_plugins_directory to discover plugins, (2) for each discovered plugin, parse manifest.toml, (3) check capability approval (first-party auto-grant, third-party config check), (4) build the host function set matching approved capabilities — only inject storage host functions if storage:read or storage:write approved, only inject http if http:outbound approved, etc., (5) load the WASM binary into Extism with the constructed host functions, (6) create a PluginHandle wrapping the PluginInstance, manifest, and approved capabilities, (7) log success: "Loaded plugin {id} v{version} with capabilities: [...]". Skip plugins that fail any step with a warning log — one bad plugin must not prevent others from loading. Return the list of successfully loaded PluginHandle objects. Define PluginHandle struct with fields: instance (PluginInstance), manifest (PluginManifest), capabilities (ApprovedCapabilities). -->
   <!-- requirements: from plugin-system spec 1.1-1.4, 2.1, 2.5, 3.1, 5.1-5.3 -->
   <!-- leverage: all previous WPs in this phase -->
 
-- [ ] Add plugin loader integration tests
+- [x] Add plugin loader integration tests
   <!-- file: packages/plugin-system/src/loader.rs -->
   <!-- purpose: Test cases: (1) valid plugin directory loads successfully with correct capabilities, (2) missing manifest skips with warning, (3) unapproved third-party capability rejects the plugin with CAP_001, (4) corrupt WASM binary skips with warning, (5) multiple plugins load independently — failure of one doesn't affect others, (6) first-party plugins get all capabilities auto-granted. -->
   <!-- requirements: from plugin-system spec 1.3, 1.4, 3.1, 5.3 -->

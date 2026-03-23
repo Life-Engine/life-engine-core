@@ -150,7 +150,7 @@ Progress: 0 / 11 work packages complete
 > depends: 2.1, 2.2, 2.8
 > spec: .odm/spec/canonical-data-models/brief.md
 
-- [ ] Add JSON Schema validation tests for all collections
+- [x] Add JSON Schema validation tests for all collections
   <!-- file: packages/types/tests/schema_validation.rs -->
   <!-- purpose: Load each of the 7 JSON Schema files from .odm/doc/schemas/. Load valid fixtures and assert they pass validation with no errors. Load invalid fixtures and assert they fail validation with descriptive error messages that identify the failing field and constraint. Test that extensions field accepts arbitrary nested JSON on all collections except Credentials. Test that Credentials has no extensions field. Test that required fields are enforced. Test that enum values are restricted to defined options. Use the jsonschema crate for validation. -->
   <!-- requirements: 3.3, 3.4 -->

@@ -15,7 +15,7 @@ This phase depends on all previous phases (types, traits, crypto, SDK, storage, 
 
 > spec: .odm/spec/binary-and-startup/brief.md
 
-Progress: 2 / 11 work packages complete
+Progress: 3 / 11 work packages complete
 
 ---
 
@@ -44,7 +44,7 @@ Progress: 2 / 11 work packages complete
 ## 9.3 — Config Validation and Section Delegation
 > spec: .odm/spec/binary-and-startup/brief.md
 
-- [ ] Implement top-level validation and module-level delegation
+- [x] Implement top-level validation and module-level delegation
   <!-- file: apps/core/src/config.rs -->
   <!-- purpose: Implement pub fn validate_config(config: &CoreConfig) -> Result<(), ConfigError>. Logic: (1) validate top-level: storage section must exist, (2) validate at least one transport is configured (warn if zero — Core with no transports is valid but useless), (3) delegate to each module's validation: pass storage section to StorageBackend for validation (e.g., path exists), pass auth section to auth module for validation (e.g., issuer URL is valid for pocket-id provider), pass each transport section to the corresponding Transport for validation, (4) pass plugins section to plugin config validation, (5) collect all validation errors and report them together (don't stop at first error). Define ConfigError enum with variants: MissingSection { name: String }, InvalidValue { section: String, field: String, message: String }, ModuleValidationFailed { module: String, errors: Vec<String> }. Implement std::error::Error and Display. -->
   <!-- requirements: 2.1, 2.2, 2.4, 2.5 -->

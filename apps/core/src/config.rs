@@ -927,7 +927,7 @@ pub mod startup {
     /// (case-insensitive) is redacted before logging.
     const SENSITIVE_FRAGMENTS: &[&str] = &["key", "secret", "password", "token"];
 
-    /// Errors that can occur while loading or parsing configuration.
+    /// Errors that can occur while loading, parsing, or validating configuration.
     #[derive(Debug)]
     pub enum ConfigError {
         /// The config file could not be read from disk.
@@ -947,6 +947,25 @@ pub mod startup {
             value: String,
             message: String,
         },
+        /// A required configuration section is missing.
+        MissingSection {
+            name: String,
+        },
+        /// A configuration value is invalid.
+        InvalidValue {
+            section: String,
+            field: String,
+            message: String,
+        },
+        /// A module's own validation reported errors.
+        ModuleValidationFailed {
+            module: String,
+            errors: Vec<String>,
+        },
+        /// Multiple validation errors collected together.
+        ValidationErrors {
+            errors: Vec<ConfigError>,
+        },
     }
 
     impl std::fmt::Display for ConfigError {
@@ -960,6 +979,22 @@ pub mod startup {
                 }
                 ConfigError::EnvVarConversion { var, value, message } => {
                     write!(f, "env var {var}={value:?}: {message}")
+                }
+                ConfigError::MissingSection { name } => {
+                    write!(f, "missing required config section: {name}")
+                }
+                ConfigError::InvalidValue { section, field, message } => {
+                    write!(f, "invalid value in {section}.{field}: {message}")
+                }
+                ConfigError::ModuleValidationFailed { module, errors } => {
+                    write!(f, "validation failed for module {module}: {}", errors.join("; "))
+                }
+                ConfigError::ValidationErrors { errors } => {
+                    write!(f, "configuration validation failed with {} error(s):", errors.len())?;
+                    for (i, err) in errors.iter().enumerate() {
+                        write!(f, "\n  {}: {err}", i + 1)?;
+                    }
+                    Ok(())
                 }
             }
         }
@@ -1041,6 +1076,103 @@ pub mod startup {
         tracing::info!(config = %redacted, "configuration loaded");
 
         Ok(config)
+    }
+
+    /// Validate a loaded configuration, collecting all errors before
+    /// returning.
+    ///
+    /// Top-level checks:
+    /// - The `storage` section must be a non-empty table.
+    /// - At least one transport should be configured (warns if zero).
+    /// - Logging level and format must be valid values.
+    ///
+    /// Module-level delegation: each opaque section (`storage`, `auth`,
+    /// each transport) is passed to the owning module for validation.
+    /// Currently the modules do not expose validation functions, so this
+    /// step is a placeholder that will be wired in as modules gain
+    /// `validate_config(toml::Value) -> Result<(), Vec<String>>` methods.
+    pub fn validate_config(config: &CoreConfig) -> Result<(), ConfigError> {
+        let mut errors: Vec<ConfigError> = Vec::new();
+
+        // 1. Storage section must be a non-empty table.
+        let storage_empty = match &config.storage {
+            toml::Value::Table(t) => t.is_empty(),
+            _ => true,
+        };
+        if storage_empty {
+            errors.push(ConfigError::MissingSection {
+                name: "storage".into(),
+            });
+        }
+
+        // 2. Warn if no transports are configured.
+        if config.transports.is_empty() {
+            tracing::warn!(
+                "no transports configured; Core will start but will not accept any connections"
+            );
+        }
+
+        // 3. Validate logging level.
+        let valid_levels = ["trace", "debug", "info", "warn", "error"];
+        if !valid_levels.contains(&config.logging.level.to_lowercase().as_str()) {
+            errors.push(ConfigError::InvalidValue {
+                section: "logging".into(),
+                field: "level".into(),
+                message: format!(
+                    "invalid level '{}', must be one of: {valid_levels:?}",
+                    config.logging.level
+                ),
+            });
+        }
+
+        // 4. Validate logging format.
+        let valid_formats = ["json", "pretty"];
+        if !valid_formats.contains(&config.logging.format.to_lowercase().as_str()) {
+            errors.push(ConfigError::InvalidValue {
+                section: "logging".into(),
+                field: "format".into(),
+                message: format!(
+                    "invalid format '{}', must be one of: {valid_formats:?}",
+                    config.logging.format
+                ),
+            });
+        }
+
+        // 5. Validate plugins path is not empty.
+        if config.plugins.path.is_empty() {
+            errors.push(ConfigError::InvalidValue {
+                section: "plugins".into(),
+                field: "path".into(),
+                message: "plugins path must not be empty".into(),
+            });
+        }
+
+        // 6. Validate workflows path is not empty.
+        if config.workflows.path.is_empty() {
+            errors.push(ConfigError::InvalidValue {
+                section: "workflows".into(),
+                field: "path".into(),
+                message: "workflows path must not be empty".into(),
+            });
+        }
+
+        // 7. Module-level delegation (placeholder).
+        //
+        // When modules expose validation functions, wire them here:
+        //   if let Err(module_errors) = storage_module::validate(&config.storage) { ... }
+        //   if let Err(module_errors) = auth_module::validate(&config.auth) { ... }
+        //   for (name, transport_config) in &config.transports {
+        //       if let Err(module_errors) = transport_module::validate(name, transport_config) { ... }
+        //   }
+        //   if let Err(module_errors) = plugin_module::validate(&config.plugins) { ... }
+
+        if errors.is_empty() {
+            Ok(())
+        } else if errors.len() == 1 {
+            Err(errors.remove(0))
+        } else {
+            Err(ConfigError::ValidationErrors { errors })
+        }
     }
 
     /// Scan environment variables for the `LIFE_ENGINE_` prefix and apply
@@ -1640,6 +1772,159 @@ api_key = "abc123"
             let path = "/absolute/path";
             let expanded = expand_tilde(path);
             assert_eq!(expanded, PathBuf::from(path));
+        }
+
+        // ---- validate_config tests ----
+
+        fn config_with_storage() -> CoreConfig {
+            let toml_str = r#"
+[storage]
+path = "/data/core.db"
+"#;
+            toml::from_str(toml_str).unwrap()
+        }
+
+        #[test]
+        fn validate_config_accepts_valid() {
+            let config = config_with_storage();
+            assert!(validate_config(&config).is_ok());
+        }
+
+        #[test]
+        fn validate_config_rejects_empty_storage() {
+            let config = CoreConfig::default();
+            let err = validate_config(&config).unwrap_err();
+            assert!(
+                err.to_string().contains("storage"),
+                "expected storage error, got: {err}"
+            );
+        }
+
+        #[test]
+        fn validate_config_rejects_invalid_log_level() {
+            let toml_str = r#"
+[storage]
+path = "/data/core.db"
+
+[logging]
+level = "verbose"
+"#;
+            let config: CoreConfig = toml::from_str(toml_str).unwrap();
+            let err = validate_config(&config).unwrap_err();
+            assert!(
+                err.to_string().contains("invalid level"),
+                "expected log level error, got: {err}"
+            );
+        }
+
+        #[test]
+        fn validate_config_rejects_invalid_log_format() {
+            let toml_str = r#"
+[storage]
+path = "/data/core.db"
+
+[logging]
+format = "xml"
+"#;
+            let config: CoreConfig = toml::from_str(toml_str).unwrap();
+            let err = validate_config(&config).unwrap_err();
+            assert!(
+                err.to_string().contains("invalid format"),
+                "expected log format error, got: {err}"
+            );
+        }
+
+        #[test]
+        fn validate_config_collects_multiple_errors() {
+            let toml_str = r#"
+[logging]
+level = "verbose"
+format = "xml"
+"#;
+            let config: CoreConfig = toml::from_str(toml_str).unwrap();
+            let err = validate_config(&config).unwrap_err();
+            // Should contain all three errors: missing storage, bad level, bad format.
+            match &err {
+                ConfigError::ValidationErrors { errors } => {
+                    assert!(errors.len() >= 3, "expected at least 3 errors, got {}", errors.len());
+                }
+                _ => panic!("expected ValidationErrors, got: {err}"),
+            }
+        }
+
+        #[test]
+        fn validate_config_rejects_empty_plugins_path() {
+            let toml_str = r#"
+[storage]
+path = "/data/core.db"
+
+[plugins]
+path = ""
+"#;
+            let config: CoreConfig = toml::from_str(toml_str).unwrap();
+            let err = validate_config(&config).unwrap_err();
+            assert!(
+                err.to_string().contains("plugins path"),
+                "expected plugins path error, got: {err}"
+            );
+        }
+
+        #[test]
+        fn validate_config_rejects_empty_workflows_path() {
+            let toml_str = r#"
+[storage]
+path = "/data/core.db"
+
+[workflows]
+path = ""
+"#;
+            let config: CoreConfig = toml::from_str(toml_str).unwrap();
+            let err = validate_config(&config).unwrap_err();
+            assert!(
+                err.to_string().contains("workflows path"),
+                "expected workflows path error, got: {err}"
+            );
+        }
+
+        #[test]
+        fn validate_config_zero_transports_is_not_error() {
+            // Zero transports produces a warning but not an error.
+            let config = config_with_storage();
+            assert!(config.transports.is_empty());
+            assert!(validate_config(&config).is_ok());
+        }
+
+        #[test]
+        fn config_error_display_missing_section() {
+            let err = ConfigError::MissingSection {
+                name: "storage".into(),
+            };
+            assert_eq!(err.to_string(), "missing required config section: storage");
+        }
+
+        #[test]
+        fn config_error_display_invalid_value() {
+            let err = ConfigError::InvalidValue {
+                section: "logging".into(),
+                field: "level".into(),
+                message: "bad value".into(),
+            };
+            assert_eq!(
+                err.to_string(),
+                "invalid value in logging.level: bad value"
+            );
+        }
+
+        #[test]
+        fn config_error_display_module_validation_failed() {
+            let err = ConfigError::ModuleValidationFailed {
+                module: "storage".into(),
+                errors: vec!["path not found".into(), "permissions denied".into()],
+            };
+            assert_eq!(
+                err.to_string(),
+                "validation failed for module storage: path not found; permissions denied"
+            );
         }
 
         #[test]

@@ -161,7 +161,7 @@ Progress: 0 / 11 work packages complete
 ## 2.10 — Extension Namespace Enforcement
 > spec: .odm/spec/canonical-data-models/brief.md
 
-- [ ] Implement extension namespace validation logic
+- [x] Implement extension namespace validation logic
   <!-- file: packages/types/src/extensions.rs -->
   <!-- purpose: Define validate_extension_namespace(plugin_id: &str, extensions: &serde_json::Value) -> Result<()> function. On write, verify all top-level keys in the extensions object match the writing plugin's ID using reverse-domain convention (e.g., plugin "com.example.weather" can write to extensions["com.example.weather"] only). Reject writes where a plugin attempts to write to another plugin's namespace with a clear error message. Preserve all extension data during read operations — no filtering by plugin ID on reads. Define ExtensionError type with NamespaceMismatch variant. Add unit tests: valid namespace passes, cross-namespace write rejected, read returns all namespaces, empty extensions passes, nested extension data preserved. -->
   <!-- requirements: 4.1, 4.2, 4.3, 4.4 -->

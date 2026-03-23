@@ -58,6 +58,8 @@ pub use life_engine_types::{
     // Pipeline message types
     CdmType, MessageMetadata, PipelineMessage, SchemaValidated, SchemaValidationError,
     TypedPayload,
+    // Extension namespace validation
+    validate_extension_namespace, ExtensionError,
 };
 
 /// Convenience prelude for plugin authors.

@@ -8,6 +8,7 @@ pub mod contacts;
 pub mod credentials;
 pub mod emails;
 pub mod events;
+pub mod extensions;
 pub mod file_helpers;
 pub mod files;
 pub mod notes;
@@ -24,6 +25,7 @@ pub use events::{
     Attendee, AttendeeStatus, CalendarEvent, EventStatus, Recurrence, RecurrenceFrequency,
     Reminder, ReminderMethod,
 };
+pub use extensions::{validate_extension_namespace, ExtensionError};
 pub use files::FileMetadata;
 pub use notes::{Note, NoteFormat};
 pub use pipeline::{

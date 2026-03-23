@@ -3961,6 +3961,7 @@ dependencies = [
  "life-engine-traits",
  "life-engine-types",
  "life-engine-workflow-engine",
+ "reqwest",
  "semver",
  "serde",
  "serde_json",

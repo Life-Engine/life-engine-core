@@ -17,6 +17,7 @@ toml = { workspace = true }
 semver = { workspace = true }
 extism = { workspace = true }
 life-engine-workflow-engine = { path = "../workflow-engine" }
+reqwest = { workspace = true }
 
 [dev-dependencies]
 async-trait = { workspace = true }

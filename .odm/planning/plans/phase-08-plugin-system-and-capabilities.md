@@ -15,7 +15,7 @@ This phase depends on Phase 3 (traits, capabilities), Phase 4 (plugin SDK), Phas
 
 > spec: .odm/spec/plugin-system/brief.md, .odm/spec/capability-enforcement/brief.md
 
-Progress: 7 / 22 work packages complete
+Progress: 8 / 22 work packages complete
 
 ---
 
@@ -148,13 +148,13 @@ Progress: 7 / 22 work packages complete
 > depends: 8.4, 8.3
 > spec: .odm/spec/plugin-system/brief.md
 
-- [ ] Implement HTTP outbound request host function
+- [x] Implement HTTP outbound request host function
   <!-- file: packages/plugin-system/src/host_functions/http.rs -->
   <!-- purpose: Implement host_http_request: (1) check http:outbound capability, (2) deserialize HTTP request from WASM memory (method, URL, headers, body), (3) execute the outbound HTTP request using reqwest, (4) serialize the HTTP response (status code, headers, body) back to WASM memory. Apply safety constraints: request timeout of 30 seconds, maximum response body size of 10 MB, only HTTP/HTTPS schemes allowed (no file://, ftp://, etc.). Log outbound requests at debug level with URL and status code (never log request/response bodies). -->
   <!-- requirements: from plugin-system spec 5.5, 6.5 -->
   <!-- leverage: reqwest -->
 
-- [ ] Add HTTP host function tests
+- [x] Add HTTP host function tests
   <!-- file: packages/plugin-system/src/host_functions/http.rs -->
   <!-- purpose: Test cases: (1) request succeeds with http:outbound capability (mock HTTP server), (2) without http:outbound returns CAP_002 error, (3) response is correctly serialized back with status, headers, body, (4) request timeout is enforced, (5) non-HTTP schemes are rejected. -->
   <!-- requirements: from plugin-system spec 5.5, 5.9, 6.5 -->

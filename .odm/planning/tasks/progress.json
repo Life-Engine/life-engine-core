@@ -115,13 +115,14 @@
     "5.12",
     "6.11",
     "7.11",
-    "6.12"
+    "6.12",
+    "7.12"
   ],
   "current_wp": null,
   "current_wp_tasks": {
     "total": 1,
     "completed": [
-      "Verify pipeline messages carry authenticated identity through plugin execution"
+      "Implement conditional step branching"
     ],
     "deferred": [],
     "remaining": [],
@@ -1035,6 +1036,14 @@
     {
       "wp": "6.12",
       "title": "Plugin Auth Inheritance",
+      "completed_at": "2026-03-23T00:00:00Z",
+      "commit": "c3da7a3",
+      "tasks_completed": 1,
+      "tasks_deferred": 0
+    },
+    {
+      "wp": "7.12",
+      "title": "Conditional Branching",
       "completed_at": "2026-03-23T00:00:00Z",
       "commit": "pending",
       "tasks_completed": 1,

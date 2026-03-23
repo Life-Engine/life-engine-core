@@ -15,7 +15,7 @@ use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use crate::error::WorkflowError;
-use crate::types::{ErrorStrategyType, ExecutionMode, TriggerContext, WorkflowDef};
+use crate::types::{ErrorStrategyType, ExecutionMode, StepDef, TriggerContext, WorkflowDef};
 
 /// Trait for executing a single plugin action.
 ///
@@ -290,11 +290,86 @@ impl PipelineExecutor {
             "starting workflow execution"
         );
 
+        self.execute_steps(&workflow.id, &workflow.steps, initial_message, 0)
+            .await
+    }
+
+    /// Resolve a dot-notation field path against a PipelineMessage payload.
+    ///
+    /// Supports paths like `"payload.category"` or `"status"`. The `payload.`
+    /// prefix is stripped since we index directly into the payload value.
+    fn resolve_field(message: &PipelineMessage, field: &str) -> Option<serde_json::Value> {
+        let payload_value = serde_json::to_value(&message.payload).unwrap_or_default();
+
+        // TypedPayload serialises with #[serde(tag = "type", content = "data")]
+        // so the structure is {"type": "Custom"|"Cdm", "data": <inner>}.
+        // Extract the "data" field as the root for field resolution.
+        let root = payload_value
+            .get("data")
+            .cloned()
+            .unwrap_or(payload_value);
+
+        // Strip leading "payload." prefix — callers write field paths relative
+        // to the message payload, not the internal TypedPayload wrapper.
+        let path = field.strip_prefix("payload.").unwrap_or(field);
+
+        let mut current = &root;
+        for segment in path.split('.') {
+            match current.get(segment) {
+                Some(v) => current = v,
+                None => return None,
+            }
+        }
+        Some(current.clone())
+    }
+
+    /// Execute a list of steps sequentially, returning the final message.
+    ///
+    /// This is used both for top-level workflow steps and for conditional
+    /// branch steps (`then_steps` / `else_steps`).
+    fn execute_steps<'a>(
+        &'a self,
+        workflow_id: &'a str,
+        steps: &'a [StepDef],
+        initial_message: PipelineMessage,
+        base_index: usize,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<PipelineMessage, WorkflowError>> + Send + 'a>> {
+        Box::pin(async move {
         let mut current_message = initial_message;
 
-        for (index, step) in workflow.steps.iter().enumerate() {
+        for (offset, step) in steps.iter().enumerate() {
+            let index = base_index + offset;
+
+            // Check for conditional branching
+            if let Some(condition) = &step.condition {
+                let resolved = Self::resolve_field(&current_message, &condition.field);
+                let matches = resolved
+                    .as_ref()
+                    .map(|v| v == &condition.equals)
+                    .unwrap_or(false);
+
+                info!(
+                    workflow_id = %workflow_id,
+                    step_index = index,
+                    field = %condition.field,
+                    matches = matches,
+                    "evaluating conditional branch"
+                );
+
+                let branch = if matches {
+                    &condition.then_steps
+                } else {
+                    &condition.else_steps
+                };
+
+                current_message = self
+                    .execute_steps(workflow_id, branch, current_message, index * 100)
+                    .await?;
+                continue;
+            }
+
             info!(
-                workflow_id = %workflow.id,
+                workflow_id = %workflow_id,
                 step_index = index,
                 plugin = %step.plugin,
                 action = %step.action,
@@ -327,7 +402,7 @@ impl PipelineExecutor {
                         Severity::Warning => {
                             // Log warning and continue — no error strategy applied.
                             warn!(
-                                workflow_id = %workflow.id,
+                                workflow_id = %workflow_id,
                                 step_index = index,
                                 plugin = %step.plugin,
                                 action = %step.action,
@@ -352,7 +427,7 @@ impl PipelineExecutor {
                     match effective_strategy {
                         ErrorStrategyType::Halt => {
                             error!(
-                                workflow_id = %workflow.id,
+                                workflow_id = %workflow_id,
                                 step_index = index,
                                 plugin = %step.plugin,
                                 action = %step.action,
@@ -369,7 +444,7 @@ impl PipelineExecutor {
                         }
                         ErrorStrategyType::Skip => {
                             warn!(
-                                workflow_id = %workflow.id,
+                                workflow_id = %workflow_id,
                                 step_index = index,
                                 plugin = %step.plugin,
                                 action = %step.action,
@@ -392,7 +467,7 @@ impl PipelineExecutor {
                             for attempt in 1..=max_retries {
                                 let backoff = std::time::Duration::from_secs(1 << (attempt - 1));
                                 warn!(
-                                    workflow_id = %workflow.id,
+                                    workflow_id = %workflow_id,
                                     step_index = index,
                                     plugin = %step.plugin,
                                     action = %step.action,
@@ -414,7 +489,7 @@ impl PipelineExecutor {
                                 {
                                     Ok(output) => {
                                         info!(
-                                            workflow_id = %workflow.id,
+                                            workflow_id = %workflow_id,
                                             step_index = index,
                                             plugin = %step.plugin,
                                             action = %step.action,
@@ -440,7 +515,7 @@ impl PipelineExecutor {
 
                                 if let Some(fallback_step) = fallback {
                                     warn!(
-                                        workflow_id = %workflow.id,
+                                        workflow_id = %workflow_id,
                                         step_index = index,
                                         plugin = %step.plugin,
                                         action = %step.action,
@@ -492,11 +567,12 @@ impl PipelineExecutor {
         }
 
         info!(
-            workflow_id = %workflow.id,
+            workflow_id = %workflow_id,
             "workflow execution completed"
         );
 
         Ok(current_message)
+        }) // Box::pin
     }
 }
 
@@ -1863,5 +1939,165 @@ mod tests {
         // Warning always continues — no retries attempted.
         assert!(result.is_ok());
         assert_eq!(mock.call_count.load(Ordering::SeqCst), 1);
+    }
+
+    // --- Conditional branching tests ---
+
+    fn make_conditional_step(
+        field: &str,
+        equals: serde_json::Value,
+        then_steps: Vec<StepDef>,
+        else_steps: Vec<StepDef>,
+    ) -> StepDef {
+        use crate::types::ConditionDef;
+        StepDef {
+            plugin: String::new(),
+            action: String::new(),
+            on_error: None,
+            condition: Some(ConditionDef {
+                field: field.into(),
+                equals,
+                then_steps,
+                else_steps,
+            }),
+        }
+    }
+
+    #[tokio::test]
+    async fn conditional_branch_takes_then_path_when_field_matches() {
+        let mock = Arc::new(MockPluginExecutor::new());
+        let executor = PipelineExecutor::new(mock.clone());
+
+        // Create a message with category = "spam"
+        let schema = serde_json::json!({"type": "object"});
+        let msg = PipelineMessage {
+            metadata: MessageMetadata {
+                correlation_id: Uuid::new_v4(),
+                source: "test:unit".into(),
+                timestamp: Utc::now(),
+                auth_context: None,
+            },
+            payload: TypedPayload::Custom(
+                SchemaValidated::new(serde_json::json!({"category": "spam"}), &schema).unwrap(),
+            ),
+        };
+
+        let workflow = make_workflow(vec![make_conditional_step(
+            "category",
+            serde_json::json!("spam"),
+            vec![make_step("spam-handler", "quarantine")],
+            vec![make_step("inbox", "deliver")],
+        )]);
+
+        let result = executor.execute_workflow(&workflow, msg).await.unwrap();
+
+        // Only the then branch should execute
+        assert_eq!(mock.call_count.load(Ordering::SeqCst), 1);
+        let payload_json = serde_json::to_value(&result.payload).unwrap();
+        let executed_by = payload_json
+            .pointer("/data/executed_by")
+            .and_then(|v| v.as_str());
+        assert_eq!(executed_by, Some("spam-handler.quarantine"));
+    }
+
+    #[tokio::test]
+    async fn conditional_branch_takes_else_path_when_field_does_not_match() {
+        let mock = Arc::new(MockPluginExecutor::new());
+        let executor = PipelineExecutor::new(mock.clone());
+
+        let schema = serde_json::json!({"type": "object"});
+        let msg = PipelineMessage {
+            metadata: MessageMetadata {
+                correlation_id: Uuid::new_v4(),
+                source: "test:unit".into(),
+                timestamp: Utc::now(),
+                auth_context: None,
+            },
+            payload: TypedPayload::Custom(
+                SchemaValidated::new(serde_json::json!({"category": "legit"}), &schema).unwrap(),
+            ),
+        };
+
+        let workflow = make_workflow(vec![make_conditional_step(
+            "category",
+            serde_json::json!("spam"),
+            vec![make_step("spam-handler", "quarantine")],
+            vec![make_step("inbox", "deliver")],
+        )]);
+
+        let result = executor.execute_workflow(&workflow, msg).await.unwrap();
+
+        assert_eq!(mock.call_count.load(Ordering::SeqCst), 1);
+        let payload_json = serde_json::to_value(&result.payload).unwrap();
+        let executed_by = payload_json
+            .pointer("/data/executed_by")
+            .and_then(|v| v.as_str());
+        assert_eq!(executed_by, Some("inbox.deliver"));
+    }
+
+    #[tokio::test]
+    async fn conditional_branch_supports_dot_notation_field_path() {
+        let mock = Arc::new(MockPluginExecutor::new());
+        let executor = PipelineExecutor::new(mock.clone());
+
+        let schema = serde_json::json!({"type": "object"});
+        let msg = PipelineMessage {
+            metadata: MessageMetadata {
+                correlation_id: Uuid::new_v4(),
+                source: "test:unit".into(),
+                timestamp: Utc::now(),
+                auth_context: None,
+            },
+            payload: TypedPayload::Custom(
+                SchemaValidated::new(
+                    serde_json::json!({"result": {"status": "approved"}}),
+                    &schema,
+                )
+                .unwrap(),
+            ),
+        };
+
+        let workflow = make_workflow(vec![make_conditional_step(
+            "result.status",
+            serde_json::json!("approved"),
+            vec![make_step("notifier", "send-approval")],
+            vec![make_step("notifier", "send-rejection")],
+        )]);
+
+        let result = executor.execute_workflow(&workflow, msg).await.unwrap();
+
+        assert_eq!(mock.call_count.load(Ordering::SeqCst), 1);
+        let payload_json = serde_json::to_value(&result.payload).unwrap();
+        let executed_by = payload_json
+            .pointer("/data/executed_by")
+            .and_then(|v| v.as_str());
+        assert_eq!(executed_by, Some("notifier.send-approval"));
+    }
+
+    #[tokio::test]
+    async fn conditional_branch_takes_else_when_field_missing() {
+        let mock = Arc::new(MockPluginExecutor::new());
+        let executor = PipelineExecutor::new(mock.clone());
+
+        // Message with no "category" field
+        let result = executor
+            .execute_workflow(
+                &make_workflow(vec![make_conditional_step(
+                    "category",
+                    serde_json::json!("spam"),
+                    vec![make_step("spam-handler", "quarantine")],
+                    vec![make_step("inbox", "deliver")],
+                )]),
+                make_test_message(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(mock.call_count.load(Ordering::SeqCst), 1);
+        let payload_json = serde_json::to_value(&result.payload).unwrap();
+        let executed_by = payload_json
+            .pointer("/data/executed_by")
+            .and_then(|v| v.as_str());
+        assert_eq!(executed_by, Some("inbox.deliver"));
     }
 }

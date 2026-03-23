@@ -156,7 +156,7 @@ Progress: 0 / 17 work packages complete
 > depends: 7.5
 > spec: .odm/spec/workflow-engine/brief.md
 
-- [ ] Implement conditional step branching
+- [x] Implement conditional step branching
   <!-- file: packages/workflow-engine/src/executor.rs -->
   <!-- purpose: When a StepDef has a condition (ConditionDef) instead of a plugin/action: evaluate the condition against the current PipelineMessage. Evaluation logic: (1) resolve the field path using dot-notation (e.g., "payload.category" → navigate into the serialized PipelineMessage JSON), (2) compare the resolved value with condition.equals using serde_json::Value equality, (3) if match, execute condition.then_steps sequentially as a sub-pipeline, (4) if no match, execute condition.else_steps sequentially as a sub-pipeline, (5) the sub-pipeline's final output becomes the input for the next step in the parent pipeline. Support nested field paths: "metadata.source", "payload.data.status", etc. Handle missing fields: if the path doesn't resolve, treat as non-matching (else branch). Add tests: condition matches → then branch executes, condition doesn't match → else branch executes, missing field → else branch, nested field access works. -->
   <!-- requirements: from workflow-engine spec 5.1 -->

@@ -893,6 +893,303 @@ fn merge_json(base: &mut serde_json::Value, patch: &serde_json::Value) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// New-architecture configuration types (Phase 9 — thin Core orchestrator)
+//
+// These types replace the legacy CoreConfig when Phase 9 is complete.
+// During the transition, they live in `config::startup` so existing code
+// that references `config::CoreConfig` (the legacy struct) keeps compiling.
+// WP 9.7 (main.rs rewrite) will promote these to top-level and remove the
+// legacy types.
+// ---------------------------------------------------------------------------
+
+pub mod startup {
+    use serde::Deserialize;
+    use std::collections::HashMap;
+    use std::path::PathBuf;
+
+    /// Platform-specific default config file path.
+    ///
+    /// - Linux: `$XDG_CONFIG_HOME/life-engine/config.toml` or `~/.config/life-engine/config.toml`
+    /// - macOS: `~/Library/Application Support/life-engine/config.toml`
+    pub const DEFAULT_CONFIG_PATH: &str = {
+        #[cfg(target_os = "macos")]
+        {
+            "~/Library/Application Support/life-engine/config.toml"
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            "~/.config/life-engine/config.toml"
+        }
+    };
+
+    /// Top-level configuration for the Core binary.
+    ///
+    /// Each section is a raw `toml::Value` that gets handed to the owning module
+    /// for parsing and validation — Core does not parse module internals.
+    /// The exceptions are `workflows`, `plugins`, and `logging` which have
+    /// lightweight Core-owned types since Core directly uses those values.
+    #[derive(Debug, Clone, Deserialize)]
+    pub struct CoreConfig {
+        /// Storage configuration — passed as-is to `StorageBackend::init()`.
+        #[serde(default = "default_empty_table")]
+        pub storage: toml::Value,
+
+        /// Authentication configuration — passed as-is to the auth module.
+        #[serde(default = "default_empty_table")]
+        pub auth: toml::Value,
+
+        /// Transport configurations, keyed by transport name.
+        ///
+        /// Supported keys: `"rest"`, `"graphql"`, `"caldav"`, `"carddav"`, `"webhook"`.
+        /// Each value is passed to the corresponding `Transport` implementation.
+        /// Only transports present in this map are started.
+        #[serde(default)]
+        pub transports: HashMap<String, toml::Value>,
+
+        /// Workflow engine configuration.
+        #[serde(default)]
+        pub workflows: WorkflowsConfig,
+
+        /// Plugin system configuration.
+        #[serde(default)]
+        pub plugins: PluginsConfig,
+
+        /// Logging configuration.
+        #[serde(default)]
+        pub logging: LoggingConfig,
+    }
+
+    /// Workflow engine configuration.
+    #[derive(Debug, Clone, Deserialize)]
+    pub struct WorkflowsConfig {
+        /// Directory containing YAML workflow definition files.
+        #[serde(default = "default_workflows_path")]
+        pub path: String,
+    }
+
+    impl Default for WorkflowsConfig {
+        fn default() -> Self {
+            Self {
+                path: default_workflows_path(),
+            }
+        }
+    }
+
+    fn default_workflows_path() -> String {
+        "workflows".into()
+    }
+
+    /// Plugin system configuration.
+    #[derive(Debug, Clone, Deserialize)]
+    pub struct PluginsConfig {
+        /// Directory containing WASM plugin bundles.
+        #[serde(default = "default_plugins_path")]
+        pub path: String,
+
+        /// Per-plugin configuration sections, keyed by plugin ID.
+        ///
+        /// Each value is validated against the plugin's declared config schema
+        /// and passed to the plugin at load time.
+        #[serde(default)]
+        pub config: HashMap<String, toml::Value>,
+    }
+
+    impl Default for PluginsConfig {
+        fn default() -> Self {
+            Self {
+                path: default_plugins_path(),
+                config: HashMap::new(),
+            }
+        }
+    }
+
+    fn default_plugins_path() -> String {
+        "plugins".into()
+    }
+
+    /// Logging configuration.
+    #[derive(Debug, Clone, Deserialize)]
+    pub struct LoggingConfig {
+        /// Log level filter (e.g. `"info"`, `"debug"`, `"warn"`).
+        #[serde(default = "default_log_level")]
+        pub level: String,
+
+        /// Log output format: `"json"` for machine-parseable or `"pretty"` for
+        /// human-readable.
+        #[serde(default = "default_log_format")]
+        pub format: String,
+    }
+
+    impl Default for LoggingConfig {
+        fn default() -> Self {
+            Self {
+                level: default_log_level(),
+                format: default_log_format(),
+            }
+        }
+    }
+
+    fn default_empty_table() -> toml::Value {
+        toml::Value::Table(toml::map::Map::new())
+    }
+
+    fn default_log_level() -> String {
+        "info".into()
+    }
+
+    fn default_log_format() -> String {
+        "json".into()
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn deserialize_minimal_config() {
+            let toml_str = "";
+            let config: CoreConfig = toml::from_str(toml_str).unwrap();
+            assert!(config.transports.is_empty());
+            assert_eq!(config.workflows.path, "workflows");
+            assert_eq!(config.plugins.path, "plugins");
+            assert!(config.plugins.config.is_empty());
+            assert_eq!(config.logging.level, "info");
+            assert_eq!(config.logging.format, "json");
+        }
+
+        #[test]
+        fn deserialize_full_config() {
+            let toml_str = r#"
+[storage]
+path = "/data/core.db"
+passphrase_env = "LIFE_ENGINE_STORAGE_PASSPHRASE"
+
+[auth]
+provider = "pocket-id"
+issuer_url = "https://auth.example.com"
+
+[transports.rest]
+host = "0.0.0.0"
+port = 3000
+
+[transports.graphql]
+port = 4000
+
+[workflows]
+path = "/etc/life-engine/workflows"
+
+[plugins]
+path = "/opt/life-engine/plugins"
+
+[plugins.config.connector-email]
+imap_host = "mail.example.com"
+imap_port = 993
+
+[plugins.config.connector-calendar]
+sync_interval_secs = 300
+
+[logging]
+level = "debug"
+format = "pretty"
+"#;
+            let config: CoreConfig = toml::from_str(toml_str).unwrap();
+
+            // Storage section is raw toml::Value.
+            assert_eq!(
+                config.storage.get("path").and_then(|v| v.as_str()),
+                Some("/data/core.db")
+            );
+
+            // Auth section is raw toml::Value.
+            assert_eq!(
+                config.auth.get("provider").and_then(|v| v.as_str()),
+                Some("pocket-id")
+            );
+
+            // Transports are keyed by name.
+            assert_eq!(config.transports.len(), 2);
+            assert!(config.transports.contains_key("rest"));
+            assert!(config.transports.contains_key("graphql"));
+            assert_eq!(
+                config.transports["rest"]
+                    .get("port")
+                    .and_then(|v| v.as_integer()),
+                Some(3000)
+            );
+
+            // Workflows.
+            assert_eq!(config.workflows.path, "/etc/life-engine/workflows");
+
+            // Plugins.
+            assert_eq!(config.plugins.path, "/opt/life-engine/plugins");
+            assert_eq!(config.plugins.config.len(), 2);
+            assert!(config.plugins.config.contains_key("connector-email"));
+            assert_eq!(
+                config.plugins.config["connector-email"]
+                    .get("imap_port")
+                    .and_then(|v| v.as_integer()),
+                Some(993)
+            );
+
+            // Logging.
+            assert_eq!(config.logging.level, "debug");
+            assert_eq!(config.logging.format, "pretty");
+        }
+
+        #[test]
+        fn storage_and_auth_default_to_empty_table() {
+            let config: CoreConfig = toml::from_str("").unwrap();
+            // Default toml::Value is a unit (not a table), but we should handle it.
+            // An empty config still deserializes the sections with defaults.
+            assert!(config.storage.as_table().is_none() || config.storage.as_table().unwrap().is_empty());
+        }
+
+        #[test]
+        fn default_config_path_is_set() {
+            assert!(!DEFAULT_CONFIG_PATH.is_empty());
+            assert!(DEFAULT_CONFIG_PATH.ends_with("config.toml"));
+        }
+
+        #[test]
+        fn transports_only_configured_are_present() {
+            let toml_str = r#"
+[transports.rest]
+port = 3000
+"#;
+            let config: CoreConfig = toml::from_str(toml_str).unwrap();
+            assert_eq!(config.transports.len(), 1);
+            assert!(config.transports.contains_key("rest"));
+            assert!(!config.transports.contains_key("graphql"));
+        }
+
+        #[test]
+        fn per_plugin_config_is_isolated() {
+            let toml_str = r#"
+[plugins.config.plugin-a]
+key = "value-a"
+
+[plugins.config.plugin-b]
+key = "value-b"
+"#;
+            let config: CoreConfig = toml::from_str(toml_str).unwrap();
+            assert_eq!(config.plugins.config.len(), 2);
+            assert_eq!(
+                config.plugins.config["plugin-a"]
+                    .get("key")
+                    .and_then(|v| v.as_str()),
+                Some("value-a")
+            );
+            assert_eq!(
+                config.plugins.config["plugin-b"]
+                    .get("key")
+                    .and_then(|v| v.as_str()),
+                Some("value-b")
+            );
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

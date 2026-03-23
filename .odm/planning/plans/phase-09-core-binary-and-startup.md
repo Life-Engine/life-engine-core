@@ -15,14 +15,14 @@ This phase depends on all previous phases (types, traits, crypto, SDK, storage, 
 
 > spec: .odm/spec/binary-and-startup/brief.md
 
-Progress: 0 / 11 work packages complete
+Progress: 1 / 11 work packages complete
 
 ---
 
 ## 9.1 — Top-Level Configuration Struct
 > spec: .odm/spec/binary-and-startup/brief.md
 
-- [ ] Define top-level CoreConfig struct with TOML deserialization
+- [x] Define top-level CoreConfig struct with TOML deserialization
   <!-- file: apps/core/src/config.rs -->
   <!-- purpose: Define CoreConfig struct with serde Deserialize. Sections: storage (toml::Value — passed to StorageBackend for module-specific parsing), auth (toml::Value — passed to auth module), transports (HashMap<String, toml::Value> — keyed by transport name "rest", "graphql", "caldav", "carddav", "webhook", each value passed to the corresponding Transport), workflows (WorkflowsConfig: path String — directory containing YAML workflow files), plugins (PluginConfig from Phase 8: path String, per-plugin config), logging (LoggingConfig: level String default "info", format String default "json"). Each section is a raw toml::Value that gets handed to the owning module — Core does not parse module internals. Define DEFAULT_CONFIG_PATH constant for platform-specific config location. Derive Debug, Clone for CoreConfig. -->
   <!-- requirements: 1.1, 1.3 -->

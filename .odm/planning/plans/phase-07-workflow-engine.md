@@ -204,7 +204,7 @@ Progress: 0 / 17 work packages complete
 > depends: 7.4, 7.5
 > spec: .odm/spec/workflow-engine/brief.md
 
-- [ ] Expose endpoint matching method for transports
+- [x] Expose endpoint matching method for transports
   <!-- file: packages/workflow-engine/src/lib.rs -->
   <!-- purpose: Define the WorkflowEngine struct as the main public entry point. It holds the TriggerRegistry, PipelineExecutor, EventBus, and Scheduler. Implement pub async fn handle_endpoint(&self, method: &str, path: &str, body: serde_json::Value, auth: Option<AuthIdentity>) -> Result<PipelineMessage, WorkflowError> that: (1) looks up the path in the trigger registry, (2) if found, builds an initial PipelineMessage from the endpoint trigger context, (3) executes the workflow, (4) returns the result. Implement pub fn has_endpoint(&self, method: &str, path: &str) -> bool for transports to check if a path is a workflow endpoint before routing. Transports call has_endpoint during request routing — if true, delegate to handle_endpoint instead of built-in handlers. Add a pub async fn new(config: WorkflowConfig, plugin_executor: Arc<dyn PluginExecutor>) -> Result<Self> constructor that loads workflows, builds the registry, and creates the executor, event bus, and scheduler. -->
   <!-- requirements: from workflow-engine spec 8.1 -->

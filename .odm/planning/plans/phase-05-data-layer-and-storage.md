@@ -140,7 +140,7 @@ Progress: 0 / 16 work packages complete
 > depends: 5.1
 > spec: .odm/spec/data-layer/brief.md
 
-- [ ] Implement audit log write functions
+- [x] Implement audit log write functions
   <!-- file: packages/storage-sqlite/src/audit.rs -->
   <!-- purpose: Define AuditEvent struct with event_type (AuditEventType enum: AuthSuccess, AuthFailure, CredentialAccess, CredentialModify, PluginLoad, PluginError, PermissionChange, DataExport), plugin_id (Option<String>), and details (serde_json::Value). Implement pub async fn log_event(db: &Connection, event: AuditEvent) -> Result<()> that inserts a row into the audit_log table with a generated UUID, current timestamp, and the event data. Implement pub async fn cleanup_old_entries(db: &Connection) -> Result<u64> that deletes entries older than 90 days and returns the count of deleted rows. The cleanup function should be called daily — expose it for the scheduler to invoke. Add daily rotation by date: audit entries are bucketed by day in the timestamp index. -->
   <!-- requirements: 7.1, 7.2, 7.3, 7.4, 7.5 -->

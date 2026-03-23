@@ -10,6 +10,7 @@ use life_engine_types::{
     StorageQuery, TypedPayload,
 };
 
+use crate::credentials;
 use crate::error::StorageError;
 use crate::validation;
 use crate::SqliteStorage;
@@ -38,7 +39,14 @@ fn is_canonical(collection: &str) -> bool {
 /// For canonical collections the JSON is deserialized into the appropriate
 /// Rust struct. For private (non-canonical) collections the raw JSON is
 /// returned as a `TypedPayload::Custom` via `SchemaValidated`.
-fn parse_payload(collection: &str, data_json: &str) -> Result<TypedPayload, StorageError> {
+///
+/// Credentials are transparently decrypted before deserialization when the
+/// `encrypted` flag is set.
+fn parse_payload(
+    collection: &str,
+    data_json: &str,
+    master_key: &[u8; 32],
+) -> Result<TypedPayload, StorageError> {
     match collection {
         "events" => {
             let v = serde_json::from_str(data_json)?;
@@ -65,7 +73,8 @@ fn parse_payload(collection: &str, data_json: &str) -> Result<TypedPayload, Stor
             Ok(TypedPayload::Cdm(Box::new(CdmType::File(v))))
         }
         "credentials" => {
-            let v = serde_json::from_str(data_json)?;
+            let decrypted = credentials::decrypt_credential(master_key, data_json)?;
+            let v = serde_json::from_str(&decrypted)?;
             Ok(TypedPayload::Cdm(Box::new(CdmType::Credential(v))))
         }
         _ => {
@@ -194,7 +203,7 @@ impl SqliteStorage {
         for row in rows {
             let (id, collection, data_json) = row.map_err(StorageError::Database)?;
 
-            let payload = parse_payload(&collection, &data_json)?;
+            let payload = parse_payload(&collection, &data_json, self.master_key())?;
 
             let correlation_id =
                 Uuid::parse_str(&id).unwrap_or_else(|_| Uuid::new_v4());
@@ -240,6 +249,13 @@ impl SqliteStorage {
                     )?;
                 }
 
+                // Encrypt credentials before storage.
+                let data_json = if collection == "credentials" {
+                    credentials::encrypt_credential(self.master_key(), &data_json)?
+                } else {
+                    data_json
+                };
+
                 self.conn.execute(
                     "INSERT INTO plugin_data \
                      (id, plugin_id, collection, data, version, created_at, updated_at) \
@@ -279,6 +295,13 @@ impl SqliteStorage {
                         &data_json,
                     )?;
                 }
+
+                // Encrypt credentials before storage.
+                let data_json = if collection == "credentials" {
+                    credentials::encrypt_credential(self.master_key(), &data_json)?
+                } else {
+                    data_json
+                };
 
                 let id_str = id.to_string();
                 let version_i64 = expected_version as i64;
@@ -332,10 +355,10 @@ fn merge_existing_extensions(
     let mut new_data: serde_json::Value = serde_json::from_str(new_data_json)?;
 
     // If the new payload already has non-null extensions, no merge needed.
-    if let Some(ext) = new_data.get("extensions") {
-        if !ext.is_null() {
-            return Ok(new_data_json.to_string());
-        }
+    if let Some(ext) = new_data.get("extensions")
+        && !ext.is_null()
+    {
+        return Ok(new_data_json.to_string());
     }
 
     // Look up existing record's extensions from the database.
@@ -350,11 +373,11 @@ fn merge_existing_extensions(
         )
         .unwrap_or(None);
 
-    if let Some(ext) = existing_extensions {
-        if !ext.is_null() {
-            new_data["extensions"] = ext;
-            return Ok(serde_json::to_string(&new_data)?);
-        }
+    if let Some(ext) = existing_extensions
+        && !ext.is_null()
+    {
+        new_data["extensions"] = ext;
+        return Ok(serde_json::to_string(&new_data)?);
     }
 
     Ok(new_data_json.to_string())
@@ -428,6 +451,7 @@ mod tests {
         SqliteStorage {
             conn,
             private_schemas: crate::validation::PrivateSchemaRegistry::new(),
+            master_key: [0x42u8; 32],
         }
     }
 
@@ -1271,5 +1295,171 @@ mod tests {
             parsed["extensions"], new_ext,
             "explicitly provided extensions should replace existing"
         );
+    }
+
+    // --- Per-credential encryption tests ---
+
+    fn make_credential_json(id: &str) -> serde_json::Value {
+        serde_json::json!({
+            "id": id,
+            "name": "Test OAuth Token",
+            "credential_type": "oauth_token",
+            "service": "google",
+            "claims": {
+                "access_token": "ya29.a0AfH6SMB",
+                "refresh_token": "1//0eXyz",
+                "token_type": "Bearer"
+            },
+            "source": "google-plugin",
+            "source_id": "cred-1",
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z"
+        })
+    }
+
+    fn make_credential_pipeline_message(id: &str) -> PipelineMessage {
+        let cred: life_engine_types::Credential =
+            serde_json::from_value(make_credential_json(id)).unwrap();
+        PipelineMessage {
+            metadata: MessageMetadata {
+                correlation_id: Uuid::new_v4(),
+                source: "test".into(),
+                timestamp: Utc::now(),
+                auth_context: None,
+            },
+            payload: TypedPayload::Cdm(Box::new(CdmType::Credential(cred))),
+        }
+    }
+
+    #[test]
+    fn credential_insert_encrypts_claims_at_rest() {
+        let storage = setup_db();
+        let id = "550e8400-e29b-41d4-a716-446655440001";
+        let msg = make_credential_pipeline_message(id);
+
+        storage
+            .execute_mutation(StorageMutation::Insert {
+                plugin_id: "plugin-a".into(),
+                collection: "credentials".into(),
+                data: msg,
+            })
+            .unwrap();
+
+        // Read the raw data column — claims should be encrypted (hex string).
+        let raw: String = storage
+            .conn
+            .query_row(
+                "SELECT data FROM plugin_data WHERE collection = 'credentials'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let raw_doc: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(raw_doc["encrypted"], true, "encrypted flag should be set");
+        assert!(
+            raw_doc["claims"].is_string(),
+            "claims should be a hex-encoded ciphertext string at rest"
+        );
+    }
+
+    #[test]
+    fn credential_read_decrypts_claims() {
+        let storage = setup_db();
+        let id = "550e8400-e29b-41d4-a716-446655440002";
+        let msg = make_credential_pipeline_message(id);
+
+        storage
+            .execute_mutation(StorageMutation::Insert {
+                plugin_id: "plugin-a".into(),
+                collection: "credentials".into(),
+                data: msg,
+            })
+            .unwrap();
+
+        let query = StorageQuery {
+            collection: "credentials".into(),
+            plugin_id: "plugin-a".into(),
+            filters: vec![],
+            sort: vec![],
+            limit: None,
+            offset: None,
+        };
+        let results = storage.execute_query(query).unwrap();
+        assert_eq!(results.len(), 1);
+
+        match &results[0].payload {
+            TypedPayload::Cdm(cdm) => match cdm.as_ref() {
+                CdmType::Credential(cred) => {
+                    // Claims should be decrypted back to the original object.
+                    assert_eq!(cred.claims["access_token"], "ya29.a0AfH6SMB");
+                    assert_eq!(cred.claims["refresh_token"], "1//0eXyz");
+                    // Encrypted flag should not be set on the returned credential.
+                    assert!(cred.encrypted.is_none() || cred.encrypted == Some(false));
+                }
+                _ => panic!("expected Credential"),
+            },
+            _ => panic!("expected Cdm"),
+        }
+    }
+
+    #[test]
+    fn credential_read_with_wrong_key_fails() {
+        let storage = setup_db();
+        let id = "550e8400-e29b-41d4-a716-446655440003";
+        let msg = make_credential_pipeline_message(id);
+
+        storage
+            .execute_mutation(StorageMutation::Insert {
+                plugin_id: "plugin-a".into(),
+                collection: "credentials".into(),
+                data: msg,
+            })
+            .unwrap();
+
+        // Create a new storage instance with a different master key
+        // pointing at the same in-memory DB isn't possible, so instead
+        // read the raw encrypted data and attempt to decrypt with a wrong key.
+        let raw: String = storage
+            .conn
+            .query_row(
+                "SELECT data FROM plugin_data WHERE collection = 'credentials'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+
+        let wrong_key = [0x99u8; 32];
+        let result = crate::credentials::decrypt_credential(&wrong_key, &raw);
+        assert!(result.is_err(), "decryption with wrong key should fail");
+    }
+
+    #[test]
+    fn unencrypted_credential_reads_normally() {
+        let storage = setup_db();
+        let id = "550e8400-e29b-41d4-a716-446655440004";
+        // Insert a credential directly without encryption (simulating legacy data).
+        let cred_json = make_credential_json(id);
+        insert_row(&storage, id, "plugin-a", "credentials", &cred_json.to_string());
+
+        let query = StorageQuery {
+            collection: "credentials".into(),
+            plugin_id: "plugin-a".into(),
+            filters: vec![],
+            sort: vec![],
+            limit: None,
+            offset: None,
+        };
+        let results = storage.execute_query(query).unwrap();
+        assert_eq!(results.len(), 1);
+
+        match &results[0].payload {
+            TypedPayload::Cdm(cdm) => match cdm.as_ref() {
+                CdmType::Credential(cred) => {
+                    assert_eq!(cred.claims["access_token"], "ya29.a0AfH6SMB");
+                }
+                _ => panic!("expected Credential"),
+            },
+            _ => panic!("expected Cdm"),
+        }
     }
 }

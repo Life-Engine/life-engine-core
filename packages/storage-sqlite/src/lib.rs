@@ -27,6 +27,7 @@ pub use validation::PrivateSchemaRegistry;
 pub struct SqliteStorage {
     conn: Connection,
     private_schemas: PrivateSchemaRegistry,
+    master_key: [u8; 32],
 }
 
 impl std::fmt::Debug for SqliteStorage {
@@ -105,6 +106,7 @@ impl SqliteStorage {
         Ok(SqliteStorage {
             conn,
             private_schemas: PrivateSchemaRegistry::new(),
+            master_key: key,
         })
     }
 
@@ -124,6 +126,11 @@ impl SqliteStorage {
     /// Returns a reference to the private schema registry.
     pub fn private_schemas(&self) -> &PrivateSchemaRegistry {
         &self.private_schemas
+    }
+
+    /// Returns the master encryption key for per-credential encryption.
+    pub(crate) fn master_key(&self) -> &[u8; 32] {
+        &self.master_key
     }
 }
 

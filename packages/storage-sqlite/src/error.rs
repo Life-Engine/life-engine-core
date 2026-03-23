@@ -55,6 +55,15 @@ pub enum StorageError {
     /// Write targets an unknown collection (neither canonical nor declared private).
     #[error("unknown collection: {0}")]
     UnknownCollection(String),
+
+    /// Per-credential encryption or decryption failed.
+    #[error("credential encryption error for credential '{credential_id}': {message}")]
+    CredentialEncryption {
+        /// The credential identifier.
+        credential_id: String,
+        /// Human-readable description of the failure.
+        message: String,
+    },
 }
 
 impl EngineError for StorageError {
@@ -70,6 +79,7 @@ impl EngineError for StorageError {
             StorageError::ConcurrencyConflict { .. } => "STORAGE_008",
             StorageError::ValidationFailed { .. } => "STORAGE_009",
             StorageError::UnknownCollection(_) => "STORAGE_010",
+            StorageError::CredentialEncryption { .. } => "STORAGE_011",
         }
     }
 

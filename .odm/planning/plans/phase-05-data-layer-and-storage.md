@@ -128,7 +128,7 @@ Progress: 0 / 16 work packages complete
 ## 5.9 — Per-Credential Encryption
 > spec: .odm/spec/data-layer/brief.md
 
-- [ ] Implement individual credential encryption within the credentials collection
+- [x] Implement individual credential encryption within the credentials collection
   <!-- file: packages/storage-sqlite/src/credentials.rs -->
   <!-- purpose: Override the default storage flow for the "credentials" collection to add per-credential encryption. On Insert/Update: before writing to the database, encrypt the credential's sensitive fields (the "claims" object containing tokens, keys, documents) using packages/crypto::encrypt() with a derived key specific to the credential (derive from master key + credential ID as salt via packages/crypto::derive_key()). Store the encrypted blob in the data column with an "encrypted": true flag and a "nonce" field. On Read: decrypt the claims field using packages/crypto::decrypt() before returning the PipelineMessage. If decryption fails (wrong key, corrupted data), return a clear error with the credential ID but never return partially-decrypted data. This provides defence-in-depth: even if SQLCipher encryption is compromised, individual credentials remain encrypted. Add tests: encrypt/store/read round-trip preserves data, read with wrong key fails, credential without encryption flag reads normally. -->
   <!-- requirements: 6.1, 6.2, 6.3 -->

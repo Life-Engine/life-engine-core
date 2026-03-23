@@ -1,0 +1,12 @@
+# Reference configuration for building Life Engine plugins as WASM modules.
+#
+# Plugin authors can copy this file into their own `.cargo/config.toml` to
+# default all `cargo build` invocations to the WASM target. This is NOT
+# enforced on the SDK itself — the SDK must compile for both native (tests)
+# and WASM (plugin builds).
+#
+# To build a plugin as WASM without copying this file:
+#   cargo build --target wasm32-wasip1 --release
+
+[build]
+target = "wasm32-wasip1"

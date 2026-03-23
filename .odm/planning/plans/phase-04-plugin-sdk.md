@@ -15,7 +15,7 @@ This phase depends on Phase 2 (types) and Phase 3 (traits, crypto). Phase 5 (dat
 
 > spec: .odm/spec/plugin-sdk-rs/brief.md
 
-Progress: 4 / 7 work packages complete
+Progress: 5 / 7 work packages complete
 
 ---
 
@@ -90,7 +90,7 @@ Progress: 4 / 7 work packages complete
 > depends: 4.1, 4.2, 4.3
 > spec: .odm/spec/plugin-sdk-rs/brief.md
 
-- [ ] Configure WASM build target and verify compatibility
+- [x] Configure WASM build target and verify compatibility
   <!-- file: packages/plugin-sdk/Cargo.toml -->
   <!-- file: packages/plugin-sdk/.cargo/config.toml -->
   <!-- purpose: In Cargo.toml, ensure all SDK dependencies are WASM-compatible — no host-only crates (no tokio, no std::net, no filesystem operations in the SDK itself). Add conditional compilation flags for wasm32-wasi target. Create .cargo/config.toml with [build] target = "wasm32-wasi" as a reference for plugin authors (not enforced on the SDK itself, which must compile for both native and WASM). Verify cargo build --target wasm32-wasi succeeds for the SDK crate and produces a valid WASM module. Document the WASM build command in the crate-level doc comment in lib.rs. Note: async-trait and tokio are NOT available in WASM — StorageContext methods in WASM use synchronous host function calls instead. -->

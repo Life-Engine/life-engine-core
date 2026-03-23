@@ -1,7 +1,9 @@
 //! Rust SDK for building Life Engine Core plugins.
 //!
 //! This crate provides the traits and types that Core plugin authors
-//! implement to extend Life Engine's functionality.
+//! implement to extend Life Engine's functionality. It compiles for both
+//! native targets (for testing) and `wasm32-wasip1` (for production plugin
+//! builds).
 //!
 //! # Quick Start
 //!
@@ -22,6 +24,23 @@
 //!     async fn handle_event(&self, _event: &CoreEvent) -> Result<()> { Ok(()) }
 //! }
 //! ```
+//!
+//! # Building for WASM
+//!
+//! Plugins are compiled to WASM for execution inside the Core sandbox:
+//!
+//! ```bash
+//! # Install the WASM target (one-time)
+//! rustup target add wasm32-wasip1
+//!
+//! # Build your plugin as a WASM module
+//! cargo build --target wasm32-wasip1 --release
+//! ```
+//!
+//! A reference `.cargo/config.toml` is included in this crate's directory
+//! that sets `wasm32-wasip1` as the default build target. Plugin authors
+//! can copy it into their own project to avoid passing `--target` on every
+//! build.
 
 pub mod credential_store;
 pub mod macros;

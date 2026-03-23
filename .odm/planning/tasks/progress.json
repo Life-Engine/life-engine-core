@@ -134,14 +134,14 @@
     "8.20",
     "9.11",
     "10.2",
-    "10.3"
+    "10.3",
+    "10.4"
   ],
   "current_wp": null,
   "current_wp_tasks": {
-    "total": 2,
+    "total": 1,
     "completed": [
-      "Implement platform-specific config file discovery for standalone mode",
-      "Add startup logging for deployment mode and active configuration"
+      "Create systemd service unit for Linux"
     ],
     "deferred": [],
     "remaining": [],
@@ -1201,6 +1201,22 @@
       "title": "Docker Compose Configuration",
       "completed_at": "2026-03-23T00:00:00Z",
       "commit": "c85becc",
+      "tasks_completed": 1,
+      "tasks_deferred": 0
+    },
+    {
+      "wp": "10.3",
+      "title": "Standalone Binary Configuration",
+      "completed_at": "2026-03-23T00:00:00Z",
+      "commit": "e6fe176",
+      "tasks_completed": 2,
+      "tasks_deferred": 0
+    },
+    {
+      "wp": "10.4",
+      "title": "Systemd Service Unit",
+      "completed_at": "2026-03-23T00:00:00Z",
+      "commit": "330dd96",
       "tasks_completed": 1,
       "tasks_deferred": 0
     }

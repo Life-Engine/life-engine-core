@@ -4,16 +4,36 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-Type=simple
+Type=exec
 User=life-engine
 Group=life-engine
-ExecStart=/usr/local/bin/life-engine-core
-Environment=LIFE_ENGINE_CORE_HOST=127.0.0.1
-Environment=LIFE_ENGINE_CORE_PORT=3750
-Environment=LIFE_ENGINE_CORE_LOG_LEVEL=info
-Environment=LIFE_ENGINE_CORE_DATA_DIR=/var/lib/life-engine
+ExecStart=/usr/local/bin/life-engine-core --config /etc/life-engine/config.toml
 Restart=on-failure
-RestartSec=5s
+RestartSec=5
+
+# Environment
+Environment=LIFE_ENGINE_STORAGE_PASSPHRASE=
+WorkingDirectory=/var/lib/life-engine
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+
+# Security hardening
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/life-engine
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictRealtime=true
 
 [Install]
 WantedBy=multi-user.target

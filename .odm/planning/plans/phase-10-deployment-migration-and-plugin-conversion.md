@@ -61,7 +61,7 @@ Progress: 3 / 24 work packages complete
 ## 10.4 — Systemd Service Unit
 > spec: .odm/spec/deployment-modes/brief.md
 
-- [ ] Create systemd service unit for Linux
+- [x] Create systemd service unit for Linux
   <!-- file: deploy/systemd/life-engine-core.service -->
   <!-- purpose: Define a systemd unit file: [Unit] Description=Life Engine Core, After=network.target. [Service] Type=exec, User=life-engine, Group=life-engine, ExecStart=/usr/local/bin/life-engine-core --config /etc/life-engine/config.toml, Restart=on-failure, RestartSec=5, Environment=LIFE_ENGINE_STORAGE_PASSPHRASE= (from systemd credential or separate env file), WorkingDirectory=/var/lib/life-engine, StandardOutput=journal, StandardError=journal, ProtectSystem=strict, ProtectHome=true, ReadWritePaths=/var/lib/life-engine, NoNewPrivileges=true, PrivateTmp=true. [Install] WantedBy=multi-user.target. Include security hardening directives. -->
   <!-- requirements: 2.2 -->

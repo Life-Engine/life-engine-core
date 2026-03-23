@@ -3938,6 +3938,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "hex",
+ "jsonschema",
  "life-engine-crypto",
  "life-engine-traits",
  "life-engine-types",

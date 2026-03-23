@@ -93,7 +93,7 @@ Progress: 0 / 16 work packages complete
 > depends: 5.3, 5.4
 > spec: .odm/spec/data-layer/brief.md
 
-- [ ] Implement schema validation for canonical collections on write
+- [x] Implement schema validation for canonical collections on write
   <!-- file: packages/storage-sqlite/src/validation.rs -->
   <!-- purpose: Load the 7 JSON Schema files from a bundled location (embedded in the binary using include_str! or loaded from a schemas/ directory). Before any Insert or Update mutation on a canonical collection, validate the data field against the corresponding JSON Schema using the jsonschema crate. If validation fails, return a StorageValidationError with the collection name, the failing field path, and the constraint that was violated. Validation errors have Severity::Fatal — invalid data never enters the database. Map collection name strings ("events", "tasks", "contacts", "notes", "emails", "files", "credentials") to their corresponding schemas. Return a clear error if a write targets an unknown collection that is neither canonical nor a declared private collection. -->
   <!-- requirements: 4.1, 4.3 -->

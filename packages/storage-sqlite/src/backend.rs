@@ -11,6 +11,7 @@ use life_engine_types::{
 };
 
 use crate::error::StorageError;
+use crate::validation;
 use crate::SqliteStorage;
 
 /// Maximum number of records a single query may return.
@@ -228,6 +229,8 @@ impl SqliteStorage {
                 let now = Utc::now().to_rfc3339();
                 let data_json = serialize_payload(&data.payload)?;
 
+                validation::validate_canonical(&collection, &data_json)?;
+
                 self.conn.execute(
                     "INSERT INTO plugin_data \
                      (id, plugin_id, collection, data, version, created_at, updated_at) \
@@ -239,13 +242,16 @@ impl SqliteStorage {
             }
             StorageMutation::Update {
                 plugin_id,
-                collection: _,
+                collection,
                 id,
                 data,
                 expected_version,
             } => {
                 let now = Utc::now().to_rfc3339();
                 let data_json = serialize_payload(&data.payload)?;
+
+                validation::validate_canonical(&collection, &data_json)?;
+
                 let id_str = id.to_string();
                 let version_i64 = expected_version as i64;
 

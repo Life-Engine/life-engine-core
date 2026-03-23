@@ -42,6 +42,19 @@ pub enum StorageError {
         /// The version the caller expected.
         expected: u64,
     },
+
+    /// Schema validation failed for a canonical or private collection write.
+    #[error("validation failed for collection '{collection}': {message}")]
+    ValidationFailed {
+        /// The collection name.
+        collection: String,
+        /// Human-readable description of the validation failure.
+        message: String,
+    },
+
+    /// Write targets an unknown collection (neither canonical nor declared private).
+    #[error("unknown collection: {0}")]
+    UnknownCollection(String),
 }
 
 impl EngineError for StorageError {
@@ -55,6 +68,8 @@ impl EngineError for StorageError {
             StorageError::InvalidConfig(_) => "STORAGE_006",
             StorageError::InitFailed(_) => "STORAGE_007",
             StorageError::ConcurrencyConflict { .. } => "STORAGE_008",
+            StorageError::ValidationFailed { .. } => "STORAGE_009",
+            StorageError::UnknownCollection(_) => "STORAGE_010",
         }
     }
 

@@ -15,7 +15,7 @@ This phase depends on Phase 2 (types) and Phase 3 (traits, crypto). Phase 5 (dat
 
 > spec: .odm/spec/plugin-sdk-rs/brief.md
 
-Progress: 3 / 7 work packages complete
+Progress: 4 / 7 work packages complete
 
 ---
 
@@ -65,19 +65,19 @@ Progress: 3 / 7 work packages complete
 > depends: 4.1, 4.2
 > spec: .odm/spec/plugin-sdk-rs/brief.md
 
-- [ ] Implement mock StorageContext for plugin testing
+- [x] Implement mock StorageContext for plugin testing
   <!-- file: packages/plugin-sdk/src/test/mock_storage.rs -->
   <!-- purpose: Define MockStorageContext that stores data in an in-memory HashMap<String, Vec<PipelineMessage>> keyed by collection name. Implement the same fluent query API as the real StorageContext: query(), insert(), update(), delete(). The mock query builder supports where_eq filtering by checking JSON field values, order_by sorting, limit/offset pagination. insert() adds to the in-memory store, update() replaces by ID, delete() removes by ID. Provide assert_inserted(collection, count), assert_contains(collection, id), and dump() methods for test assertions. This allows plugin authors to test their plugins without a real database. -->
   <!-- requirements: from plugin-sdk-rs spec 1.4 -->
   <!-- leverage: none -->
 
-- [ ] Implement mock PipelineMessage builder for plugin testing
+- [x] Implement mock PipelineMessage builder for plugin testing
   <!-- file: packages/plugin-sdk/src/test/mock_message.rs -->
   <!-- purpose: Define MockMessageBuilder that creates PipelineMessage instances with sensible defaults: auto-generated UUID correlation_id, current timestamp, "test" as source, None as auth_context. Builder methods: with_payload(TypedPayload) sets the payload, with_cdm(CdmType) sets a CDM payload, with_custom(serde_json::Value, schema: serde_json::Value) sets a validated custom payload, with_source(String) overrides the source, with_correlation_id(Uuid) overrides the correlation ID, with_auth(serde_json::Value) sets auth context, build() -> PipelineMessage. Provide convenience constructors: MockMessageBuilder::event(CalendarEvent), MockMessageBuilder::task(Task), etc. for each CDM type. -->
   <!-- requirements: from plugin-sdk-rs spec 1.4 -->
   <!-- leverage: none -->
 
-- [ ] Create test module and re-export test utilities
+- [x] Create test module and re-export test utilities
   <!-- file: packages/plugin-sdk/src/test/mod.rs -->
   <!-- file: packages/plugin-sdk/src/lib.rs -->
   <!-- purpose: Create src/test/mod.rs that re-exports MockStorageContext and MockMessageBuilder. In lib.rs, add pub mod test gated behind #[cfg(any(test, feature = "test-utils"))] so test utilities are available to plugin authors who enable the feature but not included in production WASM builds. Add the "test-utils" feature to Cargo.toml as an optional feature. -->

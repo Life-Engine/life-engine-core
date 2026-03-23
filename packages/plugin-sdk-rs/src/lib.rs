@@ -27,6 +27,8 @@ pub mod credential_store;
 pub mod macros;
 pub mod retry;
 pub mod storage;
+#[cfg(any(test, feature = "test-utils"))]
+pub mod test;
 pub mod traits;
 pub mod types;
 pub mod wasm_guest;

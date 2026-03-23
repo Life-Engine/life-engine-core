@@ -214,13 +214,13 @@ Progress: 10 / 22 work packages complete
 > depends: 8.11
 > spec: .odm/spec/plugin-system/brief.md
 
-- [ ] Implement execution bridge between workflow engine and plugin WASM
+- [x] Implement execution bridge between workflow engine and plugin WASM
   <!-- file: packages/plugin-system/src/execute.rs -->
   <!-- purpose: Implement the PluginExecutor trait (defined in Phase 7) for the plugin system. Define PluginSystemExecutor struct holding the PluginManager. Implement async fn execute(&self, plugin_id: &str, action: &str, input: PipelineMessage) -> Result<PipelineMessage, Box<dyn EngineError>>. Logic: (1) look up the PluginHandle by plugin_id, return error if not found or not in Running state, (2) verify the action exists in the plugin's manifest actions list, return error if unknown action, (3) serialize the input PipelineMessage to JSON bytes, (4) call the PluginInstance's WASM "execute" export with the serialized input, (5) deserialize the WASM output bytes back into a PipelineMessage, (6) return the result. Handle WASM execution errors: timeout, trap (panic), invalid output format. Wrap WASM-level errors in PluginError implementing EngineError with appropriate severity. -->
   <!-- requirements: from plugin-system spec 7.1, 7.2, 7.3 -->
   <!-- leverage: PluginExecutor trait from Phase 7 -->
 
-- [ ] Add plugin execution tests
+- [x] Add plugin execution tests
   <!-- file: packages/plugin-system/src/execute.rs -->
   <!-- purpose: Test cases: (1) execute with valid action returns PipelineMessage, (2) unknown action returns error with action name, (3) plugin not in Running state returns error, (4) plugin not found returns error, (5) WASM execution error (trap/panic) propagates correctly with plugin ID context, (6) WASM timeout returns error with Severity::Retryable. -->
   <!-- requirements: from plugin-system spec 7.1, 7.2, 7.3 -->

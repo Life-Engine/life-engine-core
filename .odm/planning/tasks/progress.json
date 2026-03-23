@@ -122,14 +122,15 @@
     "7.15",
     "7.16",
     "7.17",
-    "8.11"
+    "8.11",
+    "8.12"
   ],
   "current_wp": null,
   "current_wp_tasks": {
     "total": 2,
     "completed": [
-      "Implement six-phase lifecycle state machine",
-      "Add lifecycle manager tests"
+      "Implement execution bridge between workflow engine and plugin WASM",
+      "Add plugin execution tests"
     ],
     "deferred": [],
     "remaining": [],
@@ -1100,7 +1101,15 @@
       "wp": "8.11",
       "title": "Lifecycle Manager",
       "completed_at": "2026-03-23T00:00:00Z",
-      "commit": "PENDING",
+      "commit": "8aab73b",
+      "tasks_completed": 2,
+      "tasks_deferred": 0
+    },
+    {
+      "wp": "8.12",
+      "title": "Plugin Execution Bridge",
+      "completed_at": "2026-03-23T00:00:00Z",
+      "commit": "pending",
       "tasks_completed": 2,
       "tasks_deferred": 0
     }

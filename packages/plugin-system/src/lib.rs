@@ -7,6 +7,7 @@
 pub mod capability;
 pub mod discovery;
 pub mod error;
+pub mod execute;
 pub mod host_functions;
 pub mod lifecycle;
 pub mod loader;
@@ -19,5 +20,6 @@ pub use error::PluginError;
 pub use manifest::{parse_manifest, ActionDef, CapabilitySet, ConfigSchema, PluginManifest, PluginMeta};
 pub use host_functions::storage::{host_storage_read, host_storage_write, StorageHostContext};
 pub use lifecycle::{LifecycleManager, LifecycleState};
+pub use execute::PluginSystemExecutor;
 pub use loader::{load_plugins, LoaderConfig, PluginHandle};
 pub use runtime::{load_plugin, load_plugin_from_bytes, PluginInstance};

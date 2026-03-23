@@ -145,7 +145,7 @@ Progress: 0 / 12 work packages complete
 ## 6.11 — API Key Management Tests
 > spec: .odm/spec/auth-and-pocket-id/brief.md
 
-- [ ] Add tests for API key lifecycle
+- [x] Add tests for API key lifecycle
   <!-- file: packages/auth/src/tests/keys_test.rs -->
   <!-- purpose: Test scenarios: (1) create_key returns a raw key string and a record with hashed key, (2) validate_key with correct raw key returns AuthIdentity, (3) validate_key with wrong key returns AuthError::KeyInvalid, (4) revoke_key followed by validate_key returns AuthError::KeyRevoked, (5) expired key returns AuthError::KeyRevoked, (6) list_keys returns metadata without hashes, (7) each key gets a unique salt, (8) last_used is updated on successful validation. Use MockStorageContext for storage operations. -->
   <!-- requirements: 7.1, 7.2, 7.3, 7.4 -->

@@ -103,7 +103,7 @@ Progress: 5 / 7 work packages complete
 > depends: 4.1
 > spec: .odm/spec/plugin-sdk-rs/brief.md
 
-- [ ] Define Action struct in traits crate and re-export through SDK
+- [x] Define Action struct in traits crate and re-export through SDK
   <!-- file: packages/traits/src/plugin.rs -->
   <!-- file: packages/plugin-sdk/src/lib.rs -->
   <!-- purpose: Verify the Action struct defined in Phase 3 (WP 3.5) has all required fields: name (String), description (String), input_schema (Option<String> — JSON Schema string), output_schema (Option<String> — JSON Schema string). Add serde Serialize/Deserialize derives. Add a builder method Action::new(name, description) -> Action with optional .with_input_schema(schema) and .with_output_schema(schema) chainable methods for ergonomic construction. Re-export Action through the plugin SDK. Verify it round-trips through serde_json serialization. -->

@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::EngineError;
 
 /// Describes a single action exposed by a plugin.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Action {
     /// Unique action name within the plugin (e.g., "sync_emails", "transform_contact").
     pub name: String,
@@ -21,6 +21,30 @@ pub struct Action {
     /// Optional JSON Schema for validating the action's output.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output_schema: Option<String>,
+}
+
+impl Action {
+    /// Create a new action with the given name and description.
+    pub fn new(name: impl Into<String>, description: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            description: description.into(),
+            input_schema: None,
+            output_schema: None,
+        }
+    }
+
+    /// Set the JSON Schema for validating this action's input.
+    pub fn with_input_schema(mut self, schema: impl Into<String>) -> Self {
+        self.input_schema = Some(schema.into());
+        self
+    }
+
+    /// Set the JSON Schema for validating this action's output.
+    pub fn with_output_schema(mut self, schema: impl Into<String>) -> Self {
+        self.output_schema = Some(schema.into());
+        self
+    }
 }
 
 /// Trait for WASM plugin contracts.

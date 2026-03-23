@@ -111,6 +111,40 @@ fn action_serialization_skips_none_schemas() {
 }
 
 #[test]
+fn action_builder_creates_with_defaults() {
+    let action = Action::new("greet", "Say hello");
+
+    assert_eq!(action.name, "greet");
+    assert_eq!(action.description, "Say hello");
+    assert_eq!(action.input_schema, None);
+    assert_eq!(action.output_schema, None);
+}
+
+#[test]
+fn action_builder_with_schemas() {
+    let input = r#"{"type": "object"}"#;
+    let output = r#"{"type": "string"}"#;
+    let action = Action::new("transform", "Transform data")
+        .with_input_schema(input)
+        .with_output_schema(output);
+
+    assert_eq!(action.name, "transform");
+    assert_eq!(action.input_schema, Some(input.to_string()));
+    assert_eq!(action.output_schema, Some(output.to_string()));
+}
+
+#[test]
+fn action_builder_serde_round_trip() {
+    let action = Action::new("sync", "Sync data")
+        .with_input_schema(r#"{"type": "object"}"#);
+
+    let json = serde_json::to_string(&action).expect("serialize");
+    let restored: Action = serde_json::from_str(&json).expect("deserialize");
+
+    assert_eq!(action, restored);
+}
+
+#[test]
 fn re_exports_are_accessible() {
     // Verify that types re-exported from lib.rs are accessible.
     // This is a compile-time check — if any re-export is missing, this won't compile.

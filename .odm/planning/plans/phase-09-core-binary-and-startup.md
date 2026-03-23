@@ -15,7 +15,7 @@ This phase depends on all previous phases (types, traits, crypto, SDK, storage, 
 
 > spec: .odm/spec/binary-and-startup/brief.md
 
-Progress: 9 / 11 work packages complete
+Progress: 10 / 11 work packages complete
 
 ---
 
@@ -139,7 +139,7 @@ Progress: 9 / 11 work packages complete
 ## 9.11 — Structured Logging
 > spec: .odm/spec/binary-and-startup/brief.md
 
-- [ ] Configure tracing with JSON output and configurable log levels
+- [x] Configure tracing with JSON output and configurable log levels
   <!-- file: apps/core/src/main.rs -->
   <!-- purpose: During startup step 2, initialize the tracing subscriber: (1) create a tracing_subscriber::fmt subscriber with JSON formatter (tracing_subscriber::fmt::json()), (2) set the global log level from config.logging.level (default "info"), (3) add common fields to all log entries: version (from Cargo.toml), pid (process ID), (4) configure per-module log levels if specified in config (e.g., logging.modules.storage = "debug"), (5) set as the global default subscriber. The JSON format ensures log entries are machine-parseable for log aggregation. Each startup step already logs its number, name, and duration — this WP ensures the logging infrastructure is properly configured before those logs are emitted. Request-level logging (correlation IDs, request paths, response times) is delegated to transport crates — Core only logs startup, shutdown, and system-level events. -->
   <!-- requirements: 8.1, 8.2, 8.3, 8.4 -->

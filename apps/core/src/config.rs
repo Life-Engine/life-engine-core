@@ -11,6 +11,7 @@ use crate::error::CoreError;
 use crate::pg_storage::PgSslMode;
 use clap::Parser;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fmt;
 use std::path::{Path, PathBuf};
 use tracing_subscriber::EnvFilter;
@@ -78,6 +79,10 @@ pub struct CoreSettings {
     #[serde(default = "default_log_format")]
     pub log_format: String,
 
+    /// Per-module log level overrides (e.g. `{"storage": "debug", "auth": "trace"}`).
+    #[serde(default)]
+    pub log_modules: HashMap<String, String>,
+
     /// Data directory for persistent state.
     #[serde(default = "default_data_dir")]
     pub data_dir: String,
@@ -90,6 +95,7 @@ impl Default for CoreSettings {
             port: default_port(),
             log_level: default_log_level(),
             log_format: default_log_format(),
+            log_modules: HashMap::new(),
             data_dir: default_data_dir(),
         }
     }
@@ -1459,6 +1465,10 @@ pub mod startup {
         /// human-readable.
         #[serde(default = "default_log_format")]
         pub format: String,
+
+        /// Per-module log level overrides (e.g. `storage = "debug"`).
+        #[serde(default)]
+        pub modules: HashMap<String, String>,
     }
 
     impl Default for LoggingConfig {
@@ -1466,6 +1476,7 @@ pub mod startup {
             Self {
                 level: default_log_level(),
                 format: default_log_format(),
+                modules: HashMap::new(),
             }
         }
     }

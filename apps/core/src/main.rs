@@ -832,30 +832,68 @@ async fn dynamic_cors_middleware(
 
 /// Initialise the tracing subscriber based on config.
 ///
+/// Configures:
+/// - JSON or pretty output format
+/// - Global log level with per-module overrides (e.g. `log_modules: { storage: "debug" }`)
+/// - Common fields on every log entry: `version` (from Cargo.toml) and `pid`
+///
 /// Returns a [`LogReloadHandle`] that can be used to hot-reload the
 /// EnvFilter (log level) at runtime without restarting the server.
 fn init_logging(config: &CoreConfig) -> LogReloadHandle {
     use tracing_subscriber::prelude::*;
 
-    let env_filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new(&config.core.log_level));
+    // Build the filter directive: start with the global level, then append
+    // per-module overrides (e.g. "info,life_engine_storage_sqlite=debug").
+    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        let mut directives = config.core.log_level.clone();
+        for (module, level) in &config.core.log_modules {
+            // Convert user-friendly module names (e.g. "storage") to crate
+            // names by prefixing with `life_engine_` and replacing `-` with `_`.
+            let crate_name = if module.starts_with("life_engine_") {
+                module.clone()
+            } else {
+                format!("life_engine_{}", module.replace('-', "_"))
+            };
+            directives.push_str(&format!(",{crate_name}={level}"));
+        }
+        EnvFilter::new(directives)
+    });
 
     let (filter_layer, reload_handle) = tracing_subscriber::reload::Layer::new(env_filter);
+
+    let version = env!("CARGO_PKG_VERSION");
+    let pid = std::process::id();
 
     match config.core.log_format.as_str() {
         "pretty" => {
             tracing_subscriber::registry()
                 .with(filter_layer)
-                .with(tracing_subscriber::fmt::layer().pretty())
+                .with(
+                    tracing_subscriber::fmt::layer()
+                        .pretty()
+                        .with_file(false)
+                        .with_line_number(false),
+                )
                 .init();
         }
         _ => {
             tracing_subscriber::registry()
                 .with(filter_layer)
-                .with(tracing_subscriber::fmt::layer().json())
+                .with(
+                    tracing_subscriber::fmt::layer()
+                        .json()
+                        .with_current_span(true),
+                )
                 .init();
         }
     }
+
+    // Enter a root span that injects version and pid into every log entry.
+    // This span lives for the process lifetime via `leaked_enter`.
+    let root_span = tracing::info_span!("core", version = version, pid = pid);
+    // Intentionally leak the guard so the span stays active for the process lifetime.
+    let guard = root_span.enter();
+    std::mem::forget(guard);
 
     reload_handle
 }

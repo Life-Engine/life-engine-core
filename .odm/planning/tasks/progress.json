@@ -131,13 +131,14 @@
     "8.17",
     "8.18",
     "8.19",
-    "8.20"
+    "8.20",
+    "9.11"
   ],
   "current_wp": null,
   "current_wp_tasks": {
     "total": 1,
     "completed": [
-      "Add community plugin discovery, approval, and loading test"
+      "Configure tracing with JSON output and configurable log levels"
     ],
     "deferred": [],
     "remaining": [],
@@ -1180,7 +1181,15 @@
       "wp": "8.20",
       "title": "Community Plugin Loading Test",
       "completed_at": "2026-03-23T00:00:00Z",
-      "commit": "PENDING",
+      "commit": "20fafe0",
+      "tasks_completed": 1,
+      "tasks_deferred": 0
+    },
+    {
+      "wp": "9.11",
+      "title": "Structured Logging",
+      "completed_at": "2026-03-23T00:00:00Z",
+      "commit": "pending",
       "tasks_completed": 1,
       "tasks_deferred": 0
     }

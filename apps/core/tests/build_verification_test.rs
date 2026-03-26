@@ -1,7 +1,7 @@
 //! Build verification integration tests.
 //!
-//! These tests assert that the monorepo's Rust workspace and the Tauri app
-//! compile cleanly.  Build tests are marked `#[ignore]` because they are slow;
+//! These tests assert that the monorepo's Rust workspace compiles cleanly.
+//! Build tests are marked `#[ignore]` because they are slow;
 //! run them explicitly with `cargo test -- --ignored`.
 
 use std::fs;
@@ -60,31 +60,6 @@ fn core_binary_builds_successfully() {
     );
 }
 
-// ── Tauri app cargo check ──────────────────────────────────────────
-
-#[test]
-#[ignore]
-fn tauri_app_cargo_check_succeeds() {
-    let tauri_dir = repo_root().join("apps/app/src-tauri");
-    assert!(
-        tauri_dir.exists(),
-        "Tauri project directory not found at {}",
-        tauri_dir.display()
-    );
-
-    let output = Command::new("cargo")
-        .args(["check"])
-        .current_dir(&tauri_dir)
-        .output()
-        .expect("failed to execute cargo check in apps/app/src-tauri");
-
-    assert!(
-        output.status.success(),
-        "cargo check in apps/app/src-tauri failed:\n{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-}
-
 // ── Workspace members match expected set ───────────────────────────
 
 #[test]
@@ -120,10 +95,4 @@ fn workspace_members_match_expected_set() {
         );
     }
 
-    // Verify the Tauri app is excluded from the workspace (it has its own Cargo project).
-    assert!(
-        content.contains("apps/app/src-tauri"),
-        "Root Cargo.toml should reference apps/app/src-tauri in the exclude list. \
-         The Tauri app is a separate Cargo project and must not be a workspace member."
-    );
 }

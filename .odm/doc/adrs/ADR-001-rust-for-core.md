@@ -7,7 +7,7 @@ Accepted
 
 Life Engine's Core backend is responsible for loading and running WASM plugins, managing an encrypted SQLite database, handling concurrent HTTP requests, and acting as a long-lived server process on self-hosted hardware. The language chosen for Core must support all of these responsibilities without introducing a managed runtime that would bloat deployment packages or consume excessive memory on low-end home servers (Raspberry Pi, NAS devices, etc.).
 
-The backend also needed to serve as both a standalone process and an embedded library callable from Tauri's sidecar mode. This dual-mode requirement ruled out languages that assume a long-lived process with a dedicated event loop that cannot be embedded cleanly.
+The backend serves as a standalone binary deployed directly, in a Docker container, or on a home server. This deployment flexibility requires a language that produces a single self-contained binary without a managed runtime.
 
 Safety was a core requirement: the process handles encrypted user data and executes third-party plugin code. Memory unsafety vulnerabilities (use-after-free, buffer overflows) are unacceptable in this context. The language must eliminate these categories of bugs at compile time.
 
@@ -41,6 +41,6 @@ Negative consequences:
 
 **Go** was evaluated as the primary alternative. Go has excellent concurrency primitives, fast compile times, and a mature HTTP and database ecosystem. The main rejections were: Go's type system is structurally weaker than Rust's (no sum types, no exhaustive match), making it harder to enforce "Parse, Don't Validate"; Go has no first-class Extism SDK comparable to Rust's; and Go's garbage collector introduces unpredictable pauses that are undesirable in a long-lived server process on constrained hardware. Go's binary size is also larger than Rust's for equivalent functionality.
 
-**TypeScript/Node.js** was considered for ecosystem familiarity, since many potential contributors know TypeScript. It was rejected because Node.js has high baseline memory usage (~50MB for a minimal process), requires the V8 runtime in the deployment package, and is not suitable for embedded sidecar use. Memory safety is also not enforced at the language level.
+**TypeScript/Node.js** was considered for ecosystem familiarity, since many potential contributors know TypeScript. It was rejected because Node.js has high baseline memory usage (~50MB for a minimal process), requires the V8 runtime in the deployment package, and is not suitable for single-binary deployment. Memory safety is also not enforced at the language level.
 
 **Python** was briefly considered for rapid prototyping but rejected for the same runtime-dependency and performance reasons as Node, and additionally for lack of meaningful WASM integration tooling.

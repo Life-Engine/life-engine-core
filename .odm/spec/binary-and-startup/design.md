@@ -117,7 +117,6 @@ Environment variables override any TOML value. The naming convention maps the TO
 
 ## Deployment Modes
 
-- **Bundled with App** — Core runs as a subprocess of the Tauri desktop app. One install, zero server setup. The App manages Core's lifecycle.
 - **Standalone binary** — Run on any machine directly. No runtime dependencies beyond the binary itself.
 - **Docker container** — Single `docker run` command. Config mounted as a volume.
 - **Home server** — Raspberry Pi, old laptop, NAS. Runs on 128 MB RAM minimum.

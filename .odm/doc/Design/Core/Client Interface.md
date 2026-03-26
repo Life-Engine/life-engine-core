@@ -1,6 +1,6 @@
 ---
 title: "Engine — Client Interface"
-tags: [life-engine, engine, client, sync, tauri]
+tags: [life-engine, engine, client, sync]
 created: 2026-03-14
 ---
 
@@ -21,7 +21,6 @@ App
   |           |
   |           +-- Core REST API
   |
-  +-- Tauri Commands (local OS operations)
 ```
 
 Plugins never see the sync layer. They call the App shell's data API and the shell handles replication.
@@ -53,26 +52,16 @@ The `SyncAdapter` is an abstraction — PowerSync is the default, not a hard dep
 
 The sync target URL is user-configurable:
 
-- **Local Core** — `localhost:3750` (default, bundled Core on same machine)
+- **Local Core** — `localhost:3750` (Core running on same machine)
 - **Remote Core** — `https://my-server.com:3750` (self-hosted on a VPS or home server)
 - **Shared Core** — Multiple App instances on different devices pointing at the same Core
 
 Changing the target requires no plugin changes — the data API is identical regardless of where Core lives.
 
-## Bundled Mode
-
-For non-technical users, Core runs as a subprocess of the App:
-
-- Core binary bundled inside the Tauri application
-- App spawns Core on startup, kills it on shutdown
-- Pocket ID sidecar also managed by App
-- User never sees a terminal, config file, or server setup
-- Everything runs on `localhost` — no network configuration needed
-
 ## Auth Flow (Pocket ID)
 
 1. App triggers login via a Core API call
-2. Core initiates OIDC flow with the Pocket ID sidecar
+2. Core initiates OIDC flow with Pocket ID
 3. User authenticates (passkey or passphrase)
 4. Core receives and validates tokens
 5. App stores session token, attaches to all API requests

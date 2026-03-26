@@ -1281,14 +1281,6 @@
       "tasks_deferred": 0
     },
     {
-      "wp": "10.10",
-      "title": "Tauri Sidecar Integration",
-      "completed_at": "2026-03-23T00:00:06Z",
-      "commit": "b8e3651",
-      "tasks_completed": 2,
-      "tasks_deferred": 0
-    },
-    {
       "wp": "10.11",
       "title": "Network Security Enforcement",
       "completed_at": "2026-03-23T00:00:07Z",

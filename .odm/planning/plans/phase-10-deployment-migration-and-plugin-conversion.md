@@ -9,13 +9,13 @@ updated: 2026-03-23
 
 ## Plan Overview
 
-This phase completes the migration by implementing the four deployment modes (Docker, standalone, Tauri sidecar, home server), the data migration system (WASM-based transforms for schema evolution), and converting existing first-party plugins from native Rust crates to WASM modules. This is the final phase — after completion, the system runs entirely on the new architecture.
+This phase completes the migration by implementing the three deployment modes (Docker, standalone, home server), the data migration system (WASM-based transforms for schema evolution), and converting existing first-party plugins from native Rust crates to WASM modules. This is the final phase — after completion, the system runs entirely on the new architecture.
 
 This phase depends on Phase 9 (completed Core binary). The deployment modes share the same binary with config-driven behavior. The migration system handles schema evolution for both canonical and plugin-owned data. Plugin conversion is the last step — moving existing plugin logic into WASM modules that run through the workflow engine.
 
 > spec: .odm/spec/deployment-modes/brief.md, .odm/spec/migration-format/brief.md
 
-Progress: 5 / 24 work packages complete
+Progress: 5 / 23 work packages complete
 
 ---
 
@@ -52,7 +52,7 @@ Progress: 5 / 24 work packages complete
 
 - [x] Add startup logging for deployment mode and active configuration
   <!-- file: apps/core/src/main.rs -->
-  <!-- purpose: At the start of the startup sequence (after config loading), log a summary: deployment mode (bundled/standalone/docker — detected from environment), bind address and port for each active transport, TLS status (enabled/disabled), auth provider, database path, plugins directory, workflows directory, number of loaded plugins, and any warnings (e.g., "No transports configured", "Running without TLS on non-localhost address"). -->
+  <!-- purpose: At the start of the startup sequence (after config loading), log a summary: deployment mode (standalone/docker — detected from environment), bind address and port for each active transport, TLS status (enabled/disabled), auth provider, database path, plugins directory, workflows directory, number of loaded plugins, and any warnings (e.g., "No transports configured", "Running without TLS on non-localhost address"). -->
   <!-- requirements: 6.3 -->
   <!-- leverage: existing apps/core/src/main.rs -->
 
@@ -124,25 +124,7 @@ Progress: 5 / 24 work packages complete
 
 ---
 
-## 10.10 — Tauri Sidecar Integration
-> spec: .odm/spec/deployment-modes/brief.md
-
-- [x] Configure Tauri sidecar to spawn and manage Core process lifecycle
-  <!-- file: apps/app/src-tauri/tauri.conf.json -->
-  <!-- file: apps/app/src-tauri/src/main.rs -->
-  <!-- purpose: In tauri.conf.json: add Core binary as a sidecar in the bundle.externalBin array, configure the sidecar path for each platform (x86_64 and aarch64). In the Tauri main.rs: (1) spawn Core as a sidecar process on App launch using tauri::api::process::Command::new_sidecar(), (2) pass a bundled-mode config: storage in platform App data directory (dirs::data_dir()/life-engine/), plugins from bundled resources, auto-generated passphrase stored in platform keychain, (3) wait for Core's health endpoint to respond before showing the App UI, (4) on App close, send SIGTERM to the sidecar process, wait up to 5 seconds for graceful shutdown, then SIGKILL if still running. Include the plugins/ directory in the Tauri resource bundle so first-party plugins are available in bundled mode. -->
-  <!-- requirements: 1.1, 1.2, 1.4, 1.6 -->
-  <!-- leverage: existing apps/app/ Tauri configuration -->
-
-- [x] Configure platform-standard data directory for bundled mode
-  <!-- file: apps/core/src/config.rs -->
-  <!-- purpose: Detect bundled mode: check for LIFE_ENGINE_BUNDLED=true env var (set by Tauri sidecar). When in bundled mode: (1) use platform App data directory for database storage: macOS ~/Library/Application Support/life-engine/, Linux $XDG_DATA_HOME/life-engine/ or ~/.local/share/life-engine/, Windows %APPDATA%/life-engine/, (2) use bundled plugins directory from the app resources, (3) generate a passphrase on first run and store it in the platform keychain (macOS Keychain, Linux secret-tool, Windows Credential Manager) — the user never needs to manage the passphrase in bundled mode, (4) default to REST transport on localhost:0 (random port) with no TLS (localhost-only). -->
-  <!-- requirements: 1.3, 1.5 -->
-  <!-- leverage: existing config.rs -->
-
----
-
-## 10.11 — Network Security Enforcement
+## 10.10 — Network Security Enforcement
 > spec: .odm/spec/deployment-modes/brief.md
 
 - [x] Implement non-localhost startup validation
@@ -154,7 +136,7 @@ Progress: 5 / 24 work packages complete
 
 ---
 
-## 10.12 — Migration Manifest Validation
+## 10.11 — Migration Manifest Validation
 > spec: .odm/spec/migration-format/brief.md
 
 - [x] Implement manifest.toml migration entry parsing and validation
@@ -165,20 +147,20 @@ Progress: 5 / 24 work packages complete
 
 ---
 
-## 10.13 — Migration Entry Overlap Detection
-> depends: 10.12
+## 10.12 — Migration Entry Overlap Detection
+> depends: 10.11
 > spec: .odm/spec/migration-format/brief.md
 
 - [x] Add overlap detection for migration from ranges
   <!-- file: packages/workflow-engine/src/migration/manifest.rs -->
   <!-- purpose: After parsing all migration entries for a plugin, check for overlapping from ranges within the same collection. Two entries overlap if any concrete version could match both from ranges (e.g., "1.x" and "1.0.x" overlap because 1.0.5 matches both). If overlap is detected, reject the plugin update with a MigrationError including both conflicting entries and an example version that matches both. This prevents ambiguous migration paths where Core can't determine which transform to apply. Add tests: (1) non-overlapping ranges pass (1.x->2.0.0, 2.x->3.0.0), (2) overlapping ranges fail (1.x->2.0.0, 1.0.x->1.1.0), (3) same from range with different collections is allowed, (4) exact version ranges never overlap with each other. -->
   <!-- requirements: 1.4 -->
-  <!-- leverage: manifest parsing from WP 10.12 -->
+  <!-- leverage: manifest parsing from WP 10.11 -->
 
 ---
 
-## 10.14 — WASM Export Validation
-> depends: 10.12
+## 10.13 — WASM Export Validation
+> depends: 10.11
 > spec: .odm/spec/migration-format/brief.md
 
 - [x] Validate transform export names exist in plugin.wasm
@@ -189,8 +171,8 @@ Progress: 5 / 24 work packages complete
 
 ---
 
-## 10.15 — WASM Transform Runner
-> depends: 10.12
+## 10.14 — WASM Transform Runner
+> depends: 10.11
 > spec: .odm/spec/migration-format/brief.md
 
 - [x] Implement the WASM migration transform executor
@@ -201,7 +183,7 @@ Progress: 5 / 24 work packages complete
 
 ---
 
-## 10.16 — Quarantine Table and Operations
+## 10.15 — Quarantine Table and Operations
 > spec: .odm/spec/migration-format/brief.md
 
 - [x] Create quarantine table schema and CRUD operations
@@ -212,7 +194,7 @@ Progress: 5 / 24 work packages complete
 
 ---
 
-## 10.17 — Migration Log Table and Operations
+## 10.16 — Migration Log Table and Operations
 > spec: .odm/spec/migration-format/brief.md
 
 - [x] Create migration log table schema and logging operations
@@ -223,7 +205,7 @@ Progress: 5 / 24 work packages complete
 
 ---
 
-## 10.18 — Pre-Migration Backup
+## 10.17 — Pre-Migration Backup
 > spec: .odm/spec/migration-format/brief.md
 
 - [x] Implement pre-migration SQLite backup mechanism
@@ -234,8 +216,8 @@ Progress: 5 / 24 work packages complete
 
 ---
 
-## 10.19 — Migration Execution Engine
-> depends: 10.15, 10.16, 10.17, 10.18
+## 10.18 — Migration Execution Engine
+> depends: 10.14, 10.15, 10.16, 10.17
 > spec: .odm/spec/migration-format/brief.md
 
 - [x] Implement the core migration execution loop
@@ -246,32 +228,32 @@ Progress: 5 / 24 work packages complete
 
 ---
 
-## 10.20 — Canonical Migration Path
-> depends: 10.19
+## 10.19 — Canonical Migration Path
+> depends: 10.18
 > spec: .odm/spec/migration-format/brief.md
 
 - [x] Set up canonical migration file structure and startup trigger
   <!-- file: packages/types/src/migrations/mod.rs -->
   <!-- purpose: Create a packages/types/migrations/ directory structure for bundling canonical schema migrations with the types crate. Structure: migrations/events/ (event schema transforms), migrations/tasks/, migrations/contacts/, etc. — one subdirectory per canonical collection. Each subdirectory contains compiled WASM transform binaries. During Core startup, after storage initialization (step 4) and before loading plugins (step 8): compare each canonical collection's current schema version (stored in a schema_versions table or metadata) against the types crate's declared version. If the stored version is behind, run the canonical migration transforms through the same migration execution engine used for plugin migrations. This ensures canonical schema evolution is handled identically to plugin schema evolution — same WASM sandbox, same quarantine, same backup, same logging. Add schema_versions table DDL to storage-sqlite schema.rs. -->
   <!-- requirements: 3.1, 3.2, 3.3 -->
-  <!-- leverage: migration engine from WP 10.19 -->
+  <!-- leverage: migration engine from WP 10.18 -->
 
 ---
 
-## 10.21 — Version Column Update
-> depends: 10.19
+## 10.20 — Version Column Update
+> depends: 10.18
 > spec: .odm/spec/migration-format/brief.md
 
 - [x] Implement post-transform version stamping
   <!-- file: packages/storage-sqlite/src/migration/version.rs -->
   <!-- purpose: After a successful transform, update the record's version column in the plugin_data table to the migration entry's to version. This must happen within the same SQLite transaction as the data update to ensure atomicity. Implement pub fn stamp_version(tx: &Transaction, record_id: &str, new_version: &str) -> Result<()> that runs UPDATE plugin_data SET version = ? WHERE id = ?. After stamping, the record will not match the from range of the same migration entry on subsequent startups, preventing re-migration. Verify idempotency: running migrations twice produces the same result (already-migrated records are skipped because their version no longer matches the from range). Add tests: (1) version is updated after successful transform, (2) version update is atomic with data update, (3) re-running migration skips already-migrated records. -->
   <!-- requirements: 4.4 -->
-  <!-- leverage: migration engine from WP 10.19 -->
+  <!-- leverage: migration engine from WP 10.18 -->
 
 ---
 
-## 10.22 — Migration Integration Tests
-> depends: 10.20, 10.21
+## 10.21 — Migration Integration Tests
+> depends: 10.19, 10.20
 > spec: .odm/spec/migration-format/brief.md
 
 - [x] Verify end-to-end migration behavior
@@ -282,8 +264,8 @@ Progress: 5 / 24 work packages complete
 
 ---
 
-## 10.23 — First-Party Plugin WASM Conversion
-> depends: 10.19
+## 10.22 — First-Party Plugin WASM Conversion
+> depends: 10.18
 > spec: .odm/spec/plugin-system/brief.md
 
 - [x] Convert connector-email plugin from native Rust to WASM module
@@ -306,8 +288,8 @@ Progress: 5 / 24 work packages complete
 
 ---
 
-## 10.24 — Private Collection Support Registration
-> depends: 10.23
+## 10.23 — Private Collection Support Registration
+> depends: 10.22
 > spec: .odm/spec/canonical-data-models/brief.md
 
 - [x] Implement private collection registration from plugin manifests

@@ -15,8 +15,6 @@ This register tracks identified risks across technical, product, security, and o
 
 - **IMAP protocol inconsistency** — Likelihood: High. Impact: Medium. Different providers implement IMAP differently, leading to edge cases in parsing, folder naming, and flag handling. Mitigation: start with well-tested providers (Gmail, Fastmail, Outlook), maintain a provider compatibility matrix, and use a battle-tested IMAP library. Owner: Phase 1. Status: Open.
 
-- **Tauri v2 mobile maturity** — Likelihood: Medium. Impact: High. Tauri v2 mobile support is relatively new and may have stability or API coverage gaps. Mitigation: defer mobile to Phase 4, validate the architecture on desktop first, and monitor Tauri v2 mobile stability through their release channels. Owner: Phase 4. Status: Open.
-
 - **PowerSync integration complexity** — Likelihood: Medium. Impact: Medium. PowerSync is designed for specific backend patterns and may not fit cleanly with Life Engine's storage model. Mitigation: start with REST polling sync in Phase 1, introduce PowerSync in Phase 2 or 3, and ensure the SyncAdapter abstraction allows swapping implementations without upstream changes. Owner: Phase 1. Status: Open.
 
 - **WASM performance overhead** — Likelihood: Low. Impact: Medium. WASM plugins may introduce latency compared to native code, especially for data-heavy operations. Mitigation: benchmark WASM vs native in Phase 4, allow first-party plugins to remain native if overhead is unacceptable, and require WASM only for community plugins. Owner: Phase 4. Status: Open.
@@ -29,7 +27,7 @@ This register tracks identified risks across technical, product, security, and o
 
 ## Product Risks
 
-- **Too technical for non-technical users** — Likelihood: High. Impact: High. Self-hosting requirements, encryption passphrases, and IMAP credential entry may overwhelm users who are not technically inclined. Mitigation: sidecar mode hides the server entirely, onboarding wizard guides users through setup step by step, and OAuth is used where possible to avoid raw credential entry. Owner: Phase 1. Status: Open.
+- **Too technical for non-technical users** — Likelihood: High. Impact: High. Self-hosting requirements, encryption passphrases, and IMAP credential entry may overwhelm users who are not technically inclined. Mitigation: onboarding wizard guides users through setup step by step, and OAuth is used where possible to avoid raw credential entry. Owner: Phase 1. Status: Open.
 
 - **Plugin ecosystem doesn't materialise** — Likelihood: Medium. Impact: High. The community may not build third-party plugins, leaving Life Engine dependent on first-party development. Mitigation: build at least 5 first-party plugins to demonstrate the platform's capability, provide excellent SDK documentation and tooling, and create a "Your First Plugin" tutorial completable in under 30 minutes. Owner: Phase 3. Status: Open.
 
@@ -59,7 +57,7 @@ This register tracks identified risks across technical, product, security, and o
 
 - **TDD overhead on solo developer** — Likelihood: Medium. Impact: Medium. Strict TDD discipline adds upfront time cost, which may slow initial delivery velocity. Mitigation: TDD prevents regressions that cost more time later, test-first forces cleaner APIs that reduce future refactoring, and the review gate catches issues before they compound. The overhead decreases as the developer builds muscle memory. Owner: All phases. Status: Accepted.
 
-- **Playwright flaky tests in CI** — Likelihood: Medium. Impact: Low. E2E tests against a Tauri WebView may be sensitive to timing, rendering delays, or CI environment differences. Mitigation: use Playwright's built-in auto-waiting and retry mechanisms, avoid hard-coded waits, capture traces on failure for debugging, and quarantine flaky tests for investigation rather than disabling them. Owner: Phase 1. Status: Open.
+- **Playwright flaky tests in CI** — Likelihood: Medium. Impact: Low. E2E tests may be sensitive to timing, rendering delays, or CI environment differences. Mitigation: use Playwright's built-in auto-waiting and retry mechanisms, avoid hard-coded waits, capture traces on failure for debugging, and quarantine flaky tests for investigation rather than disabling them. Owner: Phase 1. Status: Open.
 
 ## Organisational Risks
 

@@ -40,9 +40,6 @@ members = [
     "plugins/engine/api-caldav",
     "plugins/engine/api-carddav",
 ]
-exclude = [
-    "apps/app/src-tauri",
-]
 
 [workspace.package]
 version = "0.1.0"

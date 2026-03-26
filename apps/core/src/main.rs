@@ -1067,7 +1067,6 @@ async fn dynamic_cors_middleware(
 ///
 /// Returns one of:
 /// - `"docker"` — running inside a container (`/.dockerenv` exists or `container` env var set)
-/// - `"bundled"` — running as a Tauri sidecar (`TAURI_ENV` or `TAURI` env var set)
 /// - `"standalone"` — default for direct binary execution
 fn detect_deployment_mode() -> &'static str {
     // Docker: check for /.dockerenv or container runtime env vars.
@@ -1076,14 +1075,6 @@ fn detect_deployment_mode() -> &'static str {
         || std::env::var("DOCKER_CONTAINER").is_ok()
     {
         return "docker";
-    }
-
-    // Tauri sidecar: check for bundled-mode env var (set by Tauri App) or Tauri-specific vars.
-    if CoreConfig::is_bundled_mode()
-        || std::env::var("TAURI_ENV").is_ok()
-        || std::env::var("TAURI").is_ok()
-    {
-        return "bundled";
     }
 
     "standalone"

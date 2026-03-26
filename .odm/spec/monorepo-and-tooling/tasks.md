@@ -59,7 +59,7 @@ This plan sets up the monorepo structure, build tooling, and developer workflow.
 
 - [ ] Set up pnpm workspace for JavaScript packages
   <!-- file: pnpm-workspace.yaml -->
-  <!-- purpose: List apps/app and any JS/TS packages as workspace members with workspace:* protocol -->
+  <!-- purpose: List any JS/TS packages as workspace members with workspace:* protocol -->
   <!-- requirements: 3.1, 3.2, 3.3 -->
   <!-- leverage: existing pnpm-workspace.yaml -->
 
@@ -96,9 +96,9 @@ This plan sets up the monorepo structure, build tooling, and developer workflow.
 > spec: ./brief.md
 > depends: 1.1, 1.2, 1.3
 
-- [ ] Create justfile with dev-core, dev-app, and dev-all recipes
+- [ ] Create justfile with dev-core recipe
   <!-- file: justfile -->
-  <!-- purpose: Add dev-core (cargo-watch), dev-app (Tauri dev server), and dev-all (concurrent) recipes -->
+  <!-- purpose: Add dev-core (cargo-watch) recipe -->
   <!-- requirements: 4.1, 4.2, 4.3 -->
   <!-- leverage: existing justfile -->
 

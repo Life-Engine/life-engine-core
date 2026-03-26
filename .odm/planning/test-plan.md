@@ -229,7 +229,6 @@ After the review gate, improvements are tracked as follow-up tasks in the curren
 - Core integration tests covering CRUD operations, auth middleware, and SSE event streams
 - Connector tests against GreenMail for IMAP sync (test-first)
 - App plugin loading tests verifying the 11-step lifecycle
-- Sidecar lifecycle tests covering startup, health check, and graceful shutdown
 - Playwright E2E: app launch, sidebar navigation, email list display, email detail view, first-run onboarding
 - Stitch-generated shell components validated against design system spec
 - Review gate passed for every work package (1.1 through 1.11)

@@ -30,7 +30,6 @@ Each phase has measurable criteria that must be met before moving to the next. E
 - **App shell launches and renders plugin container** — Verification: Tauri app opens and shows shell UI within 2 seconds.
 - **Plugin loader completes 11-step lifecycle** — Verification: test plugin loads, receives scoped API, and renders in the plugin container.
 - **Data syncs from Core to App local SQLite** — Verification: a record created via the Core API appears in the App within 5 seconds.
-- **Sidecar mode works end-to-end** — Verification: single app install, Core starts as a subprocess, email viewer shows synced emails.
 - **Documentation covers Getting Started and Architecture** — Verification: all Getting Started pages (install per platform, first-run, connect service, install plugin) are published. Architecture overview and Core/App/Data/Security pages are published. SDK reference pages auto-generate from source.
 - **Downloads page serves platform artifacts** — Verification: downloads page detects visitor OS, lists correct artifacts from GitHub Releases, displays SHA-256 checksums.
 

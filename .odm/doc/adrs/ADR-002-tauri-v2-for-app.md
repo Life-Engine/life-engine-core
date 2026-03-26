@@ -1,7 +1,9 @@
 # ADR-002: Tauri v2 for the desktop and mobile client
 
 ## Status
-Accepted
+Superseded by ADR-015
+
+**Note:** The sidecar architecture was removed. Core is now standalone-only. See ADR-015.
 
 ## Context
 

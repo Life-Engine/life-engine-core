@@ -10,7 +10,7 @@ updated: 2026-03-23
 
 # Life Engine — Planning Overview
 
-Life Engine is a personal data sovereignty platform. Core is the self-hosted Rust backend — a thin orchestrator that wires together independent modules. All features are provided by WASM plugins, data flows through declarative workflows, and clients connect via configurable transports. A Tauri v2 App client is planned as the user-facing interface.
+Life Engine is a personal data sovereignty platform. Core is the self-hosted Rust backend — a thin orchestrator that wires together independent modules. All features are provided by WASM plugins, data flows through declarative workflows, and clients connect via configurable transports.
 
 This directory contains all planning documents that guide the project from architecture decisions through to delivery.
 
@@ -66,16 +66,6 @@ Detailed specifications to be written for each major subsystem.
 - Plugin System
 - Workflow Engine
 - Auth and Pocket ID
-
-### App
-
-- Shell Framework
-- Plugin Loader
-- Shell Data API
-- Design System
-- Capability Enforcement
-- Sync Layer
-- Tauri Integration
 
 ### SDK
 

@@ -1,6 +1,6 @@
 ---
 title: Life Engine
-tags: [project, data-sovereignty, privacy, open-source, rust, tauri, self-hosted]
+tags: [project, data-sovereignty, privacy, open-source, rust, self-hosted]
 created: 2026-03-10
 status: exploring
 priority: p2
@@ -13,12 +13,9 @@ type: project
 
 ## What This Is
 
-Life Engine combines two components into one unified product:
+Life Engine is built around a single primary component:
 
-- **Core** — The self-hosted backend. A middleware layer that normalises all your external data (Google, email, calendar, identity documents, etc.) into a unified API *you* own. Your apps depend on *your* contract, not theirs.
-- **App** — The client. A cross-platform application built with Tauri (Rust + JS/HTML/CSS) that starts as an empty shell and gains functionality entirely through plugins. You install only what you need. The client stays lean and personal.
-
-Together they form a complete stack: Core manages your data, App gives you a UI to interact with it, and both are extensible through plugins.
+- **Core** — The self-hosted backend. A middleware layer that normalises all your external data (Google, email, calendar, identity documents, etc.) into a unified API *you* own. Your apps depend on *your* contract, not theirs. Core is extensible through WASM plugins and exposes configurable transports (REST, GraphQL, CalDAV, CardDAV) that any client can consume.
 
 ## Why This Exists
 

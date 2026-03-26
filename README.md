@@ -1,11 +1,8 @@
 # Life Engine
 
-> A free, open-source personal data sovereignty platform. Self-hosted backend + plugin-driven native client.
-
-Life Engine combines two components into one unified product:
+> A free, open-source personal data sovereignty platform. Standalone self-hosted backend.
 
 - **Core** -- A self-hosted Rust backend that aggregates personal data from external services, stores it locally in an encrypted database, and exposes it through a REST API. Core contains no business logic -- all features come from plugins.
-- **App** -- A cross-platform Tauri v2 client that starts as an empty shell and gains functionality entirely through user-installed plugins. The shell handles data, sync, navigation, and theming. Plugins handle UI.
 
 ## Quick Start
 
@@ -30,9 +27,6 @@ docker compose up -d
 # Run Core in dev mode
 npx nx dev-core
 
-# Run App in dev mode (separate terminal)
-npx nx dev-app
-
 # Run all tests
 npx nx cargo-test
 
@@ -45,12 +39,9 @@ npx nx cargo-lint
 ```
 life-engine/
   apps/core/              -- Rust Core binary
-  apps/app/               -- Tauri v2 client (src-tauri/ + src/)
-  packages/types/         -- Shared Rust + TS type definitions
+  packages/types/         -- Shared Rust type definitions
   packages/plugin-sdk-rs/ -- Rust SDK for Core plugin authors
-  packages/plugin-sdk-js/ -- JS/TS SDK for App plugin authors
   plugins/engine/         -- First-party Core plugins
-  plugins/life/           -- First-party App plugins
   docs/                   -- Documentation, ADRs, JSON schemas
   tools/                  -- Plugin scaffolding templates, dev scripts
   .github/                -- CI/CD workflows, issue/PR templates
@@ -59,7 +50,7 @@ life-engine/
 ## Architecture Decision Records
 
 - [ADR-001: Rust for Core](docs/adrs/ADR-001-rust-for-core.md)
-- [ADR-002: Tauri v2 for App](docs/adrs/ADR-002-tauri-v2-for-app.md)
+- [ADR-002: Tauri v2 for App](docs/adrs/ADR-002-tauri-v2-for-app.md) *(superseded)*
 - [ADR-003: Web Components as plugin boundary](docs/adrs/ADR-003-web-components-as-plugin-boundary.md)
 - [ADR-004: SQLite + SQLCipher as default storage](docs/adrs/ADR-004-sqlite-sqlcipher-storage.md)
 - [ADR-005: axum as HTTP framework](docs/adrs/ADR-005-axum-http-framework.md)

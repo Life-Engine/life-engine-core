@@ -11,7 +11,7 @@ Core is a plugin-driven orchestrator: all business logic (connectors, processing
 - Prevents a buggy plugin from corrupting Core's memory or crashing the host process.
 - Allows Core to expose a controlled set of host functions (database access, HTTP outbound, logging) that plugins call through a typed interface.
 - Supports plugins written in any language that compiles to WebAssembly (Rust, Go, AssemblyScript, etc.).
-- Is compatible with the sidecar deployment model — plugins run inside the Core process, not as separate processes.
+- Is compatible with all deployment modes — plugins run inside the Core process, not as separate processes.
 
 The Phase 1 implementation uses native Rust traits (not WASM) because the plugin contract needs to stabilise through real usage before the isolation boundary is introduced. However, the design must be compatible with WASM migration in Phase 4. The WASM runtime chosen now must be capable of hosting the eventual Phase 4 isolation layer.
 

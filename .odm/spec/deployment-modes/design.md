@@ -8,7 +8,7 @@ spec-brief: ./brief.md
 
 ## Purpose
 
-This spec defines the 4 deployment modes for Core. Each mode targets a different use case and technical comfort level, from zero-configuration desktop usage to self-hosted infrastructure on a home server. Core is a thin binary — all deployment modes share the same binary, `config.toml`, `plugins/` directory (WASM modules), and `workflows/` directory (YAML pipeline definitions).
+This spec defines the 3 deployment modes for Core. Each mode targets a different use case and technical comfort level, from a standalone binary to self-hosted infrastructure on a home server. Core is a thin binary — all deployment modes share the same binary, `config.toml`, `plugins/` directory (WASM modules), and `workflows/` directory (YAML pipeline definitions).
 
 ## Deployment Artifacts
 
@@ -20,24 +20,6 @@ Every deployment, regardless of mode, requires these components:
 - **`workflows/` directory** — YAML workflow definitions for pipeline execution
 
 ## Deployment Modes
-
-### Bundled with App
-
-This is the recommended default for v1 and the mode most users will experience.
-
-Core runs as a Tauri sidecar subprocess managed entirely by the App. The user never sees a terminal, a config file, or a port number. The App spawns Core on launch and kills it on close. Communication between App and Core happens over `localhost:3750`.
-
-This mode provides a zero-install UX for non-technical users. Download the App, open it, and everything works. No server setup, no Docker, no command line.
-
-Characteristics:
-
-- Core lifecycle is fully managed by the App process
-- No user-visible configuration required
-- Data is stored in the App's standard data directory (platform-dependent)
-- Core is not accessible from other devices on the network
-- Updates to Core are bundled with App updates
-- WASM plugins are bundled within the App package
-- Transports are pre-configured (REST on localhost only)
 
 ### Standalone Binary
 
@@ -52,7 +34,7 @@ Service management:
 - **Linux** — Systemd service unit. Install with `life-engine-core install-service`, manage with `systemctl`.
 - **macOS** — Launchd plist. Install with `life-engine-core install-service`, manage with `launchctl`.
 
-The standalone binary is the same binary used in all other deployment modes — the sidecar and Docker image both use it internally.
+The standalone binary is the same binary used in all other deployment modes — the Docker image uses it internally.
 
 Transport configuration example in `config.toml`:
 
@@ -125,7 +107,6 @@ This mode is for users who want full data sovereignty with remote access capabil
 
 Each deployment mode has the following minimum requirements:
 
-- **Bundled with App** — Same as the App requirements (any system that runs the Tauri desktop application)
 - **Standalone binary** — 64-bit processor (x86_64 or ARM64), 128 MB available RAM, 100 MB disk space for the binary and initial data
 - **Docker container** — Docker runtime installed, resource allocation depends on container configuration
 - **Home server** — ARM64 or x86_64 processor, 128 MB available RAM, 100 MB disk space for the binary and initial data. Raspberry Pi 4 or newer recommended.

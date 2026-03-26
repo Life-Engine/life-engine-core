@@ -19,10 +19,7 @@ dist/
 .pnp.*
 package-lock.json.bak
 
-# Tauri v2
-apps/app/src-tauri/target/
-apps/app/src-tauri/gen/
-apps/app/src-tauri/Cargo.lock
+# Desktop installers
 *.app
 *.dmg
 *.msi

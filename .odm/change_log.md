@@ -1,5 +1,9 @@
 # Change Log
 
+## 2026-03-27
+
+- Remove sidecar/bundled architecture — Core is now standalone-only. Delete `apps/app/` Tauri desktop client directory. Remove bundled-mode code from Core (`is_bundled_mode()`, `apply_bundled_defaults()`, `bundled_data_dir()` in config.rs, `"bundled"` branch in `detect_deployment_mode()` in main.rs). Update deployment-modes spec from 4 to 3 modes (standalone, Docker, home server). Supersede ADR-002 (Tauri v2 for App), create ADR-015 (Remove Sidecar Architecture). Update ADR-001 and ADR-007 to remove sidecar references. Update design docs (Core Overview, Client Interface, Principles, Life Engine), planning docs (Phase 10, risk register, overview, Phase 1), and monorepo spec. Remove Tauri CI job from ci.yml.disabled, Tauri test from build_verification_test.rs, Tauri entries from .gitignore, and `apps/app/src-tauri` exclude from Cargo.toml. Update README.md, pnpm-workspace.yaml.
+
 ## 2026-03-23
 
 - Update planning docs and add ARM64/QA support files: align planning overview, risk register, success criteria, and test plan with thin-Core + WASM plugin architecture. Replace Obsidian wiki-links with relative markdown links. Mark WP 10.24 complete in progress.json. Add .cargo/config.toml for ARM64 cross-compilation (aarch64-unknown-linux-gnu and aarch64-unknown-linux-musl linker config). Add deploy/arm64-build.md with Docker multi-arch and native cross-compilation instructions. Add .odm/qa/ISSUES_REPORT.md with initial QA findings (1 test failure, 3 wasmtime vulns, 104 clippy warnings, 43 crate duplicates). Update Cargo.lock with life-engine-storage-sqlite and rusqlite dependencies for workflow-engine.

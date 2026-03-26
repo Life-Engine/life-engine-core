@@ -64,7 +64,7 @@ A fully integrated system with fewer features is more valuable than many partial
 How Life Engine applies this:
 
 - **Phased delivery** — Each phase has measurable exit criteria that must pass before the next phase begins. See [[03 - Projects/Life Engine/Planning/Success Criteria]].
-- **Vertical slices** — Phase 1 delivers one complete end-to-end flow (Core + email connector + App shell + email viewer + sidecar mode) rather than scaffolding all connectors at once.
+- **Vertical slices** — Phase 1 delivers one complete end-to-end flow (Core + email connector + standalone deployment) rather than scaffolding all connectors at once.
 - **Email first** — The email connector is built first because it validates the entire pipeline (auth, fetch, normalise, store, sync). Other connectors wait until Phase 2.
 - **Trait-based plugins before WASM** — Phase 1 uses native Rust traits for Core plugins. WASM isolation comes in Phase 4 after the plugin contract is proven through real usage.
 

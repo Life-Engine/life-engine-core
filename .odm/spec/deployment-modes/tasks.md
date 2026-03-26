@@ -8,16 +8,15 @@ spec-brief: ./brief.md
 
 ## Task Overview
 
-This plan implements the four deployment modes for Core. Work is structured from infrastructure outward: Docker image first (validates the binary in isolation), then systemd/launchd service management, Caddy reverse proxy config, Tauri sidecar integration, and network security enforcement. Each task produces a testable artifact.
+This plan implements the three deployment modes for Core. Work is structured from infrastructure outward: Docker image first (validates the binary in isolation), then systemd/launchd service management, Caddy reverse proxy config, and network security enforcement. Each task produces a testable artifact.
 
-**Progress:** 0 / 13 tasks complete
+**Progress:** 0 / 11 tasks complete
 
 ## Steering Document Compliance
 
 - Localhost-only default follows Defence in Depth — network exposure is opt-in with mandatory TLS
 - Configuration via TOML + env vars follows Explicit Over Implicit — no hidden defaults
 - Same binary across all modes follows Single Source of Truth
-- Bundled mode as the default follows The Pit of Success — the easiest path is also the most secure
 - Deployment includes plugins/ directory (WASM) and workflows/ directory (YAML)
 - Transport sections in config.toml determine which transports are active
 
@@ -116,25 +115,7 @@ This plan implements the four deployment modes for Core. Work is structured from
 
 ---
 
-## 3.1 — Tauri Sidecar Integration
-> spec: ./brief.md
-
-- [ ] Configure Tauri sidecar to spawn and manage Core process lifecycle
-  <!-- file: apps/app/src-tauri/tauri.conf.json -->
-  <!-- file: apps/app/src-tauri/src/main.rs -->
-  <!-- purpose: Spawn Core as sidecar on App launch, graceful shutdown on close with 5s timeout; bundle plugins directory -->
-  <!-- requirements: 1.1, 1.2, 1.4, 1.6 -->
-  <!-- leverage: existing apps/app/ Tauri configuration -->
-
-- [ ] Configure platform-standard data directory for bundled mode
-  <!-- file: apps/core/src/config.rs -->
-  <!-- purpose: Detect bundled mode and use platform App data directory for database storage -->
-  <!-- requirements: 1.3, 1.5 -->
-  <!-- leverage: existing config.rs -->
-
----
-
-## 3.2 — Network Security Enforcement
+## 3.1 — Network Security Enforcement
 > spec: ./brief.md
 
 - [ ] Implement non-localhost startup validation (TLS + auth required)

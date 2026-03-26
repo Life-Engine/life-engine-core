@@ -106,7 +106,6 @@ fn main() {
 
 ## Deployment Modes
 
-- **Bundled with App** — Core runs as a subprocess of the Tauri app. One install, zero server setup.
 - **Standalone binary** — Run on any machine. No runtime dependencies.
 - **Docker container** — Single `docker run` command.
 - **Home server** — Raspberry Pi, old laptop, NAS. Runs on 128 MB RAM.

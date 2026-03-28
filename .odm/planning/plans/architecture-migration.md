@@ -273,42 +273,42 @@ Implement the concrete storage adapters (SQLite/SQLCipher, filesystem), the Stor
 
 ### 4.1 — SQLite Document Adapter
 
-- [ ] Implement `SqliteDocumentAdapter` in `packages/storage-sqlite/` implementing the `DocumentStorageAdapter` trait. Use `rusqlite` with `bundled-sqlcipher` feature for encrypted storage. Store documents as JSON in a `data` column alongside `id`, `collection`, `created_at`, `updated_at` columns. Implement `get`, `create`, `update`, `partial_update`, and `delete` methods using parameterised SQL (no string interpolation — prevent SQL injection).
+- [x] Implement `SqliteDocumentAdapter` in `packages/storage-sqlite/` implementing the `DocumentStorageAdapter` trait. Use `rusqlite` with `bundled-sqlcipher` feature for encrypted storage. Store documents as JSON in a `data` column alongside `id`, `collection`, `created_at`, `updated_at` columns. Implement `get`, `create`, `update`, `partial_update`, and `delete` methods using parameterised SQL (no string interpolation — prevent SQL injection).
   <!-- files: packages/storage-sqlite/src/document.rs -->
   <!-- purpose: Provide the default document storage backend -->
   <!-- requirements: document-storage-adapter 1.1, storage-context 1.1 -->
 
-- [ ] Implement query translation: convert `QueryDescriptor` into SQL WHERE clauses with bind parameters. Map `FilterNode` tree to SQL predicates. Support `json_extract()` for nested field access. Implement sorting, pagination (LIMIT/OFFSET), and field projection (select specific JSON paths). Implement `count` as `SELECT COUNT(*)`.
+- [x] Implement query translation: convert `QueryDescriptor` into SQL WHERE clauses with bind parameters. Map `FilterNode` tree to SQL predicates. Support `json_extract()` for nested field access. Implement sorting, pagination (LIMIT/OFFSET), and field projection (select specific JSON paths). Implement `count` as `SELECT COUNT(*)`.
   <!-- files: packages/storage-sqlite/src/query.rs -->
   <!-- purpose: Translate the abstract query model into SQLite-specific SQL -->
   <!-- requirements: document-storage-adapter 2.1, 3.1, 3.2 -->
 
-- [ ] Implement batch operations: `batch_create` uses a single transaction with multiple INSERTs, `batch_update` uses a single transaction with multiple UPDATEs, `batch_delete` uses `DELETE ... WHERE id IN (...)`. All batch operations are atomic — if any individual operation fails, the entire batch rolls back.
+- [x] Implement batch operations: `batch_create` uses a single transaction with multiple INSERTs, `batch_update` uses a single transaction with multiple UPDATEs, `batch_delete` uses `DELETE ... WHERE id IN (...)`. All batch operations are atomic — if any individual operation fails, the entire batch rolls back.
   <!-- files: packages/storage-sqlite/src/batch.rs -->
   <!-- purpose: Provide efficient atomic batch operations -->
   <!-- requirements: document-storage-adapter 4.1 -->
 
-- [ ] Implement transaction support: `begin_transaction` returns a `SqliteTransactionHandle` wrapping a rusqlite transaction. Operations within the handle run against the transaction. `commit()` finalises; `rollback()` aborts. Dropping the handle without committing automatically rolls back.
+- [x] Implement transaction support: `begin_transaction` returns a `SqliteTransactionHandle` wrapping a rusqlite transaction. Operations within the handle run against the transaction. `commit()` finalises; `rollback()` aborts. Dropping the handle without committing automatically rolls back.
   <!-- files: packages/storage-sqlite/src/transaction.rs -->
   <!-- purpose: Support multi-step atomic operations -->
   <!-- requirements: document-storage-adapter 5.1 -->
 
-- [ ] Implement change watching: use a polling-based approach — after each write operation, emit a `ChangeEvent` to subscribers via a Tokio broadcast channel. The `watch` method returns a receiver. This is a fallback implementation since SQLite does not have native change notifications.
+- [x] Implement change watching: use a polling-based approach — after each write operation, emit a `ChangeEvent` to subscribers via a Tokio broadcast channel. The `watch` method returns a receiver. This is a fallback implementation since SQLite does not have native change notifications.
   <!-- files: packages/storage-sqlite/src/watch.rs -->
   <!-- purpose: Enable reactive patterns via change event streaming -->
   <!-- requirements: document-storage-adapter 6.1 -->
 
-- [ ] Implement schema migration: `migrate(descriptor)` creates the collection table if it does not exist, adds columns for indexed fields, creates indexes from the descriptor's index list. Migrations are idempotent — running the same descriptor twice is a no-op. Breaking changes (removing columns) are rejected.
+- [x] Implement schema migration: `migrate(descriptor)` creates the collection table if it does not exist, adds columns for indexed fields, creates indexes from the descriptor's index list. Migrations are idempotent — running the same descriptor twice is a no-op. Breaking changes (removing columns) are rejected.
   <!-- files: packages/storage-sqlite/src/migration.rs -->
   <!-- purpose: Support schema evolution without data loss -->
   <!-- requirements: document-storage-adapter 7.1 -->
 
-- [ ] Implement health check: verify database connectivity by executing `SELECT 1`, report database file size, encryption status, and WAL mode status.
+- [x] Implement health check: verify database connectivity by executing `SELECT 1`, report database file size, encryption status, and WAL mode status.
   <!-- files: packages/storage-sqlite/src/health.rs -->
   <!-- purpose: Enable health monitoring of the storage backend -->
   <!-- requirements: document-storage-adapter 8.1 -->
 
-- [ ] Write comprehensive tests: CRUD operations, query with filters/sort/pagination, batch atomicity (partial failure rolls back), transaction commit/rollback, change event emission, migration idempotency, health check.
+- [x] Write comprehensive tests: CRUD operations, query with filters/sort/pagination, batch atomicity (partial failure rolls back), transaction commit/rollback, change event emission, migration idempotency, health check.
   <!-- files: packages/storage-sqlite/tests/ -->
   <!-- purpose: Verify SQLite adapter correctness -->
   <!-- requirements: document-storage-adapter 1.1 through 10.3 -->

@@ -9,6 +9,7 @@ pub mod audit;
 pub mod backend;
 pub mod config;
 pub mod credentials;
+pub mod document;
 pub mod error;
 pub mod export;
 pub mod migration;

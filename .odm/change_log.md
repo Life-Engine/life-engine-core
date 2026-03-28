@@ -2,6 +2,10 @@
 
 ## 2026-03-28
 
+- QA phase-3 remediation — core-application WP 1.8 (partial): add tracing::warn when PEM file contains multiple private keys in tls.rs. Remove unnecessary Result wrapper from IdentityStore::new() and update all callers. HKDF salt already present in derive_key. Deferred: audit sleep replacement (requires production code changes), redundant Arc removal (large refactor), health endpoint caching, multi-household prevention (changes return type).
+
+- QA phase-3 remediation — backup-and-webhooks WP 1.1: verified already complete — per-backup random salt, salt-accepting derive_key, salt prepended to payload, restore extracts salt, tests for salt uniqueness all present.
+
 - QA phase-2 remediation — dav-and-webhooks WP 1.2: implement CalDAV transport with Axum router, PROPFIND handler for calendar discovery (depth 0/1), REPORT handler for calendar-query and calendar-multiget, GET/PUT/DELETE handlers with ETag support, MKCALENDAR handler, CalDAV-specific error variants, CalDAV types, and 14 integration tests.
 
 - QA phase-2 remediation — dav-and-webhooks WP 1.3: implement CardDAV transport with Axum router, PROPFIND handler for addressbook discovery (depth 0/1), REPORT handler for addressbook-query and addressbook-multiget, GET/PUT/DELETE handlers with ETag support, MKCOL handler, CardDAV-specific error variants, CardDAV types, and 14 integration tests.

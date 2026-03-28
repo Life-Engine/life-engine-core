@@ -108,9 +108,17 @@ fn read_private_key(
         }
     }
 
-    keys.into_iter().next().ok_or_else(|| {
-        CoreError::Tls(format!("no private key found in '{path}'"))
-    })
+    if keys.len() > 1 {
+        tracing::warn!(
+            path = path,
+            count = keys.len(),
+            "PEM file contains multiple private keys; using the first one"
+        );
+    }
+
+    keys.into_iter()
+        .next()
+        .ok_or_else(|| CoreError::Tls(format!("no private key found in '{path}'")))
 }
 
 #[cfg(test)]

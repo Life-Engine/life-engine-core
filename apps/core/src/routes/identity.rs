@@ -518,8 +518,7 @@ mod tests {
             rusqlite::Connection::open_in_memory().expect("in-memory SQLite should open");
         let conn = Arc::new(Mutex::new(conn));
         let identity_store = Arc::new(
-            IdentityStore::new(conn, "test-identity-secret")
-                .expect("store should create"),
+            IdentityStore::new(conn, "test-identity-secret"),
         );
         identity_store.init().await.expect("init should succeed");
 

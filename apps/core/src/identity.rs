@@ -172,17 +172,16 @@ impl IdentityStore {
     ///
     /// The `identity_secret` is distinct from the main data encryption
     /// key, providing defence-in-depth for sensitive identity data.
-    pub fn new(
-        conn: Arc<Mutex<rusqlite::Connection>>,
-        identity_secret: &str,
-    ) -> Result<Self> {
-        let encryption_key = crypto::derive_key(identity_secret, crypto::DOMAIN_IDENTITY_ENCRYPT);
-        let signing_key = crypto::derive_key(identity_secret, crypto::DOMAIN_IDENTITY_SIGN);
-        Ok(Self {
+    pub fn new(conn: Arc<Mutex<rusqlite::Connection>>, identity_secret: &str) -> Self {
+        let encryption_key =
+            crypto::derive_key(identity_secret, crypto::DOMAIN_IDENTITY_ENCRYPT).to_vec();
+        let signing_key =
+            crypto::derive_key(identity_secret, crypto::DOMAIN_IDENTITY_SIGN).to_vec();
+        Self {
             conn,
             encryption_key,
             signing_key,
-        })
+        }
     }
 
     /// Initialise the identity tables.
@@ -359,7 +358,11 @@ impl IdentityStore {
             "DELETE FROM identity_credentials WHERE id = ?1",
             rusqlite::params![id],
         )?;
-        tracing::debug!(id = id, deleted = deleted > 0, "identity credential deleted");
+        tracing::debug!(
+            id = id,
+            deleted = deleted > 0,
+            "identity credential deleted"
+        );
         Ok(deleted > 0)
     }
 
@@ -419,13 +422,8 @@ impl IdentityStore {
         };
 
         // Record in audit log.
-        self.record_disclosure(
-            credential_id,
-            claim_names,
-            recipient,
-            &token_id,
-        )
-        .await?;
+        self.record_disclosure(credential_id, claim_names, recipient, &token_id)
+            .await?;
 
         Ok(token)
     }
@@ -442,9 +440,9 @@ impl IdentityStore {
             "issued_at": token.issued_at.to_rfc3339(),
         });
         let payload_bytes = serde_json::to_vec(&payload)?;
-        let expected_signature = self.sign(&payload_bytes);
 
-        if token.signature != expected_signature {
+        // Use constant-time comparison to prevent timing side-channel attacks.
+        if !crypto::hmac_sha256_verify(&self.signing_key, &payload_bytes, &token.signature) {
             return Ok(false);
         }
 
@@ -474,7 +472,14 @@ impl IdentityStore {
             "INSERT INTO disclosure_audit_log
                 (id, credential_id, disclosed_claims, recipient, timestamp, token_id)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            rusqlite::params![entry_id, credential_id, claims_json, recipient, now, token_id],
+            rusqlite::params![
+                entry_id,
+                credential_id,
+                claims_json,
+                recipient,
+                now,
+                token_id
+            ],
         )
         .context("failed to record disclosure audit entry")?;
 
@@ -488,10 +493,7 @@ impl IdentityStore {
     }
 
     /// Retrieve the disclosure audit log for a credential.
-    pub async fn get_audit_log(
-        &self,
-        credential_id: &str,
-    ) -> Result<Vec<DisclosureAuditEntry>> {
+    pub async fn get_audit_log(&self, credential_id: &str) -> Result<Vec<DisclosureAuditEntry>> {
         let conn = self.conn.lock().await;
         let mut stmt = conn.prepare(
             "SELECT id, credential_id, disclosed_claims, recipient, timestamp, token_id
@@ -684,11 +686,9 @@ mod tests {
     use super::*;
 
     async fn setup_store() -> IdentityStore {
-        let conn =
-            rusqlite::Connection::open_in_memory().expect("in-memory SQLite should open");
+        let conn = rusqlite::Connection::open_in_memory().expect("in-memory SQLite should open");
         let conn = Arc::new(Mutex::new(conn));
-        let store =
-            IdentityStore::new(conn, "test-identity-secret").expect("store should create");
+        let store = IdentityStore::new(conn, "test-identity-secret");
         store.init().await.expect("init should succeed");
         store
     }
@@ -736,7 +736,10 @@ mod tests {
     #[tokio::test]
     async fn get_nonexistent_returns_none() {
         let store = setup_store().await;
-        let result = store.get("nonexistent-id").await.expect("get should succeed");
+        let result = store
+            .get("nonexistent-id")
+            .await
+            .expect("get should succeed");
         assert!(result.is_none());
     }
 
@@ -799,7 +802,10 @@ mod tests {
     #[tokio::test]
     async fn delete_nonexistent_returns_false() {
         let store = setup_store().await;
-        let deleted = store.delete("nonexistent").await.expect("delete should succeed");
+        let deleted = store
+            .delete("nonexistent")
+            .await
+            .expect("delete should succeed");
         assert!(!deleted);
     }
 
@@ -1014,11 +1020,21 @@ mod tests {
         store.create(&cred).await.unwrap();
 
         store
-            .disclose(&cred.id, &["nationality".into()], "recipient-a", Duration::hours(1))
+            .disclose(
+                &cred.id,
+                &["nationality".into()],
+                "recipient-a",
+                Duration::hours(1),
+            )
             .await
             .unwrap();
         store
-            .disclose(&cred.id, &["date_of_birth".into()], "recipient-b", Duration::hours(1))
+            .disclose(
+                &cred.id,
+                &["date_of_birth".into()],
+                "recipient-b",
+                Duration::hours(1),
+            )
             .await
             .unwrap();
 
@@ -1037,7 +1053,12 @@ mod tests {
         store.create(&cred).await.unwrap();
 
         let token = store
-            .disclose(&cred.id, &["nationality".into()], "test", Duration::hours(1))
+            .disclose(
+                &cred.id,
+                &["nationality".into()],
+                "test",
+                Duration::hours(1),
+            )
             .await
             .unwrap();
 
@@ -1156,45 +1177,38 @@ mod tests {
 
     #[test]
     fn generate_did_starts_with_did_key() {
-        let conn =
-            rusqlite::Connection::open_in_memory().expect("in-memory SQLite should open");
+        let conn = rusqlite::Connection::open_in_memory().expect("in-memory SQLite should open");
         let conn = Arc::new(Mutex::new(conn));
-        let store =
-            IdentityStore::new(conn, "test-secret").expect("store should create");
+        let store = IdentityStore::new(conn, "test-secret");
         let did = store.generate_did();
-        assert!(did.starts_with("did:key:z"), "DID should start with did:key:z");
+        assert!(
+            did.starts_with("did:key:z"),
+            "DID should start with did:key:z"
+        );
     }
 
     #[test]
     fn generate_did_is_deterministic() {
-        let conn1 =
-            rusqlite::Connection::open_in_memory().expect("in-memory SQLite should open");
+        let conn1 = rusqlite::Connection::open_in_memory().expect("in-memory SQLite should open");
         let conn1 = Arc::new(Mutex::new(conn1));
-        let store1 =
-            IdentityStore::new(conn1, "same-secret").expect("store should create");
+        let store1 = IdentityStore::new(conn1, "same-secret");
 
-        let conn2 =
-            rusqlite::Connection::open_in_memory().expect("in-memory SQLite should open");
+        let conn2 = rusqlite::Connection::open_in_memory().expect("in-memory SQLite should open");
         let conn2 = Arc::new(Mutex::new(conn2));
-        let store2 =
-            IdentityStore::new(conn2, "same-secret").expect("store should create");
+        let store2 = IdentityStore::new(conn2, "same-secret");
 
         assert_eq!(store1.generate_did(), store2.generate_did());
     }
 
     #[test]
     fn different_secrets_produce_different_dids() {
-        let conn1 =
-            rusqlite::Connection::open_in_memory().expect("in-memory SQLite should open");
+        let conn1 = rusqlite::Connection::open_in_memory().expect("in-memory SQLite should open");
         let conn1 = Arc::new(Mutex::new(conn1));
-        let store1 =
-            IdentityStore::new(conn1, "secret-a").expect("store should create");
+        let store1 = IdentityStore::new(conn1, "secret-a");
 
-        let conn2 =
-            rusqlite::Connection::open_in_memory().expect("in-memory SQLite should open");
+        let conn2 = rusqlite::Connection::open_in_memory().expect("in-memory SQLite should open");
         let conn2 = Arc::new(Mutex::new(conn2));
-        let store2 =
-            IdentityStore::new(conn2, "secret-b").expect("store should create");
+        let store2 = IdentityStore::new(conn2, "secret-b");
 
         assert_ne!(store1.generate_did(), store2.generate_did());
     }

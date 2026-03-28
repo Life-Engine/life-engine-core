@@ -84,8 +84,10 @@ pub enum BackupTarget {
         /// Bucket name.
         bucket: String,
         /// Access key ID.
+        #[serde(default, skip_serializing)]
         access_key_id: String,
         /// Secret access key.
+        #[serde(default, skip_serializing)]
         secret_access_key: String,
         /// Optional key prefix.
         prefix: Option<String>,
@@ -97,6 +99,7 @@ pub enum BackupTarget {
         /// Username for authentication.
         username: String,
         /// Password for authentication.
+        #[serde(default, skip_serializing)]
         password: String,
     },
 }
@@ -246,9 +249,17 @@ mod tests {
             prefix: Some("backups/".into()),
         };
         let json = serde_json::to_string(&target).unwrap();
+        // Credentials must not appear in serialized output
+        assert!(!json.contains("AKID"), "access_key_id must be skipped during serialization");
+        assert!(!json.contains("SECRET"), "secret_access_key must be skipped during serialization");
+        // Non-sensitive fields still round-trip
         let restored: BackupTarget = serde_json::from_str(&json).unwrap();
         match restored {
-            BackupTarget::S3 { bucket, .. } => assert_eq!(bucket, "my-bucket"),
+            BackupTarget::S3 { bucket, access_key_id, secret_access_key, .. } => {
+                assert_eq!(bucket, "my-bucket");
+                assert!(access_key_id.is_empty(), "access_key_id defaults to empty after round-trip");
+                assert!(secret_access_key.is_empty(), "secret_access_key defaults to empty after round-trip");
+            }
             _ => panic!("wrong variant"),
         }
     }

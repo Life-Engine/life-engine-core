@@ -103,7 +103,22 @@ impl CorePlugin for BackupPlugin {
         ]
     }
 
-    async fn on_load(&mut self, _ctx: &PluginContext) -> Result<()> {
+    async fn on_load(&mut self, ctx: &PluginContext) -> Result<()> {
+        if let Some(config_value) = ctx.config() {
+            match serde_json::from_value::<types::BackupConfig>(config_value) {
+                Ok(config) => {
+                    tracing::info!(plugin_id = ctx.plugin_id(), "backup config loaded");
+                    self.config = Some(config);
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        plugin_id = ctx.plugin_id(),
+                        error = %e,
+                        "failed to parse backup config, using defaults"
+                    );
+                }
+            }
+        }
         tracing::info!("Backup plugin loaded");
         Ok(())
     }

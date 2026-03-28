@@ -71,7 +71,8 @@
     "dav-and-webhooks:1.7",
     "storage-sqlite:1.1",
     "api-plugins:1.7",
-    "backup-and-webhooks:1.2"
+    "backup-and-webhooks:1.2",
+    "backup-and-webhooks:1.3"
   ],
   "history": [
     {
@@ -339,6 +340,14 @@
       "title": "Implement Webhook Sender HTTP Delivery",
       "timestamp": "2026-03-28T00:00:00Z",
       "tasks_completed": 5,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "1.3",
+      "plan": "backup-and-webhooks.md",
+      "title": "Backup Configuration and Plugin Wiring",
+      "timestamp": "2026-03-28T00:00:00Z",
+      "tasks_completed": 4,
       "tasks_deferred": 0
     }
   ]

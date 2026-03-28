@@ -1,6 +1,9 @@
 use serde::Deserialize;
 
 /// Configuration for the backup plugin.
+///
+/// Note: Encryption is always applied — it cannot be disabled.
+/// The passphrase and Argon2 params are in the runtime `BackupConfig`.
 #[derive(Debug, Clone, Deserialize)]
 pub struct BackupPluginConfig {
     /// Storage backend: "local", "s3", or "webdav".
@@ -9,8 +12,6 @@ pub struct BackupPluginConfig {
     pub schedule: Option<String>,
     /// Number of days to retain backups.
     pub retention_days: u32,
-    /// Whether encryption is enabled.
-    pub encryption_enabled: bool,
 }
 
 impl Default for BackupPluginConfig {
@@ -19,7 +20,6 @@ impl Default for BackupPluginConfig {
             backend: "local".to_string(),
             schedule: None,
             retention_days: 30,
-            encryption_enabled: true,
         }
     }
 }

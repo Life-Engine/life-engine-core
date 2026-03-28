@@ -85,22 +85,22 @@ This plan addresses the 27 issues identified in the phase-3 QA review of the bac
 > depends: none
 > spec: .odm/qa/reports/phase-3/backup-and-webhooks.md
 
-- [ ] Implement configuration loading in backup plugin `on_load` from `PluginContext` [major]
+- [x] Implement configuration loading in backup plugin `on_load` from `PluginContext` [major]
   <!-- file: plugins/engine/backup/src/lib.rs -->
   <!-- purpose: self.config is always None; no backup settings are loaded at startup -->
   <!-- requirements: 7 -->
   <!-- leverage: existing config field, BackupPluginConfig struct -->
-- [ ] Remove or implement `encryption_enabled` config flag [minor]
+- [x] Remove or implement `encryption_enabled` config flag [minor]
   <!-- file: plugins/engine/backup/src/config.rs, plugins/engine/backup/src/engine.rs -->
   <!-- purpose: Flag exists but encryption is always applied regardless of setting -->
   <!-- requirements: 15 -->
   <!-- leverage: existing encryption_enabled field -->
-- [ ] Fix `BackupTarget::S3` serialization to skip `secret_access_key` [major]
+- [x] Fix `BackupTarget::S3` serialization to skip `secret_access_key` [major]
   <!-- file: plugins/engine/backup/src/types.rs -->
   <!-- purpose: Unlike S3BackupConfig, the enum variant's Serialize derives includes credentials -->
   <!-- requirements: 23 -->
   <!-- leverage: S3BackupConfig already uses serde(skip_serializing) pattern -->
-- [ ] Align manifest.toml config schema with actual `BackupPluginConfig` fields (add passphrase, argon2 params; clarify retention) [minor]
+- [x] Align manifest.toml config schema with actual `BackupPluginConfig` fields (add passphrase, argon2 params; clarify retention) [minor]
   <!-- file: plugins/engine/backup/manifest.toml -->
   <!-- purpose: Schema advertises retention_days but implementation uses max_count -->
   <!-- requirements: 6 -->

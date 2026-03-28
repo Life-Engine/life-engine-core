@@ -12,7 +12,7 @@ This plan addresses all findings from the Life Engine Core QA review (2026-03-28
 
 **Source:** .odm/qa/reports/EXECUTIVE-SUMMARY.md
 
-**Progress:** 22 / 30 work packages complete
+**Progress:** 24 / 30 work packages complete
 
 ---
 
@@ -405,17 +405,17 @@ This plan addresses all findings from the Life Engine Core QA review (2026-03-28
 > depends: none
 > spec: .odm/qa/reports/phase-1/cryptography.md
 
-- [ ] Add `zeroize` dependency to `packages/crypto/Cargo.toml` [security]
+- [x] Add `zeroize` dependency to `packages/crypto/Cargo.toml` [security]
   <!-- file: packages/crypto/Cargo.toml -->
   <!-- purpose: Enable memory zeroization for key material -->
   <!-- requirements: M-1 no key zeroization finding -->
   <!-- leverage: none -->
-- [ ] Use `Zeroizing<[u8; 32]>` for derived keys in `kdf.rs` [security]
+- [x] Use `Zeroizing<[u8; 32]>` for derived keys in `kdf.rs` [security]
   <!-- file: packages/crypto/src/kdf.rs -->
   <!-- purpose: Ensure derived keys are cleared from memory when dropped -->
   <!-- requirements: M-1 no key zeroization finding -->
   <!-- leverage: zeroize crate Zeroizing wrapper -->
-- [ ] Update callers to handle `Zeroizing` return type [security]
+- [x] Update callers to handle `Zeroizing` return type [security]
   <!-- file: packages/crypto/src/encryption.rs -->
   <!-- purpose: Propagate zeroization through the encryption API -->
   <!-- requirements: M-1, M-2 zeroization findings -->
@@ -565,7 +565,7 @@ This plan addresses all findings from the Life Engine Core QA review (2026-03-28
 > depends: none
 > spec: .odm/qa/reports/phase-2/plugin-sdk.md
 
-- [ ] Document `CorePlugin` vs `Plugin` usage and migration path [docs]
+- [x] Document `CorePlugin` vs `Plugin` usage and migration path [docs]
   <!-- file: packages/plugin-sdk-rs/src/lib.rs -->
   <!-- purpose: Guide developers on which plugin model to use and when -->
   <!-- requirements: Two undocumented plugin models finding -->

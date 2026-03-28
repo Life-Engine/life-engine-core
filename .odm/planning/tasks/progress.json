@@ -17,6 +17,7 @@
     "security-audit:2.1",
     "security-audit:2.2",
     "security-audit:2.3",
+    "security-audit:3.1",
     "qa-remediation:1.1",
     "qa-remediation:1.2",
     "qa-remediation:1.3",
@@ -38,7 +39,9 @@
     "qa-remediation:3.5",
     "qa-remediation:3.6",
     "qa-remediation:3.7",
+    "qa-remediation:3.8",
     "qa-remediation:3.9",
+    "qa-remediation:2.11",
     "dav-and-webhooks:1.2",
     "dav-and-webhooks:1.3",
     "dav-and-webhooks:1.4",
@@ -175,6 +178,14 @@
       "timestamp": "2026-03-28T00:00:00Z",
       "tasks_completed": 4,
       "tasks_deferred": 0
+    },
+    {
+      "wp_id": "3.1",
+      "plan": "security-audit.md",
+      "title": "Security Hardening and Consolidation",
+      "timestamp": "2026-03-28T00:00:00Z",
+      "tasks_completed": 4,
+      "tasks_deferred": 2
     }
   ]
 }

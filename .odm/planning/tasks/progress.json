@@ -78,7 +78,17 @@
     "architecture-coherence:2.1",
     "architecture-coherence:2.2",
     "architecture-coherence:3.1",
-    "backup-and-webhooks:1.5"
+    "backup-and-webhooks:1.5",
+    "architecture-coherence:3.2",
+    "architecture-coherence:4.1",
+    "backup-and-webhooks:1.1",
+    "backup-and-webhooks:1.4",
+    "backup-and-webhooks:1.6",
+    "plugin-sdk:1.1",
+    "plugin-sdk:1.2",
+    "plugin-sdk:1.3",
+    "plugin-sdk:1.4",
+    "backup-and-webhooks:1.7"
   ],
   "history": [
     {
@@ -370,6 +380,70 @@
       "title": "S3 Backend Fixes",
       "timestamp": "2026-03-28T00:00:00Z",
       "tasks_completed": 3,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "1.1",
+      "plan": "backup-and-webhooks.md",
+      "title": "Fix Backup Encryption Salt",
+      "timestamp": "2026-03-28T00:00:00Z",
+      "tasks_completed": 6,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "1.4",
+      "plan": "backup-and-webhooks.md",
+      "title": "Manifest Encryption and Metadata Leakage",
+      "timestamp": "2026-03-28T00:00:00Z",
+      "tasks_completed": 3,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "1.6",
+      "plan": "backup-and-webhooks.md",
+      "title": "WebDAV Backend Fixes",
+      "timestamp": "2026-03-28T00:00:00Z",
+      "tasks_completed": 3,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "1.7",
+      "plan": "backup-and-webhooks.md",
+      "title": "Retention Policy and Decompression Safety",
+      "timestamp": "2026-03-28T00:00:00Z",
+      "tasks_completed": 3,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "1.1",
+      "plan": "plugin-sdk.md",
+      "title": "Capability Enum Unification",
+      "timestamp": "2026-03-28T00:00:00Z",
+      "tasks_completed": 5,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "1.2",
+      "plan": "plugin-sdk.md",
+      "title": "Storage Capability and Query Fixes",
+      "timestamp": "2026-03-28T00:00:00Z",
+      "tasks_completed": 6,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "1.3",
+      "plan": "plugin-sdk.md",
+      "title": "WASM Host Call Bridge",
+      "timestamp": "2026-03-28T00:00:00Z",
+      "tasks_completed": 4,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "1.4",
+      "plan": "plugin-sdk.md",
+      "title": "Error Handling and DX Improvements",
+      "timestamp": "2026-03-28T00:00:00Z",
+      "tasks_completed": 7,
       "tasks_deferred": 0
     }
   ]

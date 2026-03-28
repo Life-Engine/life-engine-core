@@ -2,6 +2,8 @@
 
 ## 2026-03-28
 
+- QA phase-2 remediation — plugin-sdk WPs 1.1-1.4: verify capability enum unification already complete (traits::Capability re-exported as SDK Capability with Display/FromStr, StorageContext uses unified enum). Add SDK capability round-trip test, convenience wrapper tests for WASM host_call bridge, From<serde_json::Error>/From<std::io::Error>/from_anyhow tests, is_retryable classification tests, delete-with-write-only capability enforcement test, where_not_eq filter test, and default limit test. Fix pre-existing CalendarEvent missing sequence field in mock_message.rs.
+
 - QA phase-2 remediation — dav-and-webhooks WP 1.5: implement webhook sender HTTP delivery via reqwest with HMAC-SHA256 payload signing, configurable timeouts (connect/request/total), per-URL token bucket rate limiting, exponential backoff retry using plugin SDK RetryState, replace Vec::drain with VecDeque for O(1) delivery log eviction, fix pre-existing private field access bug in tests, and add 12 new tests for signing, rate limiting, delivery, and config.
 
 - QA phase-3 remediation — connector-plugins WP 1.7: cache SMTP transport in SmtpClient struct for connection pooling across batch sends. Reduce email subject log level from info to debug to prevent sensitive information leakage.

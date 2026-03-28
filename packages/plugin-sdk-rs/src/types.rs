@@ -120,20 +120,24 @@ pub trait CredentialAccess: Send + Sync {
     async fn list_credential_keys(&self) -> anyhow::Result<Vec<String>>;
 }
 
-/// Context provided to a plugin during `on_load`.
+/// Context provided to a `CorePlugin` during `on_load`.
 ///
-/// Gives the plugin scoped access to Core services based on its
-/// declared capabilities. A plugin can only use the services
-/// matching its granted capabilities.
+/// `PluginContext` is the context for native, in-process plugins that
+/// implement [`CorePlugin`](crate::traits::CorePlugin). It provides
+/// scoped access to Core services (credentials, config) based on the
+/// plugin's declared capabilities.
 ///
-/// Actual storage, config, and event bus implementations will be
-/// added in Phase 1 when the Core runtime is built.
+/// For the WASM plugin model, see [`ActionContext`](crate::context::ActionContext),
+/// which provides equivalent service access through host function bindings
+/// across the WASM boundary.
 #[derive(Clone)]
 pub struct PluginContext {
     /// The unique identifier of the plugin this context belongs to.
     plugin_id: String,
     /// Optional scoped credential access for the plugin.
     credentials: Option<Arc<dyn CredentialAccess>>,
+    /// Optional plugin configuration loaded from the engine config.
+    config: Option<serde_json::Value>,
 }
 
 impl fmt::Debug for PluginContext {
@@ -151,6 +155,7 @@ impl PluginContext {
         Self {
             plugin_id: plugin_id.into(),
             credentials: None,
+            config: None,
         }
     }
 
@@ -162,12 +167,31 @@ impl PluginContext {
         Self {
             plugin_id: plugin_id.into(),
             credentials: Some(credentials),
+            config: None,
+        }
+    }
+
+    /// Creates a new `PluginContext` with configuration and optional credentials.
+    pub fn with_config(
+        plugin_id: impl Into<String>,
+        config: serde_json::Value,
+        credentials: Option<Arc<dyn CredentialAccess>>,
+    ) -> Self {
+        Self {
+            plugin_id: plugin_id.into(),
+            credentials,
+            config: Some(config),
         }
     }
 
     /// Returns the plugin ID this context is scoped to.
     pub fn plugin_id(&self) -> &str {
         &self.plugin_id
+    }
+
+    /// Returns the plugin configuration, if any was provided.
+    pub fn config(&self) -> Option<serde_json::Value> {
+        self.config.clone()
     }
 
     /// Returns whether credential access is available.
@@ -248,6 +272,35 @@ mod tests {
         ];
         let set: HashSet<_> = caps.iter().collect();
         assert_eq!(set.len(), 13);
+    }
+
+    /// Verify that every SDK-declared capability round-trips through Display/FromStr,
+    /// proving the SDK re-export is the same type as the runtime traits::Capability.
+    #[test]
+    fn sdk_capabilities_roundtrip_through_runtime_strings() {
+        let all_caps = [
+            Capability::StorageRead,
+            Capability::StorageWrite,
+            Capability::StorageDelete,
+            Capability::StorageBlobRead,
+            Capability::StorageBlobWrite,
+            Capability::StorageBlobDelete,
+            Capability::HttpOutbound,
+            Capability::EventsEmit,
+            Capability::EventsSubscribe,
+            Capability::ConfigRead,
+            Capability::CredentialsRead,
+            Capability::CredentialsWrite,
+            Capability::Logging,
+        ];
+
+        for cap in &all_caps {
+            let display = cap.to_string();
+            let parsed: Capability = display.parse().unwrap_or_else(|_| {
+                panic!("SDK capability {cap:?} display string '{display}' failed to parse back via FromStr")
+            });
+            assert_eq!(*cap, parsed, "round-trip mismatch for {cap:?}");
+        }
     }
 
     #[test]

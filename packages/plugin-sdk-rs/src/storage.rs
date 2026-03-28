@@ -547,4 +547,45 @@ mod tests {
         assert!(result.is_err());
         assert_eq!(result.unwrap_err().code(), "CAP_002");
     }
+
+    #[tokio::test]
+    async fn delete_with_write_only_returns_cap_002() {
+        let backend = MockBackend::new();
+        let ctx = StorageContext::new(backend, "test-plugin", write_only());
+
+        let result = ctx.delete("events", Uuid::new_v4()).await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code(), "CAP_002");
+    }
+
+    #[tokio::test]
+    async fn where_not_eq_produces_correct_filter() {
+        let backend = MockBackend::new();
+        let queries = backend.queries.clone();
+        let ctx = StorageContext::new(backend, "test-plugin", all_caps());
+
+        ctx.query("events")
+            .where_not_eq("status", "archived")
+            .execute()
+            .await
+            .unwrap();
+
+        let captured = queries.lock().unwrap();
+        let q = &captured[0];
+        assert_eq!(q.filters.len(), 1);
+        assert_eq!(q.filters[0].field, "status");
+        assert_eq!(q.filters[0].operator, FilterOp::NotEq);
+    }
+
+    #[tokio::test]
+    async fn query_without_explicit_limit_defaults_to_1000() {
+        let backend = MockBackend::new();
+        let queries = backend.queries.clone();
+        let ctx = StorageContext::new(backend, "test-plugin", all_caps());
+
+        ctx.query("events").execute().await.unwrap();
+
+        let captured = queries.lock().unwrap();
+        assert_eq!(captured[0].limit, Some(1000));
+    }
 }

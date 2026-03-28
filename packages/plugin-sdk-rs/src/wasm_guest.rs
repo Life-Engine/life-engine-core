@@ -160,6 +160,110 @@ impl HostResponse {
     }
 }
 
+// --- Host call bridge ---
+
+/// Declare the host-provided FFI function for WASM plugins.
+///
+/// In a WASM build, this is the import provided by the Extism host.
+/// In native builds, this is a stub that always returns an error.
+#[cfg(target_arch = "wasm32")]
+extern "C" {
+    fn __host_call(input_ptr: *const u8, input_len: usize, output_ptr: *mut u8, output_len: *mut usize) -> i32;
+}
+
+/// Call a host function from WASM guest code.
+///
+/// Serializes the request to JSON, calls the host function, and deserializes the response.
+/// Returns a `PluginError` if the host returns an error or if serialization fails.
+pub fn host_call(request: &HostRequest) -> Result<HostResponse, crate::error::PluginError> {
+    let request_json = serde_json::to_vec(request)?;
+
+    #[cfg(target_arch = "wasm32")]
+    {
+        let mut output_buf = vec![0u8; 65536];
+        let mut output_len: usize = 0;
+        let rc = unsafe {
+            __host_call(
+                request_json.as_ptr(),
+                request_json.len(),
+                output_buf.as_mut_ptr(),
+                &mut output_len,
+            )
+        };
+        if rc != 0 {
+            return Err(crate::error::PluginError::InternalError {
+                message: format!("host_call failed with return code {rc}"),
+                detail: None,
+            });
+        }
+        let response: HostResponse = serde_json::from_slice(&output_buf[..output_len])?;
+        Ok(response)
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let _ = request_json;
+        Err(crate::error::PluginError::InternalError {
+            message: "host_call is only available in WASM builds".into(),
+            detail: None,
+        })
+    }
+}
+
+// --- Convenience wrappers for common host operations ---
+
+/// Read a document by ID from a collection.
+pub fn doc_read(collection: &str, id: &str) -> Result<HostResponse, crate::error::PluginError> {
+    host_call(&HostRequest::StoreRead {
+        collection: collection.into(),
+        id: id.into(),
+    })
+}
+
+/// Write a document to a collection.
+pub fn doc_write(collection: &str, data: serde_json::Value) -> Result<HostResponse, crate::error::PluginError> {
+    host_call(&HostRequest::StoreWrite {
+        collection: collection.into(),
+        data,
+    })
+}
+
+/// Delete a document by ID from a collection.
+pub fn doc_delete(collection: &str, id: &str) -> Result<HostResponse, crate::error::PluginError> {
+    host_call(&HostRequest::StoreDelete {
+        collection: collection.into(),
+        id: id.into(),
+    })
+}
+
+/// Emit an event to the Core event bus.
+pub fn emit_event(event_type: &str, payload: serde_json::Value) -> Result<HostResponse, crate::error::PluginError> {
+    host_call(&HostRequest::EventEmit {
+        event_type: event_type.into(),
+        payload,
+    })
+}
+
+/// Read a configuration value by key.
+pub fn config_get(key: &str) -> Result<HostResponse, crate::error::PluginError> {
+    host_call(&HostRequest::ConfigGet { key: key.into() })
+}
+
+/// Make an outbound HTTP request.
+pub fn http_request(
+    method: HttpMethod,
+    url: &str,
+    headers: Option<serde_json::Value>,
+    body: Option<String>,
+) -> Result<HostResponse, crate::error::PluginError> {
+    host_call(&HostRequest::HttpRequest {
+        url: url.into(),
+        method,
+        headers,
+        body,
+    })
+}
+
 /// Resource limits applied to WASM plugins.
 ///
 /// These limits are enforced by the host runtime. Plugin authors can
@@ -367,5 +471,57 @@ mod tests {
         assert_eq!(limits::DEFAULT_MEMORY_BYTES, 64 * 1024 * 1024);
         assert_eq!(limits::DEFAULT_TIMEOUT_SECS, 30);
         assert_eq!(limits::DEFAULT_RATE_LIMIT, 1000);
+    }
+
+    // --- Convenience wrapper tests (non-WASM returns PluginError) ---
+
+    #[test]
+    fn doc_read_returns_error_on_native() {
+        let result = doc_read("tasks", "id-1");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn doc_write_returns_error_on_native() {
+        let result = doc_write("tasks", json!({"title": "test"}));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn doc_delete_returns_error_on_native() {
+        let result = doc_delete("tasks", "id-1");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn emit_event_returns_error_on_native() {
+        let result = emit_event("task.created", json!({"id": "123"}));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn config_get_returns_error_on_native() {
+        let result = config_get("some.key");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn http_request_returns_error_on_native() {
+        let result = http_request(HttpMethod::Get, "https://example.com", None, None);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn host_response_serialization_roundtrip() {
+        let resp = HostResponse {
+            success: true,
+            data: Some(json!({"key": "value"})),
+            error: None,
+        };
+        let json = serde_json::to_string(&resp).unwrap();
+        let restored: HostResponse = serde_json::from_str(&json).unwrap();
+        assert!(restored.success);
+        assert_eq!(restored.data.unwrap()["key"], "value");
+        assert!(restored.error.is_none());
     }
 }

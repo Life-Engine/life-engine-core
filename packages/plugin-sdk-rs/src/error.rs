@@ -4,6 +4,7 @@
 //! communicate hard failures and classify error types for the pipeline
 //! executor's `on_error` strategy.
 
+use life_engine_traits::{EngineError, Severity};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -106,6 +107,27 @@ impl PluginError {
     }
 }
 
+impl PluginError {
+    /// Create an `InternalError` from an `anyhow::Error`.
+    pub fn from_anyhow(e: anyhow::Error) -> Self {
+        PluginError::InternalError {
+            message: e.to_string(),
+            detail: e.source().map(|s| s.to_string()),
+        }
+    }
+
+    /// Returns whether this error is potentially retryable.
+    ///
+    /// Network and storage errors are retryable since they may be transient.
+    /// Capability, validation, not-found, and internal errors are not.
+    pub fn is_retryable(&self) -> bool {
+        matches!(
+            self,
+            PluginError::NetworkError { .. } | PluginError::StorageError { .. }
+        )
+    }
+}
+
 impl fmt::Display for PluginError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "[{}] {}", self.code(), self.message())
@@ -113,6 +135,43 @@ impl fmt::Display for PluginError {
 }
 
 impl std::error::Error for PluginError {}
+
+impl EngineError for PluginError {
+    fn code(&self) -> &str {
+        self.code()
+    }
+
+    fn severity(&self) -> Severity {
+        match self {
+            PluginError::NetworkError { .. } | PluginError::StorageError { .. } => {
+                Severity::Retryable
+            }
+            _ => Severity::Fatal,
+        }
+    }
+
+    fn source_module(&self) -> &str {
+        "plugin-sdk"
+    }
+}
+
+impl From<serde_json::Error> for PluginError {
+    fn from(e: serde_json::Error) -> Self {
+        PluginError::InternalError {
+            message: format!("JSON serialization error: {e}"),
+            detail: None,
+        }
+    }
+}
+
+impl From<std::io::Error> for PluginError {
+    fn from(e: std::io::Error) -> Self {
+        PluginError::InternalError {
+            message: format!("I/O error: {e}"),
+            detail: None,
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -217,5 +276,65 @@ mod tests {
             detail: None,
         });
         assert!(err.to_string().contains("INTERNAL_ERROR"));
+    }
+
+    // --- From impls ---
+
+    #[test]
+    fn from_serde_json_error() {
+        let json_err = serde_json::from_str::<serde_json::Value>("invalid json").unwrap_err();
+        let plugin_err: PluginError = json_err.into();
+        assert_eq!(plugin_err.code(), "INTERNAL_ERROR");
+        assert!(plugin_err.message().contains("JSON serialization error"));
+    }
+
+    #[test]
+    fn from_io_error() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
+        let plugin_err: PluginError = io_err.into();
+        assert_eq!(plugin_err.code(), "INTERNAL_ERROR");
+        assert!(plugin_err.message().contains("I/O error"));
+        assert!(plugin_err.message().contains("file not found"));
+    }
+
+    #[test]
+    fn from_anyhow_error() {
+        let anyhow_err = anyhow::anyhow!("something went wrong");
+        let plugin_err = PluginError::from_anyhow(anyhow_err);
+        assert_eq!(plugin_err.code(), "INTERNAL_ERROR");
+        assert!(plugin_err.message().contains("something went wrong"));
+    }
+
+    // --- is_retryable ---
+
+    #[test]
+    fn network_error_is_retryable() {
+        let err = PluginError::NetworkError {
+            message: "timeout".into(),
+            detail: None,
+        };
+        assert!(err.is_retryable());
+    }
+
+    #[test]
+    fn storage_error_is_retryable() {
+        let err = PluginError::StorageError {
+            message: "db busy".into(),
+            detail: None,
+        };
+        assert!(err.is_retryable());
+    }
+
+    #[test]
+    fn non_retryable_errors() {
+        let cases = vec![
+            PluginError::CapabilityDenied { message: "denied".into(), detail: None },
+            PluginError::NotFound { message: "missing".into(), detail: None },
+            PluginError::ValidationError { message: "invalid".into(), detail: None },
+            PluginError::InternalError { message: "bug".into(), detail: None },
+        ];
+        for err in cases {
+            assert!(!err.is_retryable(), "{} should not be retryable", err.code());
+        }
     }
 }

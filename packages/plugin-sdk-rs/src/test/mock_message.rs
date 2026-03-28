@@ -106,6 +106,7 @@ impl MockMessageBuilder {
             reminders: vec![],
             timezone: None,
             status: None,
+            sequence: None,
             source: "test".to_string(),
             source_id: Uuid::new_v4().to_string(),
             extensions: None,
@@ -144,6 +145,7 @@ impl MockMessageBuilder {
             name: ContactName {
                 given: given_name.into(),
                 family: family_name.into(),
+                display: None,
                 prefix: None,
                 suffix: None,
                 middle: None,

@@ -1,0 +1,16 @@
+# Handle a GraphQL query.
+#
+# Pass-through to the system.crud plugin's graphql_resolve action.
+# The transport layer provides the parsed GraphQL operation as the
+# request payload.
+
+workflows:
+  graphql.query:
+    id: graphql.query
+    name: GraphQL Query
+    description: Resolve a GraphQL query against the storage layer
+    trigger:
+      endpoint: "POST /graphql"
+    steps:
+      - plugin: system.crud
+        action: graphql_resolve

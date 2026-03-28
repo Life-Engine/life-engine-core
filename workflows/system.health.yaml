@@ -1,0 +1,15 @@
+# Health check endpoint.
+#
+# Aggregates health status from storage and plugin subsystems.
+# This is a public endpoint that does not require authentication.
+
+workflows:
+  system.health:
+    id: system.health
+    name: System Health Check
+    description: Aggregate health status from storage and plugins
+    trigger:
+      endpoint: "GET /api/v1/health"
+    steps:
+      - plugin: system.crud
+        action: health_check

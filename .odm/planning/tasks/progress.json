@@ -174,7 +174,8 @@
     "architecture-migration:9.5",
     "architecture-migration:9.6",
     "architecture-migration:9.7",
-    "architecture-migration:10.1"
+    "architecture-migration:10.1",
+    "architecture-migration:10.2"
   ],
   "history": [
     {
@@ -1002,6 +1003,14 @@
       "wp_id": "10.1",
       "plan": "architecture-migration.md",
       "title": "Core Binary Startup Orchestration",
+      "timestamp": "2026-03-29T00:00:00Z",
+      "tasks_completed": 2,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "10.2",
+      "plan": "architecture-migration.md",
+      "title": "System Workflows",
       "timestamp": "2026-03-29T00:00:00Z",
       "tasks_completed": 2,
       "tasks_deferred": 0

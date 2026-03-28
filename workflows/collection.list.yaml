@@ -1,0 +1,16 @@
+# List documents in a collection.
+#
+# Pass-through to storage_doc_list via the system.crud plugin.
+# The transport layer provides :collection as a path parameter
+# and optional query string filters (limit, offset, sort, filter).
+
+workflows:
+  collection.list:
+    id: collection.list
+    name: Collection List
+    description: List documents in a collection with optional filtering
+    trigger:
+      endpoint: "GET /api/v1/data/:collection"
+    steps:
+      - plugin: system.crud
+        action: list

@@ -1,0 +1,17 @@
+# Create a new document in a collection.
+#
+# Pass-through to storage_doc_create via the system.crud plugin.
+# The transport layer provides :collection as a path parameter
+# and the document body as the request payload. Sets status_hint
+# to Created on success.
+
+workflows:
+  collection.create:
+    id: collection.create
+    name: Collection Create
+    description: Create a new document in a collection
+    trigger:
+      endpoint: "POST /api/v1/data/:collection"
+    steps:
+      - plugin: system.crud
+        action: create

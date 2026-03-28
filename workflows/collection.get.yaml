@@ -1,0 +1,15 @@
+# Get a single document by ID.
+#
+# Pass-through to storage_doc_get via the system.crud plugin.
+# The transport layer provides :collection and :id as path parameters.
+
+workflows:
+  collection.get:
+    id: collection.get
+    name: Collection Get
+    description: Retrieve a single document by ID
+    trigger:
+      endpoint: "GET /api/v1/data/:collection/:id"
+    steps:
+      - plugin: system.crud
+        action: get

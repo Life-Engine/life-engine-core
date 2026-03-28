@@ -922,12 +922,12 @@ Wire all layers together into the Core binary, create system workflows, generate
 
 ### 10.2 — System Workflows
 
-- [ ] Create default system workflow YAML files in `workflows/`: `collection.list.yaml` (pass-through to storage_doc_list), `collection.get.yaml` (pass-through to storage_doc_get), `collection.create.yaml` (pass-through to storage_doc_create with status_hint Created), `collection.update.yaml` (pass-through to storage_doc_update), `collection.delete.yaml` (pass-through to storage_doc_delete), `graphql.query.yaml` (GraphQL query resolution), `system.health.yaml` (aggregate storage and plugin health). These are real workflow definitions that the user can edit — not hardcoded behaviour.
+- [x] Create default system workflow YAML files in `workflows/`: `collection.list.yaml` (pass-through to storage_doc_list), `collection.get.yaml` (pass-through to storage_doc_get), `collection.create.yaml` (pass-through to storage_doc_create with status_hint Created), `collection.update.yaml` (pass-through to storage_doc_update), `collection.delete.yaml` (pass-through to storage_doc_delete), `graphql.query.yaml` (GraphQL query resolution), `system.health.yaml` (aggregate storage and plugin health). These are real workflow definitions that the user can edit — not hardcoded behaviour.
   <!-- files: workflows/*.yaml -->
   <!-- purpose: Provide working out-of-the-box CRUD and system workflows -->
   <!-- requirements: workflow-engine-contract 5.1, transport-layer 2.1 -->
 
-- [ ] Create a built-in "pass-through" plugin (or system step handler) that implements the generic CRUD operations by calling StorageContext directly. This plugin is the default executor for system workflows. It is a first-party plugin with auto-granted capabilities.
+- [x] Create a built-in "pass-through" plugin (or system step handler) that implements the generic CRUD operations by calling StorageContext directly. This plugin is the default executor for system workflows. It is a first-party plugin with auto-granted capabilities.
   <!-- files: plugins/engine/system-crud/ or packages/workflow-engine/src/system_steps.rs -->
   <!-- purpose: Provide the default implementation for system workflows -->
   <!-- requirements: workflow-engine-contract 5.1 -->

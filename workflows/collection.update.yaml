@@ -1,0 +1,16 @@
+# Update an existing document by ID.
+#
+# Pass-through to storage_doc_update via the system.crud plugin.
+# The transport layer provides :collection and :id as path parameters
+# and the updated fields as the request payload.
+
+workflows:
+  collection.update:
+    id: collection.update
+    name: Collection Update
+    description: Update an existing document by ID
+    trigger:
+      endpoint: "PUT /api/v1/data/:collection/:id"
+    steps:
+      - plugin: system.crud
+        action: update

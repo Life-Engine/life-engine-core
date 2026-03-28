@@ -8,6 +8,7 @@ pub mod loader;
 pub mod migration;
 pub mod schema_registry;
 pub mod scheduler;
+pub mod system_steps;
 pub mod triggers;
 pub mod types;
 
@@ -21,6 +22,7 @@ pub use executor::{
 pub use loader::{load_workflows, HttpMethod, TriggerRegistry};
 pub use schema_registry::{SchemaRegistry, SchemaRegistryError};
 pub use scheduler::{ScheduleJobTracker, Scheduler};
+pub use system_steps::{CompositePluginExecutor, SystemCrudHandler, SYSTEM_CRUD_PLUGIN_ID};
 pub use triggers::validate_triggers;
 pub use types::{
     ConditionDef, ConditionOperator, ErrorStrategy, ErrorStrategyType, ExecutionMode, StepDef,

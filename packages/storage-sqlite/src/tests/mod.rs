@@ -182,7 +182,7 @@ fn rekey_succeeds_and_new_key_works() {
 }
 
 #[test]
-fn rekey_failure_retains_old_key() {
+fn original_key_works_after_normal_close() {
     let dir = TempDir::new().unwrap();
     let db_path = dir.path().join("test.db");
     let path_str = db_path.to_str().unwrap();
@@ -310,5 +310,76 @@ fn credential_stored_in_db_is_not_plaintext_at_rest() {
     assert!(
         !stored.contains("gho_16C7e42F292c6912E7710c838347Ae178B4a"),
         "stored credential must not contain plaintext access token"
+    );
+}
+
+#[test]
+fn credentials_remain_readable_after_rekey() {
+    use crate::credentials::{decrypt_credential, encrypt_credential};
+
+    let dir = TempDir::new().unwrap();
+    let db_path = dir.path().join("test.db");
+    let path_str = db_path.to_str().unwrap();
+    let config = test_config(path_str);
+    let old_key = [0x01u8; 32];
+    let new_key = [0x02u8; 32];
+
+    let mut storage = SqliteStorage::init(config.clone(), old_key).expect("init");
+
+    // Encrypt and store a credential with the old key.
+    let original = serde_json::json!({
+        "id": "cred-rekey-test",
+        "name": "OAuth Token",
+        "credential_type": "oauth_token",
+        "service": "github",
+        "claims": {
+            "access_token": "gho_rekey_test_token_123",
+            "token_type": "bearer"
+        },
+        "source": "github-plugin",
+        "source_id": "cred-3",
+        "created_at": "2026-01-01T00:00:00Z",
+        "updated_at": "2026-01-01T00:00:00Z"
+    });
+    let original_json = original.to_string();
+    let encrypted_json = encrypt_credential(&old_key, &original_json).unwrap();
+
+    storage
+        .connection()
+        .execute(
+            "INSERT INTO plugin_data (id, plugin_id, collection, data, created_at, updated_at) \
+             VALUES ('cred-rekey-test', 'github-plugin', 'credentials', ?1, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+            [&encrypted_json],
+        )
+        .unwrap();
+
+    // Rotate the key — this should re-encrypt credentials.
+    storage.rekey(new_key).expect("rekey should succeed");
+
+    // Read the stored credential and decrypt with the new key.
+    let stored: String = storage
+        .connection()
+        .query_row(
+            "SELECT data FROM plugin_data WHERE id = 'cred-rekey-test'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+
+    let decrypted = decrypt_credential(&new_key, &stored)
+        .expect("credential should be decryptable with new key");
+    let dec_doc: serde_json::Value = serde_json::from_str(&decrypted).unwrap();
+
+    // Claims should match the original.
+    assert_eq!(
+        dec_doc["claims"]["access_token"], "gho_rekey_test_token_123",
+        "access_token should survive rekey"
+    );
+
+    // Old key should no longer decrypt the credential.
+    let old_result = decrypt_credential(&old_key, &stored);
+    assert!(
+        old_result.is_err(),
+        "old key should not decrypt credential after rekey"
     );
 }

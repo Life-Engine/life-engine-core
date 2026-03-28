@@ -138,8 +138,10 @@ impl SqliteStorage {
     /// Re-encrypts the database with a new key (key rotation).
     ///
     /// Uses SQLCipher's `PRAGMA rekey` to atomically re-encrypt the entire
-    /// database. On success the internal `master_key` is updated to `new_key`.
-    /// On failure the old key remains active and the database is unchanged.
+    /// database, then re-encrypts all per-credential data from the old master
+    /// key to the new one. On success the internal `master_key` is updated to
+    /// `new_key`. On failure the old key remains active and the database is
+    /// unchanged.
     pub fn rekey(&mut self, new_key: [u8; 32]) -> Result<(), StorageError> {
         let hex_key = hex::encode(new_key);
 
@@ -152,6 +154,12 @@ impl SqliteStorage {
             .execute_batch("SELECT count(*) FROM sqlite_master;")
             .map_err(|e| {
                 StorageError::RekeyFailed(format!("verification after rekey failed: {e}"))
+            })?;
+
+        // Re-encrypt per-credential data with the new master key.
+        credentials::re_encrypt_credentials(&self.conn, &self.master_key, &new_key)
+            .map_err(|e| {
+                StorageError::RekeyFailed(format!("credential re-encryption failed: {e}"))
             })?;
 
         // Only update the in-memory key after successful rekey.

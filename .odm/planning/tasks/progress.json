@@ -1,9 +1,18 @@
 {
-  "current_wp": null,
-  "current_plan": null,
-  "current_wp_title": null,
-  "current_wp_tasks": null,
-  "completed_wps": ["api-contracts:1.1"],
+  "current_wp": "dav-and-webhooks:1.2",
+  "current_plan": "dav-and-webhooks.md",
+  "current_wp_title": "CalDAV Transport Implementation",
+  "current_wp_tasks": [
+    "Implement Axum router with CalDAV route registration",
+    "Implement PROPFIND handler for calendar discovery",
+    "Implement REPORT handler for calendar-query and calendar-multiget",
+    "Implement GET/PUT/DELETE handlers for individual calendar resources",
+    "Implement MKCALENDAR handler",
+    "Add CalDAV-specific error variants",
+    "Define CalDAV types in types module",
+    "Add integration tests for CalDAV transport"
+  ],
+  "completed_wps": ["api-contracts:1.1", "api-contracts:1.2", "api-contracts:1.3", "api-contracts:1.4", "api-contracts:2.1", "qa-remediation:1.1", "qa-remediation:1.2", "qa-remediation:1.3", "qa-remediation:1.4", "qa-remediation:1.5", "qa-remediation:1.6", "qa-remediation:1.7"],
   "history": [
     {
       "wp_id": "1.1",
@@ -11,6 +20,46 @@
       "title": "Unify Capability Enum",
       "timestamp": "2026-03-28T00:00:00Z",
       "tasks_completed": 6,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "1.2",
+      "plan": "api-contracts.md",
+      "title": "Fix Identity Type Mismatch",
+      "timestamp": "2026-03-28T00:00:00Z",
+      "tasks_completed": 4,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "1.3",
+      "plan": "api-contracts.md",
+      "title": "Fix SDK Delete Capability Check",
+      "timestamp": "2026-03-28T00:00:00Z",
+      "tasks_completed": 1,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "1.4",
+      "plan": "api-contracts.md",
+      "title": "Standardize Event Field Naming",
+      "timestamp": "2026-03-28T00:00:00Z",
+      "tasks_completed": 2,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "2.1",
+      "plan": "api-contracts.md",
+      "title": "Bridge PluginError Types and Consolidate TriggerContext",
+      "timestamp": "2026-03-28T00:00:00Z",
+      "tasks_completed": 4,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "1.7",
+      "plan": "qa-remediation.md",
+      "title": "Implement credential re-encryption after rekey",
+      "timestamp": "2026-03-28T00:00:00Z",
+      "tasks_completed": 3,
       "tasks_deferred": 0
     }
   ]

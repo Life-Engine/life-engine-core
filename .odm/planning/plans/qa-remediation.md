@@ -12,7 +12,7 @@ This plan addresses all findings from the Life Engine Core QA review (2026-03-28
 
 **Source:** .odm/qa/reports/EXECUTIVE-SUMMARY.md
 
-**Progress:** 4 / 30 work packages complete
+**Progress:** 7 / 30 work packages complete
 
 ---
 
@@ -140,17 +140,17 @@ This plan addresses all findings from the Life Engine Core QA review (2026-03-28
 > depends: none
 > spec: .odm/qa/reports/phase-2/plugin-system.md
 
-- [ ] Add private IP range blocking (RFC 1918, link-local, loopback, cloud metadata) [security]
+- [x] Add private IP range blocking (RFC 1918, link-local, loopback, cloud metadata) [security]
   <!-- file: packages/plugin-system/src/host_functions/http.rs -->
   <!-- purpose: Prevent plugins from probing internal services and cloud metadata endpoints -->
   <!-- requirements: SSRF finding when allowed_domains is None -->
   <!-- leverage: none -->
-- [ ] Block requests to 169.254.169.254 (cloud metadata endpoint) explicitly [security]
+- [x] Block requests to 169.254.169.254 (cloud metadata endpoint) explicitly [security]
   <!-- file: packages/plugin-system/src/host_functions/http.rs -->
   <!-- purpose: Prevent cloud metadata credential theft -->
   <!-- requirements: SSRF finding -->
   <!-- leverage: none -->
-- [ ] Add tests verifying private IP ranges and metadata endpoints are blocked [test]
+- [x] Add tests verifying private IP ranges and metadata endpoints are blocked [test]
   <!-- file: packages/plugin-system/src/host_functions/http.rs -->
   <!-- purpose: Regression tests for SSRF prevention -->
   <!-- requirements: SSRF finding -->
@@ -160,17 +160,17 @@ This plan addresses all findings from the Life Engine Core QA review (2026-03-28
 > depends: none
 > spec: .odm/qa/reports/phase-1/authentication.md
 
-- [ ] Create `ApiKeyMetadata` response type without `key_hash` and `salt` [security]
+- [x] Create `ApiKeyMetadata` response type without `key_hash` and `salt` [security]
   <!-- file: packages/auth/src/handlers/keys.rs -->
   <!-- purpose: Prevent offline brute-force attacks by not exposing cryptographic material -->
   <!-- requirements: Lines 103-127 key hash exposure finding -->
   <!-- leverage: existing ApiKeyRecord type as basis -->
-- [ ] Update `list_keys` to return `ApiKeyMetadata` instead of full `ApiKeyRecord` [security]
+- [x] Update `list_keys` to return `ApiKeyMetadata` instead of full `ApiKeyRecord` [security]
   <!-- file: packages/auth/src/handlers/keys.rs -->
   <!-- purpose: Strip key_hash and salt from API responses -->
   <!-- requirements: Lines 103-127 key hash exposure finding -->
   <!-- leverage: none -->
-- [ ] Add test verifying list_keys response does not contain hash or salt [test]
+- [x] Add test verifying list_keys response does not contain hash or salt [test]
   <!-- file: packages/auth/src/handlers/keys.rs -->
   <!-- purpose: Regression test for key material exposure -->
   <!-- requirements: Key material exposure finding -->
@@ -180,17 +180,17 @@ This plan addresses all findings from the Life Engine Core QA review (2026-03-28
 > depends: 1.1
 > spec: .odm/qa/reports/phase-1/storage-sqlite.md
 
-- [ ] Add `re_encrypt_credentials()` function that iterates all credentials [security]
+- [x] Add `re_encrypt_credentials()` function that iterates all credentials [security]
   <!-- file: packages/storage-sqlite/src/credentials.rs -->
   <!-- purpose: Decrypt with old-derived keys and re-encrypt with new-derived keys after master key rotation -->
   <!-- requirements: Credential re-encryption missing after rekey finding -->
   <!-- leverage: existing credential encryption/decryption functions -->
-- [ ] Call `re_encrypt_credentials()` within `rekey()` inside a transaction [security]
+- [x] Call `re_encrypt_credentials()` within `rekey()` inside a transaction [security]
   <!-- file: packages/storage-sqlite/src/lib.rs -->
   <!-- purpose: Ensure all credentials are atomically re-encrypted during key rotation -->
   <!-- requirements: Credential re-encryption missing after rekey finding -->
   <!-- leverage: existing rekey workflow -->
-- [ ] Add test verifying credentials remain readable after a rekey operation [test]
+- [x] Add test verifying credentials remain readable after a rekey operation [test]
   <!-- file: packages/storage-sqlite/src/credentials.rs -->
   <!-- purpose: Verify the re-encryption flow works end-to-end -->
   <!-- requirements: Credential re-encryption finding -->

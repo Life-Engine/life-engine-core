@@ -21,8 +21,9 @@ pub use capability::{
 pub use discovery::{scan_plugins_directory, DiscoveredPlugin};
 pub use error::PluginError;
 pub use manifest::{
-    parse_manifest, parse_manifest_toml, ActionDef, CapabilitySet, CollectionAccess, CollectionDef,
-    ConfigSchema, EventsDef, PluginManifest, PluginMeta, TrustLevel, DEFAULT_TIMEOUT_MS,
+    determine_trust_level, parse_manifest, parse_manifest_toml, validate_manifest, ActionDef,
+    CapabilitySet, CollectionAccess, CollectionDef, ConfigSchema, EventsDef,
+    ManifestValidationError, PluginManifest, PluginMeta, TrustLevel, DEFAULT_TIMEOUT_MS,
 };
 pub use host_functions::storage::{host_storage_read, host_storage_write, StorageHostContext};
 pub use lifecycle::{LifecycleManager, LifecycleState};

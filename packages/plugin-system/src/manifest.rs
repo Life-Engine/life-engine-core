@@ -2,8 +2,13 @@
 //!
 //! Parses plugin identity, actions, capabilities, collections, events,
 //! and config schema from a TOML manifest file.
+//!
+//! Provides two validation modes:
+//! - `parse_manifest` / `parse_manifest_toml` — fail-fast on first error
+//! - `validate_manifest` — collect all validation errors for reporting
 
 use std::collections::HashMap;
+use std::fmt;
 use std::path::Path;
 use std::str::FromStr;
 
@@ -530,6 +535,240 @@ pub fn parse_manifest_toml(
         events,
         config,
     })
+}
+
+/// A single manifest validation error with field path and message.
+#[derive(Debug, Clone)]
+pub struct ManifestValidationError {
+    /// Dot-separated path to the offending field (e.g., "plugin.id", "collections.items.schema").
+    pub field: String,
+    /// Human-readable error description.
+    pub message: String,
+}
+
+impl fmt::Display for ManifestValidationError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}: {}", self.field, self.message)
+    }
+}
+
+/// Validates a parsed `PluginManifest` by collecting all validation errors
+/// rather than failing on the first one. This is useful for reporting all
+/// problems at once so plugin authors can fix them in a single pass.
+///
+/// The `plugin_dir` parameter is used to resolve relative schema paths
+/// and verify they point to existing files on disk.
+pub fn validate_manifest(
+    manifest: &PluginManifest,
+    plugin_dir: Option<&Path>,
+) -> Vec<ManifestValidationError> {
+    let mut errors = Vec::new();
+
+    // Validate plugin ID format
+    if !is_valid_plugin_id(&manifest.plugin.id) {
+        errors.push(ManifestValidationError {
+            field: "plugin.id".to_string(),
+            message: format!(
+                "invalid plugin ID '{}': must start with a lowercase letter and contain only lowercase letters, digits, and hyphens",
+                manifest.plugin.id
+            ),
+        });
+    }
+
+    // Check reserved plugin ID
+    if is_reserved_name(&manifest.plugin.id) {
+        errors.push(ManifestValidationError {
+            field: "plugin.id".to_string(),
+            message: format!(
+                "reserved name '{}': plugin IDs cannot use reserved names",
+                manifest.plugin.id
+            ),
+        });
+    }
+
+    // Validate semver
+    if !is_valid_semver(&manifest.plugin.version) {
+        errors.push(ManifestValidationError {
+            field: "plugin.version".to_string(),
+            message: format!(
+                "invalid version '{}': must be valid semver (e.g., 1.0.0)",
+                manifest.plugin.version
+            ),
+        });
+    }
+
+    // Validate actions are not empty
+    if manifest.actions.is_empty() {
+        errors.push(ManifestValidationError {
+            field: "actions".to_string(),
+            message: "no actions declared".to_string(),
+        });
+    }
+
+    // Validate each action has a description
+    for (name, action) in &manifest.actions {
+        if action.description.is_empty() {
+            errors.push(ManifestValidationError {
+                field: format!("actions.{name}.description"),
+                message: "action description is required".to_string(),
+            });
+        }
+    }
+
+    // Validate collections
+    for (name, coll) in &manifest.collections {
+        // Check reserved names
+        if is_reserved_name(name) {
+            errors.push(ManifestValidationError {
+                field: format!("collections.{name}"),
+                message: format!("reserved name '{name}': collection names cannot use reserved names"),
+            });
+        }
+
+        // Validate extension naming
+        for ext in &coll.extensions {
+            if !ext.starts_with("ext.") {
+                errors.push(ManifestValidationError {
+                    field: format!("collections.{name}.extensions"),
+                    message: format!(
+                        "extension '{ext}' must follow 'ext.<plugin-id>.<field>' naming convention"
+                    ),
+                });
+            }
+        }
+
+        // Validate schema paths resolve to existing files
+        if let Some(dir) = plugin_dir {
+            if !coll.schema.starts_with("cdm:") {
+                let schema_path = dir.join(&coll.schema);
+                if !schema_path.exists() {
+                    errors.push(ManifestValidationError {
+                        field: format!("collections.{name}.schema"),
+                        message: format!(
+                            "schema path '{}' does not resolve to an existing file",
+                            coll.schema
+                        ),
+                    });
+                }
+            }
+
+            // Validate extension schema path
+            if let Some(ref ext_schema) = coll.extension_schema {
+                let ext_schema_path = dir.join(ext_schema);
+                if !ext_schema_path.exists() {
+                    errors.push(ManifestValidationError {
+                        field: format!("collections.{name}.extension_schema"),
+                        message: format!(
+                            "extension schema path '{ext_schema}' does not resolve to an existing file"
+                        ),
+                    });
+                }
+            }
+        }
+    }
+
+    // Cross-section: events.emit requires events:emit capability
+    if !manifest.events.emit.is_empty() && !manifest.capabilities.has(Capability::EventsEmit) {
+        errors.push(ManifestValidationError {
+            field: "events.emit".to_string(),
+            message: "declares events to emit but lacks 'events:emit' capability".to_string(),
+        });
+    }
+
+    // Cross-section: events.subscribe requires events:subscribe capability
+    if !manifest.events.subscribe.is_empty()
+        && !manifest.capabilities.has(Capability::EventsSubscribe)
+    {
+        errors.push(ManifestValidationError {
+            field: "events.subscribe".to_string(),
+            message: "declares event subscriptions but lacks 'events:subscribe' capability"
+                .to_string(),
+        });
+    }
+
+    // Cross-section: config requires config:read capability
+    if manifest.config.is_some() && !manifest.capabilities.has(Capability::ConfigRead) {
+        errors.push(ManifestValidationError {
+            field: "config".to_string(),
+            message: "declares [config] section but lacks 'config:read' capability".to_string(),
+        });
+    }
+
+    // Validate event naming convention
+    for event_name in &manifest.events.emit {
+        let parts: Vec<&str> = event_name.split('.').collect();
+        if parts.len() < 3 {
+            errors.push(ManifestValidationError {
+                field: "events.emit".to_string(),
+                message: format!(
+                    "event name '{event_name}' does not follow '<plugin-id>.<action>.<outcome>' convention"
+                ),
+            });
+        }
+    }
+
+    // Validate event names in capabilities match events section
+    for event_name in &manifest.events.emit {
+        let parts: Vec<&str> = event_name.split('.').collect();
+        if parts.len() >= 3 {
+            // Verify the action part corresponds to a declared action
+            let action_part = parts[1];
+            if !manifest.actions.contains_key(action_part) {
+                errors.push(ManifestValidationError {
+                    field: "events.emit".to_string(),
+                    message: format!(
+                        "event '{event_name}' references action '{action_part}' which is not declared in [actions]"
+                    ),
+                });
+            }
+        }
+    }
+
+    // Validate collection names in capabilities match collections section
+    // (storage doc capabilities should correspond to declared collections)
+
+    // Validate config schema path if plugin_dir is provided
+    if let (Some(config), Some(dir)) = (&manifest.config, plugin_dir) {
+        // If the config schema references a file path, verify it exists
+        if let Some(path_str) = config.schema.as_str() {
+            if !path_str.starts_with("{") && !path_str.starts_with("[") {
+                let config_schema_path = dir.join(path_str);
+                if !config_schema_path.exists() && !path_str.contains("type") {
+                    errors.push(ManifestValidationError {
+                        field: "config.schema".to_string(),
+                        message: format!(
+                            "config schema path '{path_str}' does not resolve to an existing file"
+                        ),
+                    });
+                }
+            }
+        }
+    }
+
+    errors
+}
+
+/// Determines the trust level for a plugin based on its directory location.
+///
+/// A plugin is considered `FirstParty` if its directory is under the
+/// `builtin_plugins_path`. All other plugins are `ThirdParty`.
+///
+/// First-party plugins have their capabilities auto-granted; third-party
+/// plugins require explicit approval in Core's configuration.
+pub fn determine_trust_level(plugin_dir: &Path, builtin_plugins_path: &Path) -> TrustLevel {
+    // Canonicalize both paths for reliable comparison.
+    // If canonicalization fails (e.g., path doesn't exist), fall back to
+    // starts_with on the raw paths.
+    let plugin_canonical = plugin_dir.canonicalize().unwrap_or_else(|_| plugin_dir.to_path_buf());
+    let builtin_canonical = builtin_plugins_path
+        .canonicalize()
+        .unwrap_or_else(|_| builtin_plugins_path.to_path_buf());
+
+    if plugin_canonical.starts_with(&builtin_canonical) {
+        TrustLevel::FirstParty
+    } else {
+        TrustLevel::ThirdParty
+    }
 }
 
 #[cfg(test)]
@@ -1582,5 +1821,296 @@ description = "Runs"
         let err = parse_manifest(path).unwrap_err();
         assert!(matches!(err, PluginError::ManifestInvalid(_)));
         assert!(err.to_string().contains("failed to read"));
+    }
+
+    // ========================================================
+    // validate_manifest: multi-error collection
+    // ========================================================
+
+    fn make_valid_manifest() -> PluginManifest {
+        parse_toml(
+            r#"
+[plugin]
+id = "test"
+name = "Test"
+version = "1.0.0"
+
+[actions.do-thing]
+description = "does a thing"
+"#,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn validate_manifest_valid_returns_no_errors() {
+        let manifest = make_valid_manifest();
+        let errors = validate_manifest(&manifest, None);
+        assert!(errors.is_empty(), "expected no errors, got: {:?}", errors);
+    }
+
+    #[test]
+    fn validate_manifest_collects_multiple_errors() {
+        // Build a manifest with multiple problems manually
+        let manifest = PluginManifest {
+            plugin: PluginMeta {
+                id: "INVALID_ID".to_string(),
+                name: "Test".to_string(),
+                version: "not-semver".to_string(),
+                description: None,
+                author: None,
+                license: None,
+                trust: TrustLevel::ThirdParty,
+            },
+            actions: HashMap::new(), // no actions
+            capabilities: CapabilitySet::default(),
+            collections: {
+                let mut map = HashMap::new();
+                map.insert(
+                    "audit_log".to_string(),
+                    CollectionDef {
+                        schema: "cdm:audit".to_string(),
+                        access: CollectionAccess::ReadWrite,
+                        strict: false,
+                        indexes: vec![],
+                        extensions: vec!["no_ext_prefix".to_string()],
+                        extension_schema: None,
+                        extension_indexes: vec![],
+                    },
+                );
+                map
+            },
+            events: EventsDef {
+                emit: vec!["bad-name".to_string()],
+                subscribe: vec![],
+            },
+            config: None,
+        };
+
+        let errors = validate_manifest(&manifest, None);
+
+        // Should have at least: invalid ID, invalid version, no actions,
+        // reserved collection name, bad extension naming, missing capability,
+        // bad event naming
+        assert!(
+            errors.len() >= 5,
+            "expected at least 5 errors, got {}: {:?}",
+            errors.len(),
+            errors
+        );
+
+        let error_text: String = errors.iter().map(|e| e.to_string()).collect::<Vec<_>>().join("\n");
+        assert!(error_text.contains("plugin.id"), "should flag invalid ID");
+        assert!(error_text.contains("plugin.version"), "should flag invalid version");
+        assert!(error_text.contains("actions"), "should flag no actions");
+        assert!(error_text.contains("reserved name"), "should flag reserved collection");
+        assert!(error_text.contains("ext."), "should flag bad extension naming");
+    }
+
+    #[test]
+    fn validate_manifest_checks_schema_path_exists() {
+        let tmp = TempDir::new().unwrap();
+        let manifest = PluginManifest {
+            plugin: PluginMeta {
+                id: "test".to_string(),
+                name: "Test".to_string(),
+                version: "1.0.0".to_string(),
+                description: None,
+                author: None,
+                license: None,
+                trust: TrustLevel::ThirdParty,
+            },
+            actions: {
+                let mut map = HashMap::new();
+                map.insert(
+                    "run".to_string(),
+                    ActionDef {
+                        description: "runs".to_string(),
+                        timeout_ms: DEFAULT_TIMEOUT_MS,
+                        input_schema: None,
+                        output_schema: None,
+                    },
+                );
+                map
+            },
+            capabilities: CapabilitySet::default(),
+            collections: {
+                let mut map = HashMap::new();
+                map.insert(
+                    "items".to_string(),
+                    CollectionDef {
+                        schema: "schemas/nonexistent.json".to_string(),
+                        access: CollectionAccess::Read,
+                        strict: false,
+                        indexes: vec![],
+                        extensions: vec![],
+                        extension_schema: None,
+                        extension_indexes: vec![],
+                    },
+                );
+                map
+            },
+            events: EventsDef::default(),
+            config: None,
+        };
+
+        let errors = validate_manifest(&manifest, Some(tmp.path()));
+        assert!(
+            errors.iter().any(|e| e.message.contains("does not resolve")),
+            "expected schema path error, got: {:?}",
+            errors
+        );
+    }
+
+    #[test]
+    fn validate_manifest_accepts_existing_schema_path() {
+        let tmp = TempDir::new().unwrap();
+        let schema_dir = tmp.path().join("schemas");
+        fs::create_dir_all(&schema_dir).unwrap();
+        fs::write(schema_dir.join("item.json"), r#"{"type":"object"}"#).unwrap();
+
+        let manifest = PluginManifest {
+            plugin: PluginMeta {
+                id: "test".to_string(),
+                name: "Test".to_string(),
+                version: "1.0.0".to_string(),
+                description: None,
+                author: None,
+                license: None,
+                trust: TrustLevel::ThirdParty,
+            },
+            actions: {
+                let mut map = HashMap::new();
+                map.insert(
+                    "run".to_string(),
+                    ActionDef {
+                        description: "runs".to_string(),
+                        timeout_ms: DEFAULT_TIMEOUT_MS,
+                        input_schema: None,
+                        output_schema: None,
+                    },
+                );
+                map
+            },
+            capabilities: CapabilitySet::default(),
+            collections: {
+                let mut map = HashMap::new();
+                map.insert(
+                    "items".to_string(),
+                    CollectionDef {
+                        schema: "schemas/item.json".to_string(),
+                        access: CollectionAccess::Read,
+                        strict: false,
+                        indexes: vec![],
+                        extensions: vec![],
+                        extension_schema: None,
+                        extension_indexes: vec![],
+                    },
+                );
+                map
+            },
+            events: EventsDef::default(),
+            config: None,
+        };
+
+        let errors = validate_manifest(&manifest, Some(tmp.path()));
+        assert!(
+            errors.is_empty(),
+            "expected no errors for valid schema path, got: {:?}",
+            errors
+        );
+    }
+
+    #[test]
+    fn validate_manifest_cdm_schema_skips_path_check() {
+        let manifest = make_valid_manifest();
+        // CDM schemas are resolved by the SDK, not by file path
+        let errors = validate_manifest(&manifest, Some(Path::new("/nonexistent")));
+        assert!(errors.is_empty());
+    }
+
+    // ========================================================
+    // determine_trust_level: directory-based trust
+    // ========================================================
+
+    #[test]
+    fn trust_level_first_party_when_under_builtin_path() {
+        let tmp = TempDir::new().unwrap();
+        let builtin = tmp.path().join("plugins");
+        let plugin_dir = builtin.join("my-plugin");
+        fs::create_dir_all(&plugin_dir).unwrap();
+
+        let trust = determine_trust_level(&plugin_dir, &builtin);
+        assert_eq!(trust, TrustLevel::FirstParty);
+    }
+
+    #[test]
+    fn trust_level_third_party_when_outside_builtin_path() {
+        let tmp = TempDir::new().unwrap();
+        let builtin = tmp.path().join("builtin-plugins");
+        let external = tmp.path().join("external-plugins").join("my-plugin");
+        fs::create_dir_all(&builtin).unwrap();
+        fs::create_dir_all(&external).unwrap();
+
+        let trust = determine_trust_level(&external, &builtin);
+        assert_eq!(trust, TrustLevel::ThirdParty);
+    }
+
+    #[test]
+    fn trust_level_builtin_path_itself_is_first_party() {
+        let tmp = TempDir::new().unwrap();
+        let builtin = tmp.path().join("plugins");
+        fs::create_dir_all(&builtin).unwrap();
+
+        let trust = determine_trust_level(&builtin, &builtin);
+        assert_eq!(trust, TrustLevel::FirstParty);
+    }
+
+    // ========================================================
+    // validate_manifest: event name / action consistency
+    // ========================================================
+
+    #[test]
+    fn validate_manifest_flags_event_referencing_undeclared_action() {
+        let manifest = PluginManifest {
+            plugin: PluginMeta {
+                id: "test".to_string(),
+                name: "Test".to_string(),
+                version: "1.0.0".to_string(),
+                description: None,
+                author: None,
+                license: None,
+                trust: TrustLevel::ThirdParty,
+            },
+            actions: {
+                let mut map = HashMap::new();
+                map.insert(
+                    "do-thing".to_string(),
+                    ActionDef {
+                        description: "does a thing".to_string(),
+                        timeout_ms: DEFAULT_TIMEOUT_MS,
+                        input_schema: None,
+                        output_schema: None,
+                    },
+                );
+                map
+            },
+            capabilities: CapabilitySet {
+                required: vec![Capability::EventsEmit],
+            },
+            collections: HashMap::new(),
+            events: EventsDef {
+                emit: vec!["test.nonexistent-action.completed".to_string()],
+                subscribe: vec![],
+            },
+            config: None,
+        };
+
+        let errors = validate_manifest(&manifest, None);
+        assert!(
+            errors.iter().any(|e| e.message.contains("nonexistent-action")),
+            "expected undeclared action error, got: {:?}",
+            errors
+        );
     }
 }

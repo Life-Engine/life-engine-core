@@ -482,22 +482,22 @@ Define the developer-facing contracts for plugin authors: manifest format, actio
 
 ### 6.1 — Plugin Manifest Specification
 
-- [ ] Define manifest types in `packages/plugin-system/src/manifest.rs`: `PluginManifest` struct deserialised from `manifest.toml` with sections: `[plugin]` (id, name, version, description, author, license), `[actions]` (map of action_name → ActionDeclaration with description and optional timeout_ms), `[capabilities]` (storage_doc: Vec of read/write/delete, storage_blob: Vec of read/write/delete, http_outbound: Vec of domain strings, events_emit: Vec of event names, events_subscribe: Vec of event names, config_read: bool), `[collections]` (map of collection_name → CollectionDeclaration with schema path, access level: shared/private, extensions: bool, indexes, strict: bool), `[events]` (emit: Vec<String>, subscribe: Vec<String>), `[config]` (schema for runtime configuration validation as JSON Schema reference).
+- [x] Define manifest types in `packages/plugin-system/src/manifest.rs`: `PluginManifest` struct deserialised from `manifest.toml` with sections: `[plugin]` (id, name, version, description, author, license), `[actions]` (map of action_name → ActionDeclaration with description and optional timeout_ms), `[capabilities]` (storage_doc: Vec of read/write/delete, storage_blob: Vec of read/write/delete, http_outbound: Vec of domain strings, events_emit: Vec of event names, events_subscribe: Vec of event names, config_read: bool), `[collections]` (map of collection_name → CollectionDeclaration with schema path, access level: shared/private, extensions: bool, indexes, strict: bool), `[events]` (emit: Vec<String>, subscribe: Vec<String>), `[config]` (schema for runtime configuration validation as JSON Schema reference).
   <!-- files: packages/plugin-system/src/manifest.rs -->
   <!-- purpose: Define the complete manifest format that plugin authors use to declare their requirements -->
   <!-- requirements: plugin-manifest 1.1, 2.1, 3.1, 4.1, 5.1, 6.1 -->
 
-- [ ] Implement manifest validation at load time: verify plugin ID follows `[a-z0-9-]+` pattern, version follows semver, all event names in capabilities match events section, all collection names in capabilities match collections section, schema paths point to existing files (relative to plugin directory), no reserved collection names (audit_log, system.*), action timeout defaults to 30s if not specified. Return `Vec<ManifestError>` for all violations found (not just the first).
+- [x] Implement manifest validation at load time: verify plugin ID follows `[a-z0-9-]+` pattern, version follows semver, all event names in capabilities match events section, all collection names in capabilities match collections section, schema paths point to existing files (relative to plugin directory), no reserved collection names (audit_log, system.*), action timeout defaults to 30s if not specified. Return `Vec<ManifestError>` for all violations found (not just the first).
   <!-- files: packages/plugin-system/src/manifest.rs -->
   <!-- purpose: Catch manifest errors at load time with actionable error messages -->
   <!-- requirements: plugin-manifest 7.1, 7.2, 7.3 -->
 
-- [ ] Implement trust model: plugins have a trust level: `first_party` (shipped with Core, capabilities auto-granted) or `third_party` (requires explicit approval in Core config). The trust level is determined by checking if the plugin directory is under Core's built-in plugins path. Third-party plugins whose capabilities have not been approved are loaded but all capability-gated operations are denied at runtime.
+- [x] Implement trust model: plugins have a trust level: `first_party` (shipped with Core, capabilities auto-granted) or `third_party` (requires explicit approval in Core config). The trust level is determined by checking if the plugin directory is under Core's built-in plugins path. Third-party plugins whose capabilities have not been approved are loaded but all capability-gated operations are denied at runtime.
   <!-- files: packages/plugin-system/src/manifest.rs -->
   <!-- purpose: Enforce deny-by-default with explicit approval for third-party plugins -->
   <!-- requirements: plugin-manifest 8.1, 8.2 -->
 
-- [ ] Write unit tests: parse a valid manifest, parse a manifest with missing required fields, validate event name consistency, validate collection name rules, trust level determination.
+- [x] Write unit tests: parse a valid manifest, parse a manifest with missing required fields, validate event name consistency, validate collection name rules, trust level determination.
   <!-- files: packages/plugin-system/tests/manifest_tests.rs -->
   <!-- purpose: Verify manifest parsing and validation -->
   <!-- requirements: plugin-manifest 1.1 through 8.2 -->

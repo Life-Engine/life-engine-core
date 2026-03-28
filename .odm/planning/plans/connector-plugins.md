@@ -211,17 +211,17 @@ This plan addresses the issues identified in the phase-3 QA review of the four c
 > depends: none
 > spec: .odm/qa/reports/phase-3/connector-plugins.md
 
-- [ ] Consolidate duplicate `SyncState` / `MailboxSyncState` types in email connector [minor]
+- [x] Consolidate duplicate `SyncState` / `MailboxSyncState` types in email connector [minor]
   <!-- file: plugins/engine/connector-email/src/types.rs, plugins/engine/connector-email/src/imap.rs -->
   <!-- purpose: Two representations of IMAP sync state with different field types (Option vs non-Option) -->
   <!-- requirements: 2 -->
   <!-- leverage: existing types -->
-- [ ] Consolidate duplicate `FileChange` / `FileChangeType` types in filesystem connector [minor]
+- [x] Consolidate duplicate `FileChange` / `FileChangeType` types in filesystem connector [minor]
   <!-- file: plugins/engine/connector-filesystem/src/types.rs, plugins/engine/connector-filesystem/src/local.rs -->
   <!-- purpose: Two representations of the same concept without cross-references -->
   <!-- requirements: 1 -->
   <!-- leverage: existing types -->
-- [ ] Remove or implement `FileChange::Moved` variant [minor]
+- [x] Remove or implement `FileChange::Moved` variant [minor]
   <!-- file: plugins/engine/connector-filesystem/src/local.rs -->
   <!-- purpose: Variant exists but detect_changes never produces it -->
   <!-- requirements: 6 -->

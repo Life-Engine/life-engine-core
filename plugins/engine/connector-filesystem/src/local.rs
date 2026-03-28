@@ -49,8 +49,6 @@ pub enum FileChange {
     Modified(PathBuf),
     /// A previously indexed file was deleted.
     Deleted(PathBuf),
-    /// A file was moved from one path to another.
-    Moved(PathBuf, PathBuf),
 }
 
 /// Snapshot of an indexed file's metadata, used for change detection.

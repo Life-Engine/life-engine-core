@@ -2,6 +2,7 @@
 
 ## 2026-03-28
 
+- QA phase-3 remediation — connector-plugins WP 1.10: remove unused duplicate types.rs from email and filesystem connectors (SyncState, FileChange/FileChangeType). Remove unused FileChange::Moved variant from local.rs.
 - QA phase-3 remediation — connector-plugins WP 1.5: remove unnecessary head_object check before delete_object (TOCTOU race fix). Pagination already implemented. SDK client caching deferred (conflicts with per-call credential pattern).
 - QA phase-3 remediation — connector-plugins WP 1.3: verified all four connectors already have RetryState from plugin SDK. No code changes needed.
 - QA phase-3 remediation — connector-plugins WP 1.1: replace direct secret_access_key/access_key_id fields in S3Config with credential_key referencing the credential store. Add S3Credentials struct for runtime credential passing. Update CloudStorageConnector trait and S3Client impl to accept credentials parameter on all operations. Update integration tests to use credential store pattern.

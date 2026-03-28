@@ -23,7 +23,6 @@ pub mod normalizer;
 pub mod s3;
 pub mod steps;
 pub mod transform;
-pub mod types;
 
 use std::time::Duration;
 
@@ -31,6 +30,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use life_engine_plugin_sdk::prelude::*;
+use life_engine_plugin_sdk::retry::RetryState;
 use life_engine_plugin_sdk::types::Capability;
 
 use crate::local::{LocalFsConfig, LocalFsConnector};
@@ -47,6 +47,8 @@ pub struct FilesystemConnectorPlugin {
     scan_interval: Duration,
     /// Timestamp of the last successful scan.
     last_scan: Option<DateTime<Utc>>,
+    /// Retry state for exponential backoff on transient scan failures.
+    retry_state: RetryState,
 }
 
 impl FilesystemConnectorPlugin {
@@ -56,6 +58,7 @@ impl FilesystemConnectorPlugin {
             local: None,
             scan_interval: Duration::from_secs(300), // 5 minutes
             last_scan: None,
+            retry_state: RetryState::with_config(5, 60, 3600).with_jitter(true),
         }
     }
 

@@ -18,7 +18,6 @@ pub mod normalizer;
 pub mod smtp;
 pub mod steps;
 pub mod transform;
-pub mod types;
 
 use std::time::Duration;
 
@@ -121,7 +120,7 @@ impl EmailConnectorPlugin {
 
     /// Returns the number of consecutive sync failures.
     pub fn failure_count(&self) -> u32 {
-        self.retry.failure_count
+        self.retry.failure_count()
     }
 
     /// Returns the earliest time the next sync retry is allowed.
@@ -148,7 +147,7 @@ impl EmailConnectorPlugin {
             .unwrap_or_else(|_| chrono::Duration::seconds(backoff.as_secs() as i64));
         self.next_retry = Some(Utc::now() + backoff_chrono);
         tracing::warn!(
-            failure_count = self.retry.failure_count,
+            failure_count = self.retry.failure_count(),
             next_retry_secs = backoff.as_secs(),
             "sync failed, applying exponential backoff"
         );

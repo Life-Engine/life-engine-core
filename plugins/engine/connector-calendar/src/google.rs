@@ -177,7 +177,7 @@ struct TokenResponse {
 /// The verifier is a random string of 43-128 URL-safe characters.
 /// The challenge is `BASE64URL(SHA256(verifier))`.
 pub fn generate_pkce_challenge() -> (String, String) {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let length = rng.gen_range(43..=128);
     let verifier: String = (0..length)
         .map(|_| {
@@ -634,26 +634,33 @@ impl GoogleCalendarClient {
         let access_token = self.ensure_valid_token(client_secret).await?;
         let client = http_client();
 
-        let response = client
-            .get("https://www.googleapis.com/calendar/v3/users/me/calendarList")
-            .bearer_auth(&access_token)
-            .send()
-            .await
-            .map_err(|e| GoogleApiError::ApiError {
-                status: 0,
-                body: e.to_string(),
-            })?;
+        let mut rate_limit_attempt = 0u32;
+        let list: GoogleCalendarListResponse = loop {
+            let response = client
+                .get("https://www.googleapis.com/calendar/v3/users/me/calendarList")
+                .bearer_auth(&access_token)
+                .send()
+                .await
+                .map_err(|e| GoogleApiError::ApiError {
+                    status: 0,
+                    body: e.to_string(),
+                })?;
 
-        map_error_response(&response)?;
+            if handle_rate_limit(&response, rate_limit_attempt).await? {
+                rate_limit_attempt += 1;
+                continue;
+            }
 
-        let list: GoogleCalendarListResponse =
-            response
+            map_error_response(&response)?;
+
+            break response
                 .json()
                 .await
                 .map_err(|e| GoogleApiError::ApiError {
                     status: 0,
                     body: e.to_string(),
                 })?;
+        };
 
         Ok(list.items)
     }
@@ -705,28 +712,36 @@ impl GoogleCalendarClient {
             }
         }
 
-        let response = client
-            .get(url)
-            .bearer_auth(&access_token)
-            .send()
-            .await
-            .map_err(|e| GoogleApiError::ApiError {
-                status: 0,
-                body: e.to_string(),
-            })?;
-
-        map_error_response(&response)?;
-
-        let events_response: GoogleEventsListResponse =
-            response
-                .json()
+        let mut rate_limit_attempt = 0u32;
+        loop {
+            let response = client
+                .get(url.clone())
+                .bearer_auth(&access_token)
+                .send()
                 .await
                 .map_err(|e| GoogleApiError::ApiError {
                     status: 0,
                     body: e.to_string(),
                 })?;
 
-        Ok(events_response)
+            if handle_rate_limit(&response, rate_limit_attempt).await? {
+                rate_limit_attempt += 1;
+                continue;
+            }
+
+            map_error_response(&response)?;
+
+            let events_response: GoogleEventsListResponse =
+                response
+                    .json()
+                    .await
+                    .map_err(|e| GoogleApiError::ApiError {
+                        status: 0,
+                        body: e.to_string(),
+                    })?;
+
+            return Ok(events_response);
+        }
     }
 
     /// Get a single event by ID.
@@ -749,25 +764,33 @@ impl GoogleCalendarClient {
             "https://www.googleapis.com/calendar/v3/calendars/{encoded_cal_id}/events/{encoded_evt_id}"
         );
 
-        let response = client
-            .get(&url)
-            .bearer_auth(&access_token)
-            .send()
-            .await
-            .map_err(|e| GoogleApiError::ApiError {
-                status: 0,
-                body: e.to_string(),
-            })?;
+        let mut rate_limit_attempt = 0u32;
+        let event: GoogleEvent = loop {
+            let response = client
+                .get(&url)
+                .bearer_auth(&access_token)
+                .send()
+                .await
+                .map_err(|e| GoogleApiError::ApiError {
+                    status: 0,
+                    body: e.to_string(),
+                })?;
 
-        map_error_response(&response)?;
+            if handle_rate_limit(&response, rate_limit_attempt).await? {
+                rate_limit_attempt += 1;
+                continue;
+            }
 
-        let event: GoogleEvent = response
-            .json()
-            .await
-            .map_err(|e| GoogleApiError::ApiError {
-                status: 0,
-                body: e.to_string(),
-            })?;
+            map_error_response(&response)?;
+
+            break response
+                .json()
+                .await
+                .map_err(|e| GoogleApiError::ApiError {
+                    status: 0,
+                    body: e.to_string(),
+                })?;
+        };
 
         Ok(event)
     }
@@ -1067,10 +1090,19 @@ fn parse_google_datetime(gdt: &GoogleDateTime) -> anyhow::Result<DateTime<Utc>> 
     ))
 }
 
+/// Maximum number of retries for 429 rate limit responses.
+#[cfg(feature = "integration")]
+const MAX_RATE_LIMIT_RETRIES: u32 = 3;
+
+/// Default backoff in seconds when no Retry-After header is present.
+#[cfg(feature = "integration")]
+const DEFAULT_RATE_LIMIT_BACKOFF_SECS: u64 = 5;
+
 /// Map an HTTP response status to a `GoogleApiError` if it indicates failure.
 ///
 /// Returns `Ok(())` for success responses, allowing the caller to proceed
-/// with parsing the body.
+/// with parsing the body. For 429 responses, returns `RateLimited` — callers
+/// that want retry behavior should use `handle_rate_limit` instead.
 #[cfg(feature = "integration")]
 fn map_error_response(response: &reqwest::Response) -> Result<(), GoogleApiError> {
     let status = response.status();
@@ -1098,6 +1130,47 @@ fn map_error_response(response: &reqwest::Response) -> Result<(), GoogleApiError
             body: format!("HTTP {}", status),
         }),
     }
+}
+
+/// Check if the response is a 429 and, if so, sleep for the Retry-After
+/// duration (or a default backoff) and return `Ok(true)` so the caller can
+/// retry. Returns `Ok(false)` for non-429 responses.
+/// Returns `Err` if the rate limit retry budget is exhausted.
+#[cfg(feature = "integration")]
+async fn handle_rate_limit(
+    response: &reqwest::Response,
+    attempt: u32,
+) -> Result<bool, GoogleApiError> {
+    if response.status().as_u16() != 429 {
+        return Ok(false);
+    }
+
+    if attempt >= MAX_RATE_LIMIT_RETRIES {
+        let retry_after = response
+            .headers()
+            .get("retry-after")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.parse::<u64>().ok());
+        return Err(GoogleApiError::RateLimited {
+            retry_after_secs: retry_after,
+        });
+    }
+
+    let wait_secs = response
+        .headers()
+        .get("retry-after")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse::<u64>().ok())
+        .unwrap_or(DEFAULT_RATE_LIMIT_BACKOFF_SECS);
+
+    tracing::warn!(
+        wait_secs = wait_secs,
+        attempt = attempt,
+        "Google Calendar API rate limited (429), backing off"
+    );
+
+    tokio::time::sleep(std::time::Duration::from_secs(wait_secs)).await;
+    Ok(true)
 }
 
 // ---------------------------------------------------------------------------

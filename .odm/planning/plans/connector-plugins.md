@@ -12,7 +12,7 @@ This plan addresses the issues identified in the phase-3 QA review of the four c
 
 **Source:** .odm/qa/reports/phase-3/connector-plugins.md
 
-**Progress:** 0 / 10 work packages complete
+**Progress:** 9 / 10 work packages complete
 
 ---
 
@@ -80,17 +80,17 @@ This plan addresses the issues identified in the phase-3 QA review of the four c
 > depends: 1.3
 > spec: .odm/qa/reports/phase-3/connector-plugins.md
 
-- [ ] Handle Google API 429 responses with Retry-After backoff in `connector-contacts/src/google.rs` [major]
+- [x] Handle Google API 429 responses with Retry-After backoff in `connector-contacts/src/google.rs` [major]
   <!-- file: plugins/engine/connector-contacts/src/google.rs -->
   <!-- purpose: GoogleApiError::RateLimited variant exists but is never acted upon -->
   <!-- requirements: 5 -->
   <!-- leverage: existing error variant -->
-- [ ] Handle Google API 429 responses with Retry-After backoff in `connector-calendar/src/google.rs` [major]
+- [x] Handle Google API 429 responses with Retry-After backoff in `connector-calendar/src/google.rs` [major]
   <!-- file: plugins/engine/connector-calendar/src/google.rs -->
   <!-- purpose: Same rate limiting gap for Google Calendar API -->
   <!-- requirements: 5 -->
   <!-- leverage: existing GoogleApiError::RateLimited variant -->
-- [ ] Add connection-rate awareness for IMAP to avoid server-imposed limits [minor]
+- [x] Add connection-rate awareness for IMAP to avoid server-imposed limits [minor]
   <!-- file: plugins/engine/connector-email/src/imap.rs -->
   <!-- purpose: Rapid reconnection could hit IMAP server connection limits -->
   <!-- requirements: 5 -->
@@ -168,17 +168,18 @@ This plan addresses the issues identified in the phase-3 QA review of the four c
 > depends: 1.2
 > spec: .odm/qa/reports/phase-3/connector-plugins.md
 
-- [ ] Implement actual HTTP PUT/POST/DELETE in CalDAV CRUD stubs (`create_event`, `update_event`, `delete_event`) [major]
+- [x] Implement actual HTTP PUT/POST/DELETE in CalDAV CRUD stubs (`create_event`, `update_event`, `delete_event`) [major]
   <!-- file: plugins/engine/connector-calendar/src/caldav.rs -->
   <!-- purpose: CRUD methods are no-op stubs that silently succeed; callers cannot distinguish real from fake ops -->
   <!-- requirements: 8 -->
   <!-- leverage: existing stubs at caldav.rs:194-211 -->
-- [ ] Wire `handle_event()` to actually send outbound sync requests instead of only logging [major]
+- [-] Wire `handle_event()` to actually send outbound sync requests instead of only logging [major]
   <!-- file: plugins/engine/connector-calendar/src/lib.rs -->
   <!-- purpose: Event handler builds payloads but never sends them -->
   <!-- requirements: 8 -->
   <!-- leverage: existing handle_event at lib.rs:310-365 -->
-- [ ] Make `http_client` field private on `GoogleContactsClient` [minor]
+  <!-- deferred: CorePlugin::handle_event trait does not provide credential store access; CalDAV CRUD methods are implemented but handle_event cannot retrieve passwords to call them -->
+- [x] Make `http_client` field private on `GoogleContactsClient` [minor]
   <!-- file: plugins/engine/connector-contacts/src/google.rs -->
   <!-- purpose: pub field exposes internal reqwest client for external mutation -->
   <!-- requirements: 6 -->

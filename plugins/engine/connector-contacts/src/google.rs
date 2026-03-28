@@ -110,7 +110,7 @@ pub struct GoogleContactsClient {
     /// Cached OAuth2 access token.
     token_cache: Option<OAuthTokenCache>,
     /// Reusable HTTP client.
-    pub http_client: reqwest::Client,
+    http_client: reqwest::Client,
     /// The People API base URL (overridable for testing).
     api_base_url: String,
     /// The OAuth2 token endpoint URL (overridable for testing).
@@ -177,6 +177,48 @@ impl GoogleContactsClient {
     /// Reset sync state for a full re-sync.
     pub fn reset_sync_state(&mut self) {
         self.sync_state = GoogleSyncState::default();
+    }
+
+    /// Maximum number of retries for 429 rate limit responses.
+    const MAX_RATE_LIMIT_RETRIES: u32 = 3;
+
+    /// Default backoff in seconds when no Retry-After header is present.
+    const DEFAULT_RATE_LIMIT_BACKOFF_SECS: u64 = 5;
+
+    /// If the response is a 429, sleep for the Retry-After duration (or a
+    /// default backoff) and return `Ok(true)` so the caller can retry.
+    /// Returns `Ok(false)` for non-429 responses.
+    /// Returns `Err` if the rate limit retry budget is exhausted.
+    async fn handle_rate_limit(
+        response: &reqwest::Response,
+        attempt: u32,
+    ) -> anyhow::Result<bool> {
+        if response.status().as_u16() != 429 {
+            return Ok(false);
+        }
+
+        if attempt >= Self::MAX_RATE_LIMIT_RETRIES {
+            anyhow::bail!(
+                "Google API rate limited (429) after {} retries, giving up",
+                attempt
+            );
+        }
+
+        let wait_secs = response
+            .headers()
+            .get("retry-after")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(Self::DEFAULT_RATE_LIMIT_BACKOFF_SECS);
+
+        tracing::warn!(
+            wait_secs = wait_secs,
+            attempt = attempt,
+            "Google API rate limited (429), backing off"
+        );
+
+        tokio::time::sleep(std::time::Duration::from_secs(wait_secs)).await;
+        Ok(true)
     }
 
     /// Ensure a valid OAuth2 access token is available.
@@ -311,30 +353,40 @@ impl GoogleContactsClient {
                 }
             }
 
-            let response = self
-                .http_client
-                .get(url)
-                .bearer_auth(&access_token)
-                .send()
-                .await
-                .context("failed to send People API list request")?;
+            let list_response = {
+                let mut rate_limit_attempt = 0u32;
+                loop {
+                    let response = self
+                        .http_client
+                        .get(url.clone())
+                        .bearer_auth(&access_token)
+                        .send()
+                        .await
+                        .context("failed to send People API list request")?;
 
-            if response.status().as_u16() == 410 {
-                anyhow::bail!("410 Gone: sync token expired");
-            }
+                    if response.status().as_u16() == 410 {
+                        anyhow::bail!("410 Gone: sync token expired");
+                    }
 
-            if !response.status().is_success() {
-                let status = response.status();
-                let body = response.text().await.unwrap_or_default();
-                anyhow::bail!(
-                    "Google People API returned {status}: {body}"
-                );
-            }
+                    if Self::handle_rate_limit(&response, rate_limit_attempt).await? {
+                        rate_limit_attempt += 1;
+                        continue;
+                    }
 
-            let list_response: GoogleListResponse = response
-                .json()
-                .await
-                .context("failed to parse People API list response")?;
+                    if !response.status().is_success() {
+                        let status = response.status();
+                        let body = response.text().await.unwrap_or_default();
+                        anyhow::bail!(
+                            "Google People API returned {status}: {body}"
+                        );
+                    }
+
+                    break response
+                        .json::<GoogleListResponse>()
+                        .await
+                        .context("failed to parse People API list response")?;
+                }
+            };
 
             all_persons.extend(list_response.connections);
 
@@ -372,28 +424,34 @@ impl GoogleContactsClient {
             self.api_base_url
         );
 
-        let response = self
-            .http_client
-            .get(&url)
-            .bearer_auth(&access_token)
-            .send()
-            .await
-            .context("failed to send People API get request")?;
+        let mut rate_limit_attempt = 0u32;
+        loop {
+            let response = self
+                .http_client
+                .get(&url)
+                .bearer_auth(&access_token)
+                .send()
+                .await
+                .context("failed to send People API get request")?;
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            anyhow::bail!(
-                "Google People API get returned {status}: {body}"
-            );
+            if Self::handle_rate_limit(&response, rate_limit_attempt).await? {
+                rate_limit_attempt += 1;
+                continue;
+            }
+
+            if !response.status().is_success() {
+                let status = response.status();
+                let body = response.text().await.unwrap_or_default();
+                anyhow::bail!(
+                    "Google People API get returned {status}: {body}"
+                );
+            }
+
+            return response
+                .json::<GooglePerson>()
+                .await
+                .context("failed to parse People API get response");
         }
-
-        let person: GooglePerson = response
-            .json()
-            .await
-            .context("failed to parse People API get response")?;
-
-        Ok(person)
     }
 
     /// Create a new contact via the People API.
@@ -417,29 +475,35 @@ impl GoogleContactsClient {
             self.api_base_url
         );
 
-        let response = self
-            .http_client
-            .post(&url)
-            .bearer_auth(&access_token)
-            .json(person)
-            .send()
-            .await
-            .context("failed to send People API create request")?;
+        let mut rate_limit_attempt = 0u32;
+        loop {
+            let response = self
+                .http_client
+                .post(&url)
+                .bearer_auth(&access_token)
+                .json(person)
+                .send()
+                .await
+                .context("failed to send People API create request")?;
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            anyhow::bail!(
-                "Google People API create returned {status}: {body}"
-            );
+            if Self::handle_rate_limit(&response, rate_limit_attempt).await? {
+                rate_limit_attempt += 1;
+                continue;
+            }
+
+            if !response.status().is_success() {
+                let status = response.status();
+                let body = response.text().await.unwrap_or_default();
+                anyhow::bail!(
+                    "Google People API create returned {status}: {body}"
+                );
+            }
+
+            return response
+                .json::<GooglePerson>()
+                .await
+                .context("failed to parse People API create response");
         }
-
-        let created: GooglePerson = response
-            .json()
-            .await
-            .context("failed to parse People API create response")?;
-
-        Ok(created)
     }
 
     /// Update an existing contact via the People API.
@@ -464,29 +528,35 @@ impl GoogleContactsClient {
             self.api_base_url, person.resource_name
         );
 
-        let response = self
-            .http_client
-            .patch(&url)
-            .bearer_auth(&access_token)
-            .json(person)
-            .send()
-            .await
-            .context("failed to send People API update request")?;
+        let mut rate_limit_attempt = 0u32;
+        loop {
+            let response = self
+                .http_client
+                .patch(&url)
+                .bearer_auth(&access_token)
+                .json(person)
+                .send()
+                .await
+                .context("failed to send People API update request")?;
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            anyhow::bail!(
-                "Google People API update returned {status}: {body}"
-            );
+            if Self::handle_rate_limit(&response, rate_limit_attempt).await? {
+                rate_limit_attempt += 1;
+                continue;
+            }
+
+            if !response.status().is_success() {
+                let status = response.status();
+                let body = response.text().await.unwrap_or_default();
+                anyhow::bail!(
+                    "Google People API update returned {status}: {body}"
+                );
+            }
+
+            return response
+                .json::<GooglePerson>()
+                .await
+                .context("failed to parse People API update response");
         }
-
-        let updated: GooglePerson = response
-            .json()
-            .await
-            .context("failed to parse People API update response")?;
-
-        Ok(updated)
     }
 
     /// Delete a contact by resource name.
@@ -509,23 +579,31 @@ impl GoogleContactsClient {
             self.api_base_url, resource_name
         );
 
-        let response = self
-            .http_client
-            .delete(&url)
-            .bearer_auth(&access_token)
-            .send()
-            .await
-            .context("failed to send People API delete request")?;
+        let mut rate_limit_attempt = 0u32;
+        loop {
+            let response = self
+                .http_client
+                .delete(&url)
+                .bearer_auth(&access_token)
+                .send()
+                .await
+                .context("failed to send People API delete request")?;
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            anyhow::bail!(
-                "Google People API delete returned {status}: {body}"
-            );
+            if Self::handle_rate_limit(&response, rate_limit_attempt).await? {
+                rate_limit_attempt += 1;
+                continue;
+            }
+
+            if !response.status().is_success() {
+                let status = response.status();
+                let body = response.text().await.unwrap_or_default();
+                anyhow::bail!(
+                    "Google People API delete returned {status}: {body}"
+                );
+            }
+
+            return Ok(());
         }
-
-        Ok(())
     }
 
     /// Perform a contact sync using the stored sync token.
@@ -2325,5 +2403,13 @@ mod tests {
         );
         assert_eq!(client.api_base_url, "http://localhost:9999/v1");
         assert_eq!(client.token_endpoint_url, "http://localhost:9999/token");
+    }
+
+    #[test]
+    fn rate_limit_constants_are_reasonable() {
+        assert!(GoogleContactsClient::MAX_RATE_LIMIT_RETRIES >= 2);
+        assert!(GoogleContactsClient::MAX_RATE_LIMIT_RETRIES <= 10);
+        assert!(GoogleContactsClient::DEFAULT_RATE_LIMIT_BACKOFF_SECS >= 1);
+        assert!(GoogleContactsClient::DEFAULT_RATE_LIMIT_BACKOFF_SECS <= 60);
     }
 }

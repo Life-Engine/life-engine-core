@@ -8,6 +8,8 @@
 
 - QA phase-2 remediation — dav-and-webhooks WP 1.5: implement webhook sender HTTP delivery via reqwest with HMAC-SHA256 payload signing, configurable timeouts (connect/request/total), per-URL token bucket rate limiting, exponential backoff retry using plugin SDK RetryState, replace Vec::drain with VecDeque for O(1) delivery log eviction, fix pre-existing private field access bug in tests, and add 12 new tests for signing, rate limiting, delivery, and config.
 
+- QA phase-3 remediation — connector-plugins WP 1.4: add 429 rate limit retry with Retry-After backoff to Google Contacts API (replace check_rate_limit with handle_rate_limit, wrap all 5 API call sites in retry loops). Add rate limit retry to Google Calendar API list_calendars (list_events and get_event already handled). IMAP connection-rate awareness already implemented (MIN_CONNECT_INTERVAL + enforce_connect_cooldown).
+
 - QA phase-3 remediation — backup-and-webhooks WP 1.9: add URL validation (url crate) on WebhookSubscription, replace full payload storage in DeliveryRecord with SHA-256 hash (payload_hash field), update all callers to pass payload by reference. HashSet dedup in incremental backup and async exists in local backend already done. Unused WebhookSenderStatus type and process_webhook refactor already completed by prior agents.
 
 - QA phase-3 remediation — connector-plugins WP 1.7: cache SMTP transport in SmtpClient struct for connection pooling across batch sends. Reduce email subject log level from info to debug to prevent sensitive information leakage.

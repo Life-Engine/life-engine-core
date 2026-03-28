@@ -64,7 +64,13 @@
     "api-plugins:1.3",
     "api-plugins:1.5",
     "api-plugins:1.8",
-    "api-plugins:1.6"
+    "api-plugins:1.6",
+    "dav-and-webhooks:1.1",
+    "dav-and-webhooks:1.5",
+    "dav-and-webhooks:1.6",
+    "dav-and-webhooks:1.7",
+    "storage-sqlite:1.1",
+    "api-plugins:1.7"
   ],
   "history": [
     {
@@ -292,6 +298,30 @@
       "title": "CalDAV Serializer Completeness",
       "timestamp": "2026-03-28T00:00:00Z",
       "tasks_completed": 7,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "1.5",
+      "plan": "dav-and-webhooks.md",
+      "title": "Webhook Sender: HTTP Delivery and Signing",
+      "timestamp": "2026-03-28T00:00:00Z",
+      "tasks_completed": 7,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "1.7",
+      "plan": "dav-and-webhooks.md",
+      "title": "Housekeeping and Hardening",
+      "timestamp": "2026-03-28T00:00:00Z",
+      "tasks_completed": 5,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "1.7",
+      "plan": "api-plugins.md",
+      "title": "CardDAV Serializer Completeness",
+      "timestamp": "2026-03-28T00:00:00Z",
+      "tasks_completed": 12,
       "tasks_deferred": 0
     }
   ]

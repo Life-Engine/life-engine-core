@@ -230,62 +230,62 @@ This plan addresses the 29 issues identified in the phase-3 QA review of the Cal
 > depends: 1.2
 > spec: .odm/qa/reports/phase-3/api-plugins.md
 
-- [ ] Escape semicolons in ADR property component values in `contact_to_vcard` [major]
+- [x] Escape semicolons in ADR property component values in `contact_to_vcard` [major]
   <!-- file: plugins/engine/api-carddav/src/serializer.rs -->
   <!-- purpose: Prevent address corruption when street addresses contain semicolons -->
   <!-- requirements: 11 -->
   <!-- leverage: existing contact_to_vcard at line 113, dav_utils::vcard::escape_value -->
-- [ ] Add TITLE property serialization and parsing [minor]
+- [x] Add TITLE property serialization and parsing [minor]
   <!-- file: plugins/engine/api-carddav/src/serializer.rs -->
   <!-- purpose: Preserve contact title field on round-trip -->
   <!-- requirements: 17 -->
   <!-- leverage: existing title field on Contact -->
-- [ ] Add BDAY property serialization and parsing [minor]
+- [x] Add BDAY property serialization and parsing [minor]
   <!-- file: plugins/engine/api-carddav/src/serializer.rs -->
   <!-- purpose: Preserve contact birthday on round-trip -->
   <!-- requirements: 17 -->
   <!-- leverage: existing birthday field on Contact -->
-- [ ] Add NOTE property serialization and parsing [minor]
+- [x] Add NOTE property serialization and parsing [minor]
   <!-- file: plugins/engine/api-carddav/src/serializer.rs -->
   <!-- purpose: Preserve contact notes on round-trip -->
   <!-- requirements: 17 -->
   <!-- leverage: existing notes field on Contact -->
-- [ ] Add PHOTO property serialization [minor]
+- [x] Add PHOTO property serialization [minor]
   <!-- file: plugins/engine/api-carddav/src/serializer.rs -->
   <!-- purpose: Preserve contact photo URL on round-trip -->
   <!-- requirements: 17 -->
   <!-- leverage: existing photo_url field on Contact -->
-- [ ] Add CATEGORIES property serialization for groups [minor]
+- [x] Add CATEGORIES property serialization for groups [minor]
   <!-- file: plugins/engine/api-carddav/src/serializer.rs -->
   <!-- purpose: Preserve contact group membership on round-trip -->
   <!-- requirements: 17 -->
   <!-- leverage: existing groups field on Contact -->
-- [ ] Parse REV property in `vcard_to_contact` to preserve modification timestamp [minor]
+- [x] Parse REV property in `vcard_to_contact` to preserve modification timestamp [minor]
   <!-- file: plugins/engine/api-carddav/src/serializer.rs -->
   <!-- purpose: Prevent loss of original modification timestamp on vCard import -->
   <!-- requirements: 18 -->
   <!-- leverage: none -->
-- [ ] Parse CREATED property in `vcard_to_contact` to preserve creation timestamp [minor]
+- [x] Parse CREATED property in `vcard_to_contact` to preserve creation timestamp [minor]
   <!-- file: plugins/engine/api-carddav/src/serializer.rs -->
   <!-- purpose: Prevent loss of creation timestamp on vCard import -->
   <!-- requirements: 18 -->
   <!-- leverage: none -->
-- [ ] Add ADR TYPE parameter serialization and parsing [minor]
+- [x] Add ADR TYPE parameter serialization and parsing [minor]
   <!-- file: plugins/engine/api-carddav/src/serializer.rs -->
   <!-- purpose: Preserve address type (home, work) on round-trip -->
   <!-- requirements: 19 -->
   <!-- leverage: existing address_type field -->
-- [ ] Improve FN-to-name fallback parsing for multi-word names [minor]
+- [x] Improve FN-to-name fallback parsing for multi-word names [minor]
   <!-- file: plugins/engine/api-carddav/src/serializer.rs -->
   <!-- purpose: Handle names with multiple given names correctly (e.g., "Mary Jane Watson") -->
   <!-- requirements: 20 -->
   <!-- leverage: existing fallback at line 296 -->
-- [ ] Replace duplicate `escape_vcard_value` with `dav_utils::vcard::escape_value` [minor]
+- [x] Replace duplicate `escape_vcard_value` with `dav_utils::vcard::escape_value` [minor]
   <!-- file: plugins/engine/api-carddav/src/serializer.rs -->
   <!-- purpose: Consolidate duplicate logic and ensure consistent escaping -->
   <!-- requirements: 21 -->
   <!-- leverage: dav_utils::vcard::escape_value -->
-- [ ] Ensure vCard output ends with trailing CRLF [minor]
+- [x] Ensure vCard output ends with trailing CRLF [minor]
   <!-- file: plugins/engine/api-carddav/src/serializer.rs -->
   <!-- purpose: RFC 6350 compliance -->
   <!-- requirements: 26 -->

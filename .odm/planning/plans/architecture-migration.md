@@ -374,42 +374,42 @@ Implement the concrete storage adapters (SQLite/SQLCipher, filesystem), the Stor
 
 ### 4.4 — Storage Context
 
-- [ ] Implement `StorageContext` in `packages/traits/src/storage_context.rs`: the API surface that plugins and workflows use to interact with storage. StorageContext wraps the StorageRouter and adds permission checking, collection scoping, schema validation, and audit event emission. Two access paths: plugin access (scoped and permission-checked based on plugin manifest) and workflow engine access (system-level, bypasses plugin checks but still validates schemas and emits audit events).
+- [x] Implement `StorageContext` in `packages/traits/src/storage_context.rs`: the API surface that plugins and workflows use to interact with storage. StorageContext wraps the StorageRouter and adds permission checking, collection scoping, schema validation, and audit event emission. Two access paths: plugin access (scoped and permission-checked based on plugin manifest) and workflow engine access (system-level, bypasses plugin checks but still validates schemas and emits audit events).
   <!-- files: packages/traits/src/storage_context.rs -->
   <!-- purpose: Provide the single enforcement point for all storage access -->
   <!-- requirements: storage-context 1.1, 1.2, 2.1 -->
 
-- [ ] Implement permission enforcement: check that the calling plugin has declared the required capability (`storage:doc:read`, `storage:doc:write`, `storage:doc:delete`, `storage:blob:read`, `storage:blob:write`, `storage:blob:delete`) in its manifest. Check that the collection being accessed is declared in the plugin's `collections` manifest section. Reject with `StorageError::PermissionDenied` if either check fails.
+- [x] Implement permission enforcement: check that the calling plugin has declared the required capability (`storage:doc:read`, `storage:doc:write`, `storage:doc:delete`, `storage:blob:read`, `storage:blob:write`, `storage:blob:delete`) in its manifest. Check that the collection being accessed is declared in the plugin's `collections` manifest section. Reject with `StorageError::PermissionDenied` if either check fails.
   <!-- files: packages/traits/src/storage_context.rs -->
   <!-- purpose: Enforce deny-by-default storage access -->
   <!-- requirements: storage-context 2.1, 2.2, 2.3 -->
 
-- [ ] Implement collection scoping: shared collections are accessed by name directly. Plugin-scoped collections are prefixed with `{plugin_id}.` automatically. A plugin can only access its own scoped collections and shared collections declared in its manifest.
+- [x] Implement collection scoping: shared collections are accessed by name directly. Plugin-scoped collections are prefixed with `{plugin_id}.` automatically. A plugin can only access its own scoped collections and shared collections declared in its manifest.
   <!-- files: packages/traits/src/storage_context.rs -->
   <!-- purpose: Isolate plugin data while allowing shared collections -->
   <!-- requirements: storage-context 3.1, 3.2 -->
 
-- [ ] Implement schema validation on write: before passing a document to the StorageRouter for create/update/partial_update, validate it against the collection's registered schema (from the SchemaRegistry). If validation fails, return `StorageError::ValidationFailed` without calling the adapter. System-managed base fields (id, created_at, updated_at) are injected after validation.
+- [x] Implement schema validation on write: before passing a document to the StorageRouter for create/update/partial_update, validate it against the collection's registered schema (from the SchemaRegistry). If validation fails, return `StorageError::ValidationFailed` without calling the adapter. System-managed base fields (id, created_at, updated_at) are injected after validation.
   <!-- files: packages/traits/src/storage_context.rs -->
   <!-- purpose: Validate data before it reaches the storage layer -->
   <!-- requirements: storage-context 4.1, 4.2, 4.3 -->
 
-- [ ] Implement extension field handling: when a plugin writes to a shared collection, only its own namespace (`ext.{plugin_id}.*`) is writable. Attempting to write to another plugin's namespace is silently ignored (the write succeeds, but the foreign namespace fields are stripped). Extension merging uses merge-not-replace: updating `ext.my_plugin.foo` does not affect `ext.other_plugin.bar`.
+- [x] Implement extension field handling: when a plugin writes to a shared collection, only its own namespace (`ext.{plugin_id}.*`) is writable. Attempting to write to another plugin's namespace is silently ignored (the write succeeds, but the foreign namespace fields are stripped). Extension merging uses merge-not-replace: updating `ext.my_plugin.foo` does not affect `ext.other_plugin.bar`.
   <!-- files: packages/traits/src/storage_context.rs -->
   <!-- purpose: Enforce extension namespace isolation -->
   <!-- requirements: storage-context 5.1, 5.2 -->
 
-- [ ] Implement audit event emission: after every successful write operation, emit a system event via the event bus: `system.storage.created`, `system.storage.updated`, `system.storage.deleted` for documents; `system.blob.stored`, `system.blob.deleted` for blobs. Events include collection name, document ID, and the identity of the caller (if available).
+- [x] Implement audit event emission: after every successful write operation, emit a system event via the event bus: `system.storage.created`, `system.storage.updated`, `system.storage.deleted` for documents; `system.blob.stored`, `system.blob.deleted` for blobs. Events include collection name, document ID, and the identity of the caller (if available).
   <!-- files: packages/traits/src/storage_context.rs -->
   <!-- purpose: Enable audit logging and reactive patterns based on storage changes -->
   <!-- requirements: storage-context 6.1, 6.2 -->
 
-- [ ] Implement watch-to-event-bus bridge: when a StorageContext consumer calls `watch(collection)`, the StorageContext subscribes to the adapter's ChangeEvent stream and re-emits each change as an event bus event. This bridges adapter-level change watching into the unified event model.
+- [x] Implement watch-to-event-bus bridge: when a StorageContext consumer calls `watch(collection)`, the StorageContext subscribes to the adapter's ChangeEvent stream and re-emits each change as an event bus event. This bridges adapter-level change watching into the unified event model.
   <!-- files: packages/traits/src/storage_context.rs -->
   <!-- purpose: Unify change watching with the event bus -->
   <!-- requirements: storage-context 7.1 -->
 
-- [ ] Write comprehensive tests: permission checks (allowed/denied), collection scoping (plugin vs shared), schema validation (valid/invalid), extension namespace isolation, audit event emission, system-level access bypass.
+- [x] Write comprehensive tests: permission checks (allowed/denied), collection scoping (plugin vs shared), schema validation (valid/invalid), extension namespace isolation, audit event emission, system-level access bypass.
   <!-- files: packages/traits/tests/storage_context_tests.rs -->
   <!-- purpose: Verify StorageContext enforcement behaviour -->
   <!-- requirements: storage-context 1.1 through 7.1 -->

@@ -470,6 +470,56 @@ impl StorageContext {
         Ok(())
     }
 
+    // -- Watch ----------------------------------------------------------------
+
+    /// Subscribe to changes on a collection, bridging adapter-level change
+    /// events into the audit event bus.
+    ///
+    /// Returns a receiver of `ChangeEvent`s for the caller to consume. Each
+    /// change is also re-emitted as an `AuditEvent` on the audit channel so
+    /// that the unified event model stays in sync.
+    pub async fn doc_watch(
+        &self,
+        caller: &CallerIdentity,
+        collection: &str,
+        plugin_scoped: bool,
+    ) -> Result<mpsc::Receiver<crate::storage::ChangeEvent>, StorageError> {
+        Self::check_capability(caller, StorageCapability::DocRead)?;
+        let resolved = Self::resolve_collection(caller, collection, plugin_scoped)?;
+
+        let mut adapter_rx = self.router.doc_watch(&resolved).await?;
+
+        // Bridge: forward change events to both a new consumer channel and the
+        // audit bus.
+        let (bridge_tx, bridge_rx) = mpsc::channel(64);
+        let audit_tx = self.audit_tx.clone();
+        let origin = Self::origin(caller);
+
+        tokio::spawn(async move {
+            while let Some(event) = adapter_rx.recv().await {
+                let event_type = match event.change_type {
+                    crate::storage::ChangeType::Created => "system.storage.created",
+                    crate::storage::ChangeType::Updated => "system.storage.updated",
+                    crate::storage::ChangeType::Deleted => "system.storage.deleted",
+                };
+                let _ = audit_tx.send(AuditEvent {
+                    event_type: event_type.to_string(),
+                    origin: origin.clone(),
+                    payload: serde_json::json!({
+                        "collection": event.collection,
+                        "id": event.document_id,
+                        "source": "watch",
+                    }),
+                });
+                if bridge_tx.send(event).await.is_err() {
+                    break;
+                }
+            }
+        });
+
+        Ok(bridge_rx)
+    }
+
     // -- Health ---------------------------------------------------------------
 
     /// Delegate health check to the router.
@@ -973,5 +1023,42 @@ mod tests {
         let doc = json!({"id": "my-custom-id", "name": "test"});
         let created = ctx.doc_create(&caller, "items", doc, true).await.unwrap();
         assert_eq!(created["id"], "my-custom-id");
+    }
+
+    // =========================================================================
+    // Test: Watch-to-event-bus bridge
+    // =========================================================================
+
+    #[tokio::test]
+    async fn watch_requires_doc_read_capability() {
+        let (ctx, _rx) = make_context();
+        let caller = plugin_caller(&[]);
+
+        let result = ctx.doc_watch(&caller, "items", true).await;
+        assert!(matches!(result, Err(StorageError::PermissionDenied { .. })));
+    }
+
+    #[tokio::test]
+    async fn watch_resolves_collection_scoping() {
+        let (ctx, _rx) = make_context();
+        let caller = plugin_caller(&[StorageCapability::DocRead]);
+
+        // Plugin-scoped watch should not produce PermissionDenied.
+        let result = ctx.doc_watch(&caller, "items", true).await;
+        assert!(!matches!(result, Err(StorageError::PermissionDenied { .. })));
+    }
+
+    #[tokio::test]
+    async fn watch_shared_collection_requires_declaration() {
+        let (ctx, _rx) = make_context();
+        let caller = plugin_caller(&[StorageCapability::DocRead]);
+
+        // "undeclared" is not in the plugin's shared_collections.
+        let result = ctx.doc_watch(&caller, "undeclared", false).await;
+        assert!(matches!(result, Err(StorageError::PermissionDenied { .. })));
+
+        // "tasks" is declared.
+        let result = ctx.doc_watch(&caller, "tasks", false).await;
+        assert!(!matches!(result, Err(StorageError::PermissionDenied { .. })));
     }
 }

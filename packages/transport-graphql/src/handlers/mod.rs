@@ -5,12 +5,12 @@
 //! the `WorkflowResponse` back to the GraphQL wire format.
 
 use axum::http::StatusCode;
-use axum::response::IntoResponse;
+use axum::response::{IntoResponse, Response};
 use axum::Json;
 use life_engine_types::identity::Identity;
 use life_engine_types::workflow::WorkflowResponse;
 
-use crate::types::{translate_request, translate_response, GraphqlRequest};
+use crate::types::{translate_request, translate_response, validate_mutation_collection, GraphqlRequest};
 
 /// Axum handler for `POST /graphql`.
 ///
@@ -23,7 +23,18 @@ use crate::types::{translate_request, translate_response, GraphqlRequest};
 /// `dispatcher.dispatch(workflow_request)` and translates the response.
 pub async fn graphql_handler(
     Json(gql_req): Json<GraphqlRequest>,
-) -> impl IntoResponse {
+) -> Response {
+    // Validate mutation collection names against the CDM allowlist (CB-15).
+    if let Err(invalid_collection) = validate_mutation_collection(&gql_req) {
+        let body = serde_json::json!({
+            "errors": [{
+                "message": format!("Unknown collection: '{invalid_collection}'. Mutations may only target CDM collections."),
+                "extensions": { "code": "INVALID_COLLECTION" }
+            }]
+        });
+        return (StatusCode::BAD_REQUEST, Json(body)).into_response();
+    }
+
     // For now, build the WorkflowRequest to prove the translation pipeline.
     // A real implementation injects the Identity from auth middleware and the
     // dispatcher from Axum state.
@@ -31,7 +42,7 @@ pub async fn graphql_handler(
 
     // Placeholder: return the translated request as JSON so tests can verify
     // the translation without a full workflow engine.
-    (StatusCode::OK, Json(serde_json::to_value(&_workflow_request).unwrap()))
+    (StatusCode::OK, Json(serde_json::to_value(&_workflow_request).unwrap())).into_response()
 }
 
 /// Translate a `WorkflowResponse` into an Axum response with the correct

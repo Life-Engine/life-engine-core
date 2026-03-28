@@ -8,7 +8,10 @@ use life_engine_types::workflow::{
 };
 
 use crate::config::{generate_schema, PluginSchemaDeclaration};
-use crate::types::{translate_request, translate_response, GraphqlRequest};
+use crate::types::{
+    is_valid_cdm_collection, translate_request, translate_response, validate_mutation_collection,
+    GraphqlRequest, CDM_COLLECTIONS,
+};
 
 // ── Test 1: GraphQL request → WorkflowRequest translation (Req 8.1) ──
 
@@ -252,4 +255,69 @@ fn translate_error_response_with_no_explicit_errors() {
         errors[0].get("message").unwrap().as_str().unwrap(),
         "Access denied"
     );
+}
+
+// ── Test 7: CDM collection allowlist (CB-15) ──
+
+#[test]
+fn cdm_collections_has_seven_entries() {
+    assert_eq!(CDM_COLLECTIONS.len(), 7);
+}
+
+#[test]
+fn valid_cdm_collections_accepted() {
+    for name in CDM_COLLECTIONS {
+        assert!(
+            is_valid_cdm_collection(name),
+            "'{name}' should be a valid CDM collection"
+        );
+    }
+}
+
+#[test]
+fn invalid_collection_rejected() {
+    assert!(!is_valid_cdm_collection("widgets"));
+    assert!(!is_valid_cdm_collection("internal_tables"));
+    assert!(!is_valid_cdm_collection(""));
+}
+
+#[test]
+fn mutation_with_valid_collection_passes() {
+    let req = GraphqlRequest {
+        query: "mutation { createRecord(collection: \"tasks\") { id } }".into(),
+        operation_name: None,
+        variables: HashMap::from([("collection".into(), serde_json::json!("tasks"))]),
+    };
+    assert!(validate_mutation_collection(&req).is_ok());
+}
+
+#[test]
+fn mutation_with_invalid_collection_fails() {
+    let req = GraphqlRequest {
+        query: "mutation { createRecord(collection: \"widgets\") { id } }".into(),
+        operation_name: None,
+        variables: HashMap::from([("collection".into(), serde_json::json!("widgets"))]),
+    };
+    assert!(validate_mutation_collection(&req).is_err());
+    assert_eq!(validate_mutation_collection(&req).unwrap_err(), "widgets");
+}
+
+#[test]
+fn query_with_any_collection_passes() {
+    let req = GraphqlRequest {
+        query: "{ widgets { id } }".into(),
+        operation_name: None,
+        variables: HashMap::from([("collection".into(), serde_json::json!("widgets"))]),
+    };
+    assert!(validate_mutation_collection(&req).is_ok());
+}
+
+#[test]
+fn mutation_without_collection_variable_passes() {
+    let req = GraphqlRequest {
+        query: "mutation { deleteAll }".into(),
+        operation_name: None,
+        variables: HashMap::new(),
+    };
+    assert!(validate_mutation_collection(&req).is_ok());
 }

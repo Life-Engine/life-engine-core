@@ -46,8 +46,16 @@ pub fn translate_request(req: &GraphqlRequest, identity: Identity) -> WorkflowRe
         })
         .collect();
 
+    // Determine whether this is a mutation or a query based on the GraphQL document.
+    let is_mutation = req.query.trim_start().starts_with("mutation");
+    let workflow = if is_mutation {
+        "graphql.mutation"
+    } else {
+        "graphql.query"
+    };
+
     WorkflowRequest {
-        workflow: "graphql.query".into(),
+        workflow: workflow.into(),
         identity,
         params: HashMap::new(),
         query,
@@ -58,6 +66,50 @@ pub fn translate_request(req: &GraphqlRequest, identity: Identity) -> WorkflowRe
             source_binding: "graphql".into(),
         },
     }
+}
+
+/// The set of valid CDM collection names that mutations may target.
+///
+/// Mutations referencing a collection outside this set are rejected before
+/// reaching the workflow engine.
+pub const CDM_COLLECTIONS: &[&str] = &[
+    "events",
+    "tasks",
+    "contacts",
+    "notes",
+    "emails",
+    "files",
+    "credentials",
+];
+
+/// Check whether a collection name is a valid CDM collection.
+pub fn is_valid_cdm_collection(name: &str) -> bool {
+    CDM_COLLECTIONS.contains(&name)
+}
+
+/// Extract the `collection` variable from a GraphQL mutation request and
+/// validate it against the CDM allowlist.
+///
+/// Returns `Ok(())` if the request is not a mutation, has no `collection`
+/// variable, or the collection is in the allowlist. Returns `Err` with
+/// the invalid collection name otherwise.
+pub fn validate_mutation_collection(req: &GraphqlRequest) -> Result<(), String> {
+    let is_mutation = req.query.trim_start().starts_with("mutation");
+    if !is_mutation {
+        return Ok(());
+    }
+
+    if let Some(collection_val) = req.variables.get("collection") {
+        let collection = match collection_val {
+            serde_json::Value::String(s) => s.as_str(),
+            _ => return Err(collection_val.to_string()),
+        };
+        if !is_valid_cdm_collection(collection) {
+            return Err(collection.to_string());
+        }
+    }
+
+    Ok(())
 }
 
 /// GraphQL-shaped success envelope (Requirement 8.2).

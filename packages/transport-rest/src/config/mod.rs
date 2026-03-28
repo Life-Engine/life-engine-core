@@ -6,6 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
+use std::path::Path;
 
 use crate::error::RestError;
 
@@ -152,43 +153,64 @@ fn default_rest_routes() -> Vec<RouteConfig> {
     ]
 }
 
+/// Write the default listener config to a YAML file in the given directory.
+///
+/// Creates a `listeners.yaml` file at `config_dir/listeners.yaml`.
+/// Returns the path to the written file.
+pub fn write_default_config(config_dir: &Path) -> Result<std::path::PathBuf, RestError> {
+    let config = default_listener_config();
+    let yaml = serde_yaml::to_string(&config).map_err(|e| {
+        RestError::InvalidConfig(format!("failed to serialize default config: {e}"))
+    })?;
+    let path = config_dir.join("listeners.yaml");
+    std::fs::write(&path, &yaml).map_err(|e| {
+        RestError::InvalidConfig(format!("failed to write {}: {e}", path.display()))
+    })?;
+    Ok(path)
+}
+
 // ── Validation (Requirements 1, 4, 15) ───────────────────────────────
 
-/// Validate a listener config, returning all errors found.
+/// Validate a listener config, collecting all errors found.
+///
+/// Returns all violations (not just the first) so the user can fix
+/// everything in one pass.
 pub fn validate_listener(config: &ListenerConfig) -> Result<(), RestError> {
+    let mut errors: Vec<String> = Vec::new();
+
     // Port range check.
     if config.port == 0 {
-        return Err(RestError::InvalidConfig(
-            "port must be between 1 and 65535".to_string(),
-        ));
+        errors.push("port must be between 1 and 65535".to_string());
     }
 
     // TLS cert/key existence check (Requirement 15).
-    if let Some(tls) = &config.tls
-        && (tls.cert.is_empty() || tls.key.is_empty())
-    {
-        return Err(RestError::InvalidConfig(
-            "TLS config requires both cert and key paths".to_string(),
-        ));
+    if let Some(tls) = &config.tls {
+        if tls.cert.is_empty() || tls.key.is_empty() {
+            errors.push("TLS config requires both cert and key paths".to_string());
+        }
     }
 
-    // Collect all routes across handlers for duplicate detection.
+    // Collect all routes across handlers for duplicate detection and namespace validation.
     let mut seen = HashSet::new();
     for handler in &config.handlers {
         for route in &handler.routes {
             let key = format!("{} {}", route.method.to_uppercase(), route.path);
             if !seen.insert(key.clone()) {
-                return Err(RestError::InvalidConfig(format!(
-                    "duplicate route: {key}"
-                )));
+                errors.push(format!("duplicate route: {key}"));
             }
 
             // Namespace validation (Requirement 4).
-            validate_route_namespace(&handler.handler_type, route)?;
+            if let Err(e) = validate_route_namespace(&handler.handler_type, route) {
+                errors.push(e.to_string());
+            }
         }
     }
 
-    Ok(())
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(RestError::InvalidConfig(errors.join("; ")))
+    }
 }
 
 /// Ensure REST routes start with `/api/` and GraphQL routes start with `/graphql`.

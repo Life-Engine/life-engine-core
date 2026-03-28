@@ -787,22 +787,22 @@ Build the HTTP entry point: listener configuration, route merging, REST and Grap
 
 ### 9.1 — Transport Configuration
 
-- [ ] Define config structs in `packages/transport-rest/src/config/`: `ListenerConfig` with fields: `binding: String`, `port: u16`, `address: String`, `tls: Option<TlsConfig>`, `auth: AuthConfig`, `handlers: Vec<HandlerConfig>`. `HandlerConfig` with `handler_type: HandlerType` (Rest, GraphQL) and `routes: Vec<RouteConfig>`. `RouteConfig` with `method: HttpMethod`, `path: String`, `workflow: String`, `public: bool`. `TlsConfig` with `cert: PathBuf`, `key: PathBuf`. `AuthConfig` with `verify: AuthMode` (Token, None).
+- [x] Define config structs in `packages/transport-rest/src/config/`: `ListenerConfig` with fields: `binding: String`, `port: u16`, `address: String`, `tls: Option<TlsConfig>`, `auth: AuthConfig`, `handlers: Vec<HandlerConfig>`. `HandlerConfig` with `handler_type: HandlerType` (Rest, GraphQL) and `routes: Vec<RouteConfig>`. `RouteConfig` with `method: HttpMethod`, `path: String`, `workflow: String`, `public: bool`. `TlsConfig` with `cert: PathBuf`, `key: PathBuf`. `AuthConfig` with `verify: AuthMode` (Token, None).
   <!-- files: packages/transport-rest/src/config/types.rs -->
   <!-- purpose: Define the listener configuration model -->
   <!-- requirements: transport-layer 1.1, 1.2, 1.3 -->
 
-- [ ] Implement config validation: verify port is in valid range, TLS cert/key files exist when TLS is configured, no duplicate routes (same method + path), REST routes start with `/api/`, GraphQL routes start with `/graphql`. Return all violations (not just the first) with human-readable error messages.
+- [x] Implement config validation: verify port is in valid range, TLS cert/key files exist when TLS is configured, no duplicate routes (same method + path), REST routes start with `/api/`, GraphQL routes start with `/graphql`. Return all violations (not just the first) with human-readable error messages.
   <!-- files: packages/transport-rest/src/config/validation.rs -->
   <!-- purpose: Catch config errors at startup -->
   <!-- requirements: transport-layer 1.1, 4.1, 4.2, 4.3, 15.1 -->
 
-- [ ] Implement default config generation: on first run, generate a default `listeners.yaml` with generic CRUD routes (`collection.list`, `collection.get`, `collection.create`, `collection.update`, `collection.delete`), GraphQL endpoint, and public health check. Write to the config directory.
+- [x] Implement default config generation: on first run, generate a default `listeners.yaml` with generic CRUD routes (`collection.list`, `collection.get`, `collection.create`, `collection.update`, `collection.delete`), GraphQL endpoint, and public health check. Write to the config directory.
   <!-- files: packages/transport-rest/src/config/defaults.rs -->
   <!-- purpose: Provide a working out-of-the-box configuration -->
   <!-- requirements: transport-layer 2.1, 2.2, 2.3, 2.4 -->
 
-- [ ] Write unit tests: config parsing from YAML, validation errors for invalid configs, default generation produces parseable config.
+- [x] Write unit tests: config parsing from YAML, validation errors for invalid configs, default generation produces parseable config.
   <!-- files: packages/transport-rest/src/config/tests.rs -->
   <!-- purpose: Verify config infrastructure -->
   <!-- requirements: transport-layer 1.1, 2.1 -->

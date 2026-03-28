@@ -4,7 +4,7 @@ mod middleware_test;
 
 use crate::config::{
     HandlerConfig, ListenerConfig, PluginRoute, RouteConfig, TlsConfig,
-    default_listener_config, merge_routes, validate_listener,
+    default_listener_config, merge_routes, validate_listener, write_default_config,
 };
 use crate::router::build_router;
 use axum::body::Body;
@@ -217,6 +217,92 @@ fn test_merge_routes_detects_conflict() {
         msg.contains("conflicts"),
         "error should mention conflict: {msg}"
     );
+}
+
+// ── Multi-error validation tests ─────────────────────────────────────
+
+#[test]
+fn test_validation_collects_all_errors() {
+    let config = ListenerConfig {
+        binding: "test".into(),
+        port: 0,
+        address: "127.0.0.1".into(),
+        tls: Some(TlsConfig {
+            cert: String::new(),
+            key: String::new(),
+        }),
+        auth: None,
+        handlers: vec![HandlerConfig {
+            handler_type: "rest".into(),
+            routes: vec![RouteConfig {
+                method: "GET".into(),
+                path: "/graphql".into(),
+                workflow: "bad".into(),
+                public: false,
+            }],
+        }],
+    };
+    let err = validate_listener(&config).unwrap_err();
+    let msg = err.to_string();
+    assert!(msg.contains("port"), "should report port error: {msg}");
+    assert!(msg.contains("TLS"), "should report TLS error: {msg}");
+    assert!(
+        msg.contains("must start with /api/"),
+        "should report namespace error: {msg}"
+    );
+}
+
+// ── YAML parsing tests ──────────────────────────────────────────────
+
+#[test]
+fn test_config_parses_from_yaml() {
+    let yaml = r#"
+binding: test
+port: 8080
+address: "0.0.0.0"
+handlers:
+  - type: rest
+    routes:
+      - method: GET
+        path: /api/v1/health
+        workflow: health.check
+        public: true
+"#;
+    let config: ListenerConfig = serde_yaml::from_str(yaml).expect("should parse YAML");
+    assert_eq!(config.port, 8080);
+    assert_eq!(config.address, "0.0.0.0");
+    assert_eq!(config.handlers.len(), 1);
+    assert_eq!(config.handlers[0].routes[0].workflow, "health.check");
+    assert!(config.handlers[0].routes[0].public);
+}
+
+#[test]
+fn test_config_yaml_defaults_applied() {
+    let yaml = r#"
+port: 3000
+handlers: []
+"#;
+    let config: ListenerConfig = serde_yaml::from_str(yaml).expect("should parse YAML");
+    assert_eq!(config.binding, "default");
+    assert_eq!(config.address, "127.0.0.1");
+}
+
+// ── Default config file generation tests ─────────────────────────────
+
+#[test]
+fn test_write_default_config_produces_parseable_yaml() {
+    let dir = std::env::temp_dir().join("le-config-test");
+    std::fs::create_dir_all(&dir).unwrap();
+
+    let path = write_default_config(&dir).expect("should write config");
+    assert!(path.exists(), "file should exist at {}", path.display());
+
+    let contents = std::fs::read_to_string(&path).unwrap();
+    let parsed: ListenerConfig =
+        serde_yaml::from_str(&contents).expect("written YAML should parse back");
+    validate_listener(&parsed).expect("written config should be valid");
+
+    std::fs::remove_dir_all(&dir).ok();
 }
 
 // ── Router construction + path parameter extraction tests ────────────

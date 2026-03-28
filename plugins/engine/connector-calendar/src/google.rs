@@ -9,8 +9,8 @@ use std::collections::HashMap;
 
 use base64::Engine as _;
 use chrono::{DateTime, Duration, Utc};
-use life_engine_types::CalendarEvent;
 use life_engine_types::events::{Attendee, Recurrence};
+use life_engine_types::CalendarEvent;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -253,9 +253,7 @@ pub async fn exchange_code(
 
     Ok(TokenState {
         access_token: token_resp.access_token,
-        refresh_token: token_resp
-            .refresh_token
-            .unwrap_or_default(),
+        refresh_token: token_resp.refresh_token.unwrap_or_default(),
         expires_at: Utc::now() + Duration::seconds(token_resp.expires_in),
         scopes,
     })
@@ -554,10 +552,7 @@ impl GoogleCalendarClient {
     /// Update the sync token for a specific calendar after a successful sync.
     pub fn update_sync_token(&mut self, token: String) {
         // Legacy: store under "primary" key
-        let state = self
-            .sync_states
-            .entry("primary".to_string())
-            .or_default();
+        let state = self.sync_states.entry("primary".to_string()).or_default();
         state.sync_token = Some(token);
         state.last_sync = Some(Utc::now());
     }
@@ -569,10 +564,7 @@ impl GoogleCalendarClient {
         sync_token: Option<String>,
         page_token: Option<String>,
     ) {
-        let state = self
-            .sync_states
-            .entry(calendar_id.to_string())
-            .or_default();
+        let state = self.sync_states.entry(calendar_id.to_string()).or_default();
         state.sync_token = sync_token;
         state.page_token = page_token;
         state.last_sync = Some(Utc::now());
@@ -641,13 +633,14 @@ impl GoogleCalendarClient {
 
         map_error_response(&response)?;
 
-        let list: GoogleCalendarListResponse = response
-            .json()
-            .await
-            .map_err(|e| GoogleApiError::ApiError {
-                status: 0,
-                body: e.to_string(),
-            })?;
+        let list: GoogleCalendarListResponse =
+            response
+                .json()
+                .await
+                .map_err(|e| GoogleApiError::ApiError {
+                    status: 0,
+                    body: e.to_string(),
+                })?;
 
         Ok(list.items)
     }
@@ -670,14 +663,12 @@ impl GoogleCalendarClient {
         let client = reqwest::Client::new();
 
         let encoded_id = urlencoding::encode(calendar_id);
-        let url_str = format!(
-            "https://www.googleapis.com/calendar/v3/calendars/{encoded_id}/events"
-        );
-        let mut url =
-            reqwest::Url::parse(&url_str).map_err(|e| GoogleApiError::ApiError {
-                status: 0,
-                body: e.to_string(),
-            })?;
+        let url_str =
+            format!("https://www.googleapis.com/calendar/v3/calendars/{encoded_id}/events");
+        let mut url = reqwest::Url::parse(&url_str).map_err(|e| GoogleApiError::ApiError {
+            status: 0,
+            body: e.to_string(),
+        })?;
 
         {
             let mut params = url.query_pairs_mut();
@@ -713,13 +704,14 @@ impl GoogleCalendarClient {
 
         map_error_response(&response)?;
 
-        let events_response: GoogleEventsListResponse = response
-            .json()
-            .await
-            .map_err(|e| GoogleApiError::ApiError {
-                status: 0,
-                body: e.to_string(),
-            })?;
+        let events_response: GoogleEventsListResponse =
+            response
+                .json()
+                .await
+                .map_err(|e| GoogleApiError::ApiError {
+                    status: 0,
+                    body: e.to_string(),
+                })?;
 
         Ok(events_response)
     }
@@ -756,14 +748,13 @@ impl GoogleCalendarClient {
 
         map_error_response(&response)?;
 
-        let event: GoogleEvent =
-            response
-                .json()
-                .await
-                .map_err(|e| GoogleApiError::ApiError {
-                    status: 0,
-                    body: e.to_string(),
-                })?;
+        let event: GoogleEvent = response
+            .json()
+            .await
+            .map_err(|e| GoogleApiError::ApiError {
+                status: 0,
+                body: e.to_string(),
+            })?;
 
         Ok(event)
     }
@@ -839,11 +830,7 @@ impl GoogleCalendarClient {
 
             for google_event in &response.items {
                 // Skip cancelled events
-                if google_event
-                    .status
-                    .as_deref()
-                    == Some("cancelled")
-                {
+                if google_event.status.as_deref() == Some("cancelled") {
                     continue;
                 }
 
@@ -863,11 +850,7 @@ impl GoogleCalendarClient {
                 page_token = Some(next_page);
             } else {
                 // Final page: store the new sync token
-                self.update_calendar_sync_state(
-                    calendar_id,
-                    response.next_sync_token,
-                    None,
-                );
+                self.update_calendar_sync_state(calendar_id, response.next_sync_token, None);
                 break;
             }
         }
@@ -938,37 +921,38 @@ impl GoogleCalendarClient {
                 serde_json::Value::String(color_id.clone()),
             );
         }
-        if let Some(ref creator) = event.creator
-            && let Some(ref email) = creator.email
-        {
-            ext.insert(
-                "creator_email".to_string(),
-                serde_json::Value::String(email.clone()),
-            );
+        if let Some(ref creator) = event.creator {
+            if let Some(ref email) = creator.email {
+                ext.insert(
+                    "creator_email".to_string(),
+                    serde_json::Value::String(email.clone()),
+                );
+            }
         }
-        if let Some(ref organizer) = event.organizer
-            && let Some(ref email) = organizer.email
-        {
-            ext.insert(
-                "organizer_email".to_string(),
-                serde_json::Value::String(email.clone()),
-            );
+        if let Some(ref organizer) = event.organizer {
+            if let Some(ref email) = organizer.email {
+                ext.insert(
+                    "organizer_email".to_string(),
+                    serde_json::Value::String(email.clone()),
+                );
+            }
         }
-        if let Some(ref conf_data) = event.conference_data
-            && let Some(entry_points) = conf_data.get("entryPoints")
-            && let Some(first) = entry_points.as_array().and_then(|a| a.first())
-            && let Some(uri) = first.get("uri").and_then(|u| u.as_str())
-        {
-            ext.insert(
-                "conference_uri".to_string(),
-                serde_json::Value::String(uri.to_string()),
-            );
+        if let Some(ref conf_data) = event.conference_data {
+            if let Some(uri) = conf_data
+                .get("entryPoints")
+                .and_then(|ep| ep.as_array())
+                .and_then(|a| a.first())
+                .and_then(|first| first.get("uri"))
+                .and_then(|u| u.as_str())
+            {
+                ext.insert(
+                    "conference_uri".to_string(),
+                    serde_json::Value::String(uri.to_string()),
+                );
+            }
         }
         if let Some(ref etag) = event.etag {
-            ext.insert(
-                "etag".to_string(),
-                serde_json::Value::String(etag.clone()),
-            );
+            ext.insert("etag".to_string(), serde_json::Value::String(etag.clone()));
         }
 
         let extensions = if ext.is_empty() {
@@ -1082,12 +1066,8 @@ fn map_error_response(response: &reqwest::Response) -> Result<(), GoogleApiError
 
     match status.as_u16() {
         401 => Err(GoogleApiError::AuthExpired),
-        403 => Err(GoogleApiError::PermissionDenied(
-            "forbidden".to_string(),
-        )),
-        404 => Err(GoogleApiError::NotFound(
-            response.url().to_string(),
-        )),
+        403 => Err(GoogleApiError::PermissionDenied("forbidden".to_string())),
+        404 => Err(GoogleApiError::NotFound(response.url().to_string())),
         410 => Err(GoogleApiError::SyncTokenExpired),
         429 => {
             let retry_after = response
@@ -1129,8 +1109,7 @@ mod tests {
     fn google_config_serialization() {
         let config = test_config();
         let json = serde_json::to_string(&config).expect("serialize");
-        let restored: GoogleCalendarConfig =
-            serde_json::from_str(&json).expect("deserialize");
+        let restored: GoogleCalendarConfig = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(restored.client_id, "test-client-id");
         assert_eq!(restored.client_secret_key, "google_cal_client_secret");
         assert_eq!(restored.refresh_token_key, "google_cal_refresh_token");
@@ -1141,8 +1120,7 @@ mod tests {
         let json = r#"{
             "client_id": "id"
         }"#;
-        let config: GoogleCalendarConfig =
-            serde_json::from_str(json).expect("deserialize");
+        let config: GoogleCalendarConfig = serde_json::from_str(json).expect("deserialize");
         assert_eq!(config.auth_endpoint, DEFAULT_AUTH_ENDPOINT);
         assert_eq!(config.token_endpoint, DEFAULT_TOKEN_ENDPOINT);
         assert!(!config.redirect_uri.is_empty());
@@ -1171,11 +1149,7 @@ mod tests {
         let mut client = GoogleCalendarClient::new(test_config());
         assert!(client.sync_state("cal-1").is_none());
 
-        client.update_calendar_sync_state(
-            "cal-1",
-            Some("sync-abc".to_string()),
-            None,
-        );
+        client.update_calendar_sync_state("cal-1", Some("sync-abc".to_string()), None);
         let state = client.sync_state("cal-1").expect("should have state");
         assert_eq!(state.sync_token.as_deref(), Some("sync-abc"));
         assert!(state.last_sync.is_some());
@@ -1185,11 +1159,7 @@ mod tests {
     #[test]
     fn google_client_reset_sync_state() {
         let mut client = GoogleCalendarClient::new(test_config());
-        client.update_calendar_sync_state(
-            "cal-1",
-            Some("sync-abc".to_string()),
-            None,
-        );
+        client.update_calendar_sync_state("cal-1", Some("sync-abc".to_string()), None);
         assert!(client.sync_state("cal-1").is_some());
 
         client.reset_sync_state("cal-1");
@@ -1204,8 +1174,7 @@ mod tests {
             page_token: None,
         };
         let json = serde_json::to_string(&state).expect("serialize");
-        let restored: GoogleSyncState =
-            serde_json::from_str(&json).expect("deserialize");
+        let restored: GoogleSyncState = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(restored.sync_token.as_deref(), Some("token-123"));
     }
 
@@ -1219,10 +1188,7 @@ mod tests {
             "verifier length {} not in range 43..=128",
             verifier.len()
         );
-        assert!(
-            !challenge.is_empty(),
-            "challenge should not be empty"
-        );
+        assert!(!challenge.is_empty(), "challenge should not be empty");
     }
 
     #[test]
@@ -1405,7 +1371,10 @@ mod tests {
         assert!(cal_event.start < cal_event.end.unwrap());
 
         // Verify extensions
-        let extensions = cal_event.extensions.as_ref().expect("should have extensions");
+        let extensions = cal_event
+            .extensions
+            .as_ref()
+            .expect("should have extensions");
         let ns = extensions
             .get("com.life-engine.connector-calendar")
             .expect("should have namespace");
@@ -1417,14 +1386,8 @@ mod tests {
             ns.get("html_link").and_then(|v| v.as_str()),
             Some("https://calendar.google.com/event?eid=abc")
         );
-        assert_eq!(
-            ns.get("status").and_then(|v| v.as_str()),
-            Some("confirmed")
-        );
-        assert_eq!(
-            ns.get("color_id").and_then(|v| v.as_str()),
-            Some("5")
-        );
+        assert_eq!(ns.get("status").and_then(|v| v.as_str()), Some("confirmed"));
+        assert_eq!(ns.get("color_id").and_then(|v| v.as_str()), Some("5"));
         assert_eq!(
             ns.get("creator_email").and_then(|v| v.as_str()),
             Some("creator@example.com")
@@ -1474,7 +1437,10 @@ mod tests {
             GoogleCalendarClient::normalize_google_event(&event).expect("should normalize");
         assert_eq!(cal_event.title, "Company Holiday");
         assert_eq!(cal_event.start.date_naive().to_string(), "2026-03-25");
-        assert_eq!(cal_event.end.unwrap().date_naive().to_string(), "2026-03-26");
+        assert_eq!(
+            cal_event.end.unwrap().date_naive().to_string(),
+            "2026-03-26"
+        );
     }
 
     #[test]
@@ -1511,7 +1477,11 @@ mod tests {
         let cal_event =
             GoogleCalendarClient::normalize_google_event(&event).expect("should normalize");
         assert_eq!(
-            cal_event.recurrence.as_ref().map(|r| r.to_rrule()).as_deref(),
+            cal_event
+                .recurrence
+                .as_ref()
+                .map(|r| r.to_rrule())
+                .as_deref(),
             Some("FREQ=DAILY;COUNT=30")
         );
     }
@@ -1785,10 +1755,15 @@ mod tests {
 
         let json = serde_json::to_string(&event).expect("serialize");
         // Verify camelCase keys in JSON
-        assert!(json.contains("\"htmlLink\""), "should use camelCase htmlLink");
+        assert!(
+            json.contains("\"htmlLink\""),
+            "should use camelCase htmlLink"
+        );
         assert!(json.contains("\"colorId\""), "should use camelCase colorId");
-        assert!(json.contains("\"conferenceData\"") || !json.contains("conference_data"),
-            "should use camelCase conferenceData or omit");
+        assert!(
+            json.contains("\"conferenceData\"") || !json.contains("conference_data"),
+            "should use camelCase conferenceData or omit"
+        );
     }
 
     #[test]
@@ -1836,16 +1811,12 @@ mod tests {
             ]
         }"#;
 
-        let response: GoogleCalendarListResponse =
-            serde_json::from_str(json).expect("deserialize");
+        let response: GoogleCalendarListResponse = serde_json::from_str(json).expect("deserialize");
         assert_eq!(response.items.len(), 1);
         assert_eq!(response.items[0].id, "primary");
         assert_eq!(response.items[0].summary.as_deref(), Some("My Calendar"));
         assert!(response.items[0].primary);
-        assert_eq!(
-            response.items[0].access_role.as_deref(),
-            Some("owner")
-        );
+        assert_eq!(response.items[0].access_role.as_deref(), Some("owner"));
     }
 
     #[test]
@@ -1862,14 +1833,10 @@ mod tests {
             "nextSyncToken": "sync-token-xyz"
         }"#;
 
-        let response: GoogleEventsListResponse =
-            serde_json::from_str(json).expect("deserialize");
+        let response: GoogleEventsListResponse = serde_json::from_str(json).expect("deserialize");
         assert_eq!(response.items.len(), 1);
         assert_eq!(response.items[0].id, "evt-1");
-        assert_eq!(
-            response.next_sync_token.as_deref(),
-            Some("sync-token-xyz")
-        );
+        assert_eq!(response.next_sync_token.as_deref(), Some("sync-token-xyz"));
         assert!(response.next_page_token.is_none());
     }
 
@@ -1880,13 +1847,9 @@ mod tests {
             "nextPageToken": "page-2"
         }"#;
 
-        let response: GoogleEventsListResponse =
-            serde_json::from_str(json).expect("deserialize");
+        let response: GoogleEventsListResponse = serde_json::from_str(json).expect("deserialize");
         assert!(response.items.is_empty());
-        assert_eq!(
-            response.next_page_token.as_deref(),
-            Some("page-2")
-        );
+        assert_eq!(response.next_page_token.as_deref(), Some("page-2"));
         assert!(response.next_sync_token.is_none());
     }
 
@@ -1962,10 +1925,7 @@ mod tests {
         let cal_event =
             GoogleCalendarClient::normalize_google_event(&event).expect("should normalize");
         // +05:30 means UTC is 5h30m earlier
-        assert_eq!(
-            cal_event.start.to_rfc3339(),
-            "2026-03-21T04:30:00+00:00"
-        );
+        assert_eq!(cal_event.start.to_rfc3339(), "2026-03-21T04:30:00+00:00");
         assert_eq!(
             cal_event.end.unwrap().to_rfc3339(),
             "2026-03-21T05:30:00+00:00"
@@ -1987,7 +1947,11 @@ mod tests {
             GoogleCalendarClient::normalize_google_event(&event).expect("should normalize");
         // Only the RRULE component is parsed into Recurrence; EXDATE/RDATE are separate iCal properties
         assert_eq!(
-            cal_event.recurrence.as_ref().map(|r| r.to_rrule()).as_deref(),
+            cal_event
+                .recurrence
+                .as_ref()
+                .map(|r| r.to_rrule())
+                .as_deref(),
             Some("FREQ=WEEKLY;BYDAY=MO")
         );
     }
@@ -2178,10 +2142,7 @@ mod tests {
         assert_eq!(event.recurrence, vec!["RRULE:FREQ=DAILY;COUNT=5"]);
         assert_eq!(event.attendees.len(), 2);
         assert_eq!(event.attendees[0].email, "alice@corp.com");
-        assert_eq!(
-            event.attendees[0].display_name.as_deref(),
-            Some("Alice")
-        );
+        assert_eq!(event.attendees[0].display_name.as_deref(), Some("Alice"));
         assert_eq!(event.attendees[1].email, "bob@corp.com");
         assert!(event.attendees[1].display_name.is_none());
         assert_eq!(event.location.as_deref(), Some("Conference Room A"));
@@ -2234,10 +2195,7 @@ mod tests {
     fn google_datetime_deserialization_timed() {
         let json = r#"{ "dateTime": "2026-07-01T15:00:00+02:00", "timeZone": "Europe/Berlin" }"#;
         let gdt: GoogleDateTime = serde_json::from_str(json).expect("deserialize");
-        assert_eq!(
-            gdt.date_time.as_deref(),
-            Some("2026-07-01T15:00:00+02:00")
-        );
+        assert_eq!(gdt.date_time.as_deref(), Some("2026-07-01T15:00:00+02:00"));
         assert_eq!(gdt.time_zone.as_deref(), Some("Europe/Berlin"));
         assert!(gdt.date.is_none());
     }
@@ -2319,8 +2277,7 @@ mod tests {
             is_self: true,
         };
         let json = serde_json::to_string(&creator).expect("serialize");
-        let restored: GoogleEventCreator =
-            serde_json::from_str(&json).expect("deserialize");
+        let restored: GoogleEventCreator = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(restored.email.as_deref(), Some("user@example.com"));
         assert!(restored.is_self);
     }
@@ -2333,8 +2290,7 @@ mod tests {
             is_self: false,
         };
         let json = serde_json::to_string(&organizer).expect("serialize");
-        let restored: GoogleEventOrganizer =
-            serde_json::from_str(&json).expect("deserialize");
+        let restored: GoogleEventOrganizer = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(restored.email.as_deref(), Some("org@example.com"));
         assert!(!restored.is_self);
     }

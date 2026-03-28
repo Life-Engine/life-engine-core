@@ -26,6 +26,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use life_engine_plugin_sdk::prelude::*;
+use life_engine_plugin_sdk::retry::RetryState;
 use life_engine_plugin_sdk::types::Capability;
 
 use crate::caldav::{CalDavClient, CalDavConfig};
@@ -47,6 +48,8 @@ pub struct CalendarConnectorPlugin {
     last_sync: Option<DateTime<Utc>>,
     /// PKCE code verifier for in-flight OAuth2 flows.
     pkce_verifier: Option<String>,
+    /// Retry state for exponential backoff on transient sync failures.
+    retry_state: RetryState,
 }
 
 impl CalendarConnectorPlugin {
@@ -58,6 +61,7 @@ impl CalendarConnectorPlugin {
             sync_interval: Duration::from_secs(300), // 5 minutes
             last_sync: None,
             pkce_verifier: None,
+            retry_state: RetryState::with_config(5, 60, 3600).with_jitter(true),
         }
     }
 
@@ -147,10 +151,9 @@ impl CalendarConnectorPlugin {
         auth_code: &str,
         client_secret: &str,
     ) -> anyhow::Result<()> {
-        let verifier = self
-            .pkce_verifier
-            .take()
-            .ok_or_else(|| anyhow::anyhow!("no PKCE verifier found — call google_auth_url first"))?;
+        let verifier = self.pkce_verifier.take().ok_or_else(|| {
+            anyhow::anyhow!("no PKCE verifier found — call google_auth_url first")
+        })?;
 
         let config = self
             .google
@@ -159,9 +162,10 @@ impl CalendarConnectorPlugin {
             .config()
             .clone();
 
-        let token_state = crate::google::exchange_code(&config, auth_code, &verifier, client_secret)
-            .await
-            .map_err(|e| anyhow::anyhow!("code exchange failed: {e}"))?;
+        let token_state =
+            crate::google::exchange_code(&config, auth_code, &verifier, client_secret)
+                .await
+                .map_err(|e| anyhow::anyhow!("code exchange failed: {e}"))?;
 
         if let Some(ref mut client) = self.google {
             client.set_token_state(token_state);
@@ -309,7 +313,9 @@ impl CorePlugin for CalendarConnectorPlugin {
 
     async fn handle_event(&self, event: &CoreEvent) -> Result<()> {
         // Only handle events for the 'events' collection
-        let collection = event.payload.get("collection")
+        let collection = event
+            .payload
+            .get("collection")
             .and_then(|v| v.as_str())
             .unwrap_or("");
         if collection != "events" {
@@ -319,7 +325,10 @@ impl CorePlugin for CalendarConnectorPlugin {
         match event.event_type.as_str() {
             "data.created" | "data.updated" => {
                 if let Some(data) = event.payload.get("data") {
-                    let source = data.get("source").and_then(|v| v.as_str()).unwrap_or("local");
+                    let source = data
+                        .get("source")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("local");
                     tracing::info!(
                         event_type = %event.event_type,
                         source = %source,
@@ -327,19 +336,31 @@ impl CorePlugin for CalendarConnectorPlugin {
                     );
                     match source {
                         "caldav" => {
-                            if let Some(ref _client) = self.caldav
-                                && let Ok(cal_event) = serde_json::from_value::<life_engine_types::CalendarEvent>(data.clone())
-                            {
-                                let ical = crate::caldav::build_vevent_ical(&cal_event);
-                                tracing::debug!(ical_len = ical.len(), "built VEVENT for CalDAV push");
+                            if let Some(ref _client) = self.caldav {
+                                if let Ok(cal_event) =
+                                    serde_json::from_value::<life_engine_types::CalendarEvent>(
+                                        data.clone(),
+                                    )
+                                {
+                                    let ical = crate::caldav::build_vevent_ical(&cal_event);
+                                    tracing::debug!(
+                                        ical_len = ical.len(),
+                                        "built VEVENT for CalDAV push"
+                                    );
+                                }
                             }
                         }
                         "google-calendar" => {
-                            if let Some(ref _client) = self.google
-                                && let Ok(cal_event) = serde_json::from_value::<life_engine_types::CalendarEvent>(data.clone())
-                            {
-                                let google_event = crate::google::build_google_event(&cal_event);
-                                tracing::debug!(google_event_id = %google_event.id, "built Google event for push");
+                            if let Some(ref _client) = self.google {
+                                if let Ok(cal_event) =
+                                    serde_json::from_value::<life_engine_types::CalendarEvent>(
+                                        data.clone(),
+                                    )
+                                {
+                                    let google_event =
+                                        crate::google::build_google_event(&cal_event);
+                                    tracing::debug!(google_event_id = %google_event.id, "built Google event for push");
+                                }
                             }
                         }
                         _ => {
@@ -350,7 +371,11 @@ impl CorePlugin for CalendarConnectorPlugin {
             }
             "data.deleted" => {
                 if let Some(id) = event.payload.get("id").and_then(|v| v.as_str()) {
-                    let source = event.payload.get("source").and_then(|v| v.as_str()).unwrap_or("local");
+                    let source = event
+                        .payload
+                        .get("source")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("local");
                     tracing::info!(
                         event_type = %event.event_type,
                         id = %id,
@@ -372,7 +397,10 @@ mod tests {
     #[test]
     fn plugin_id_is_correct() {
         let plugin = CalendarConnectorPlugin::new();
-        assert_eq!(CorePlugin::id(&plugin), "com.life-engine.connector-calendar");
+        assert_eq!(
+            CorePlugin::id(&plugin),
+            "com.life-engine.connector-calendar"
+        );
     }
 
     #[test]
@@ -391,20 +419,32 @@ mod tests {
     fn plugin_capabilities() {
         let plugin = CalendarConnectorPlugin::new();
         use life_engine_test_utils::assert_plugin_capabilities;
-        assert_plugin_capabilities!(plugin, [
-            Capability::StorageRead,
-            Capability::StorageWrite,
-            Capability::HttpOutbound,
-            Capability::CredentialsRead,
-            Capability::CredentialsWrite,
-        ]);
+        assert_plugin_capabilities!(
+            plugin,
+            [
+                Capability::StorageRead,
+                Capability::StorageWrite,
+                Capability::HttpOutbound,
+                Capability::CredentialsRead,
+                Capability::CredentialsWrite,
+            ]
+        );
     }
 
     #[test]
     fn plugin_routes() {
         use life_engine_test_utils::assert_plugin_routes;
         let plugin = CalendarConnectorPlugin::new();
-        assert_plugin_routes!(plugin, ["/sync", "/status", "/calendars", "/google/auth", "/google/callback"]);
+        assert_plugin_routes!(
+            plugin,
+            [
+                "/sync",
+                "/status",
+                "/calendars",
+                "/google/auth",
+                "/google/callback"
+            ]
+        );
     }
 
     #[tokio::test]
@@ -455,15 +495,17 @@ mod tests {
 
     #[test]
     fn custom_sync_interval() {
-        let plugin =
-            CalendarConnectorPlugin::with_sync_interval(Duration::from_secs(60));
+        let plugin = CalendarConnectorPlugin::with_sync_interval(Duration::from_secs(60));
         assert_eq!(plugin.sync_interval(), Duration::from_secs(60));
     }
 
     #[test]
     fn default_impl() {
         let plugin = CalendarConnectorPlugin::default();
-        assert_eq!(CorePlugin::id(&plugin), "com.life-engine.connector-calendar");
+        assert_eq!(
+            CorePlugin::id(&plugin),
+            "com.life-engine.connector-calendar"
+        );
     }
 
     #[tokio::test]
@@ -569,10 +611,7 @@ mod tests {
             token_endpoint: crate::google::DEFAULT_TOKEN_ENDPOINT.to_string(),
         });
         assert!(plugin.google_client().is_some());
-        assert_eq!(
-            plugin.google_client().unwrap().config().client_id,
-            "id"
-        );
+        assert_eq!(plugin.google_client().unwrap().config().client_id, "id");
     }
 
     #[test]
@@ -588,7 +627,9 @@ mod tests {
         });
 
         // Use mutable accessor to update sync token
-        let client = plugin.google_client_mut().expect("should have google client");
+        let client = plugin
+            .google_client_mut()
+            .expect("should have google client");
         client.update_sync_token("new-sync-token-456".into());
 
         // Verify via immutable accessor
@@ -716,7 +757,16 @@ mod tests {
         let plugin = CalendarConnectorPlugin::new();
         let actions = Plugin::actions(&plugin);
         let names: Vec<&str> = actions.iter().map(|a| a.name.as_str()).collect();
-        assert_eq!(names, vec!["sync", "status", "calendars", "google_auth", "google_callback"]);
+        assert_eq!(
+            names,
+            vec![
+                "sync",
+                "status",
+                "calendars",
+                "google_auth",
+                "google_callback"
+            ]
+        );
     }
 
     #[test]
@@ -734,22 +784,22 @@ mod tests {
                 warnings: vec![],
             },
             payload: TypedPayload::Cdm(Box::new(CdmType::Task(life_engine_plugin_sdk::Task {
-                    id: uuid::Uuid::new_v4(),
-                    title: "test".into(),
-                    description: None,
-                    status: life_engine_plugin_sdk::TaskStatus::Pending,
-                    priority: life_engine_plugin_sdk::TaskPriority::Medium,
-                    due_date: None,
-                    completed_at: None,
-                    tags: vec![],
-                    assignee: None,
-                    parent_id: None,
-                    source: "test".into(),
-                    source_id: "t-1".into(),
-                    extensions: None,
-                    created_at: Utc::now(),
-                    updated_at: Utc::now(),
-                }))),
+                id: uuid::Uuid::new_v4(),
+                title: "test".into(),
+                description: None,
+                status: life_engine_plugin_sdk::TaskStatus::Pending,
+                priority: life_engine_plugin_sdk::TaskPriority::Medium,
+                due_date: None,
+                completed_at: None,
+                tags: vec![],
+                assignee: None,
+                parent_id: None,
+                source: "test".into(),
+                source_id: "t-1".into(),
+                extensions: None,
+                created_at: Utc::now(),
+                updated_at: Utc::now(),
+            }))),
         };
         let result = Plugin::execute(&plugin, "sync", msg);
         assert!(result.is_ok());
@@ -770,22 +820,22 @@ mod tests {
                 warnings: vec![],
             },
             payload: TypedPayload::Cdm(Box::new(CdmType::Task(life_engine_plugin_sdk::Task {
-                    id: uuid::Uuid::new_v4(),
-                    title: "test".into(),
-                    description: None,
-                    status: life_engine_plugin_sdk::TaskStatus::Pending,
-                    priority: life_engine_plugin_sdk::TaskPriority::Medium,
-                    due_date: None,
-                    completed_at: None,
-                    tags: vec![],
-                    assignee: None,
-                    parent_id: None,
-                    source: "test".into(),
-                    source_id: "t-1".into(),
-                    extensions: None,
-                    created_at: Utc::now(),
-                    updated_at: Utc::now(),
-                }))),
+                id: uuid::Uuid::new_v4(),
+                title: "test".into(),
+                description: None,
+                status: life_engine_plugin_sdk::TaskStatus::Pending,
+                priority: life_engine_plugin_sdk::TaskPriority::Medium,
+                due_date: None,
+                completed_at: None,
+                tags: vec![],
+                assignee: None,
+                parent_id: None,
+                source: "test".into(),
+                source_id: "t-1".into(),
+                extensions: None,
+                created_at: Utc::now(),
+                updated_at: Utc::now(),
+            }))),
         };
         let result = Plugin::execute(&plugin, "nonexistent", msg);
         assert!(result.is_err());

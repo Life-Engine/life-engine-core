@@ -2,6 +2,8 @@
 
 ## 2026-03-28
 
+- QA phase-3 remediation — connector-plugins WP 1.2: refactor let-chains in connector-calendar handle_event() and google.rs to use nested if-let blocks for Rust stable compatibility. Local urlencoding module already provides explicit implementation (no transitive dependency risk).
+
 - QA phase-2 remediation — dav-and-webhooks WP 1.4: implement webhook transport with Axum router, HMAC-SHA256 signature verification (constant-time comparison), timestamp-based replay protection (5-minute window), idempotency key deduplication, content-type validation, webhook-specific error variants, and 12 integration tests.
 
 - QA phase-3 remediation — core-application WP 1.8 (partial): add tracing::warn when PEM file contains multiple private keys in tls.rs. Remove unnecessary Result wrapper from IdentityStore::new() and update all callers. HKDF salt already present in derive_key. Deferred: audit sleep replacement (requires production code changes), redundant Arc removal (large refactor), health endpoint caching, multi-household prevention (changes return type).

@@ -12,13 +12,13 @@ use life_engine_types::{
     FilterOp, MessageMetadata, PipelineMessage, QueryFilter, SchemaValidated,
     StorageMutation, StorageQuery, TypedPayload,
 };
-use rand::RngCore;
+use rand::TryRngCore;
 use rand::rngs::OsRng;
 use tracing::{info, warn};
 use uuid::Uuid;
 
 use crate::error::AuthError;
-use crate::types::{ApiKeyRecord, AuthIdentity};
+use crate::types::{ApiKeyMetadata, ApiKeyRecord, AuthIdentity};
 use crate::AuthProvider;
 
 /// Plugin ID used for API key storage operations.
@@ -44,8 +44,8 @@ impl ApiKeyProvider {
         Self { storage }
     }
 
-    /// List all API key records (metadata only, hashes excluded from display).
-    pub async fn list_keys(&self) -> Result<Vec<ApiKeyRecord>, AuthError> {
+    /// List all API key metadata (hashes and salts excluded).
+    pub async fn list_keys(&self) -> Result<Vec<ApiKeyMetadata>, AuthError> {
         list_keys(self.storage.as_ref()).await
     }
 }
@@ -59,7 +59,7 @@ pub async fn create_key(
 ) -> Result<(String, ApiKeyRecord), AuthError> {
     // Generate a cryptographically random 32-byte key.
     let mut raw_bytes = [0u8; 32];
-    OsRng.fill_bytes(&mut raw_bytes);
+    OsRng.try_fill_bytes(&mut raw_bytes).expect("OS RNG should not fail");
     let raw_key = URL_SAFE_NO_PAD.encode(raw_bytes);
 
     // Generate a unique salt and hash the key with HMAC-SHA256.
@@ -99,8 +99,16 @@ pub async fn create_key(
     Ok((raw_key, record))
 }
 
-/// List all API key records from storage.
+/// List all API key metadata from storage (excludes key_hash and salt).
 pub async fn list_keys(
+    storage: &dyn StorageBackend,
+) -> Result<Vec<ApiKeyMetadata>, AuthError> {
+    let keys = list_key_records(storage).await?;
+    Ok(keys.into_iter().map(ApiKeyMetadata::from).collect())
+}
+
+/// List all full API key records from storage (internal use only).
+async fn list_key_records(
     storage: &dyn StorageBackend,
 ) -> Result<Vec<ApiKeyRecord>, AuthError> {
     let query = StorageQuery {
@@ -161,7 +169,7 @@ pub async fn validate_key(
     storage: &dyn StorageBackend,
     raw_key: &str,
 ) -> Result<AuthIdentity, AuthError> {
-    let all_keys = list_keys(storage).await?;
+    let all_keys = list_key_records(storage).await?;
 
     for record in &all_keys {
         let salt = URL_SAFE_NO_PAD

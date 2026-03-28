@@ -48,3 +48,39 @@ pub struct ApiKeyRecord {
     /// Last time the key was used successfully.
     pub last_used: Option<DateTime<Utc>>,
 }
+
+/// API key metadata returned by list operations.
+///
+/// Excludes `key_hash` and `salt` to prevent offline brute-force attacks
+/// via exposed key material.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiKeyMetadata {
+    /// Unique key identifier.
+    pub id: Uuid,
+    /// Human-readable label.
+    pub name: String,
+    /// Authorized scopes.
+    pub scopes: Vec<String>,
+    /// When the key was created.
+    pub created_at: DateTime<Utc>,
+    /// Optional expiration.
+    pub expires_at: Option<DateTime<Utc>>,
+    /// Whether the key has been revoked.
+    pub revoked: bool,
+    /// Last time the key was used successfully.
+    pub last_used: Option<DateTime<Utc>>,
+}
+
+impl From<ApiKeyRecord> for ApiKeyMetadata {
+    fn from(record: ApiKeyRecord) -> Self {
+        Self {
+            id: record.id,
+            name: record.name,
+            scopes: record.scopes,
+            created_at: record.created_at,
+            expires_at: record.expires_at,
+            revoked: record.revoked,
+            last_used: record.last_used,
+        }
+    }
+}

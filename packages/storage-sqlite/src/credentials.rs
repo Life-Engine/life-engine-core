@@ -4,7 +4,9 @@
 //! using AES-256-GCM on top of SQLCipher database-level encryption. Each
 //! credential gets a unique derived key produced via HMAC(master_key, credential_id).
 
+use rusqlite::Connection;
 use life_engine_crypto::{encrypt, decrypt, hmac_sign};
+use tracing::info;
 
 use crate::error::StorageError;
 
@@ -133,6 +135,71 @@ pub fn decrypt_credential(
         .map(|obj| obj.remove("encrypted"));
 
     serde_json::to_string(&doc).map_err(StorageError::Serialization)
+}
+
+/// Re-encrypts all credential records from `old_key` to `new_key` within a
+/// single transaction. If any credential fails to decrypt or re-encrypt, the
+/// entire operation is rolled back so no credentials are left in an
+/// inconsistent state.
+pub fn re_encrypt_credentials(
+    conn: &Connection,
+    old_key: &[u8; 32],
+    new_key: &[u8; 32],
+) -> Result<(), StorageError> {
+    let tx = conn.unchecked_transaction().map_err(|e| {
+        StorageError::RekeyFailed(format!("failed to begin transaction: {e}"))
+    })?;
+
+    let rows: Vec<(String, String)> = {
+        let mut stmt = tx
+            .prepare("SELECT id, data FROM plugin_data WHERE collection = 'credentials'")
+            .map_err(|e| {
+                StorageError::RekeyFailed(format!("failed to query credentials: {e}"))
+            })?;
+
+        stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .map_err(|e| {
+                StorageError::RekeyFailed(format!("failed to read credentials: {e}"))
+            })?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| {
+                StorageError::RekeyFailed(format!("failed to collect credentials: {e}"))
+            })?
+    };
+
+    let mut count = 0u64;
+    for (id, data_json) in &rows {
+        let decrypted = decrypt_credential(old_key, data_json).map_err(|e| {
+            StorageError::RekeyFailed(format!(
+                "failed to decrypt credential {id} with old key: {e}"
+            ))
+        })?;
+
+        let re_encrypted = encrypt_credential(new_key, &decrypted).map_err(|e| {
+            StorageError::RekeyFailed(format!(
+                "failed to re-encrypt credential {id} with new key: {e}"
+            ))
+        })?;
+
+        tx.execute(
+            "UPDATE plugin_data SET data = ?1 WHERE id = ?2",
+            rusqlite::params![re_encrypted, id],
+        )
+        .map_err(|e| {
+            StorageError::RekeyFailed(format!(
+                "failed to update credential {id}: {e}"
+            ))
+        })?;
+
+        count += 1;
+    }
+
+    tx.commit().map_err(|e| {
+        StorageError::RekeyFailed(format!("failed to commit transaction: {e}"))
+    })?;
+
+    info!(count, "re-encrypted credentials after rekey");
+    Ok(())
 }
 
 #[cfg(test)]

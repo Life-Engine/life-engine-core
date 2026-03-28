@@ -21,7 +21,7 @@ pub use error::AuthError;
 pub use handlers::keys::{create_key, list_keys, revoke_key, validate_key};
 pub use handlers::rate_limit::RateLimiter;
 pub use handlers::validate::validate_request;
-pub use types::{ApiKeyRecord, AuthIdentity, AuthToken};
+pub use types::{ApiKeyMetadata, ApiKeyRecord, AuthIdentity, AuthToken};
 
 /// Transport-agnostic authentication provider.
 ///

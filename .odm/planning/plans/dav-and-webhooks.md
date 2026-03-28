@@ -110,42 +110,42 @@ Work packages are ordered by dependency: foundational DAV XML parsing (1.1) enab
 > depends: 1.1
 > spec: .odm/qa/reports/phase-2/dav-and-webhooks.md
 
-- [ ] Implement Axum router with CardDAV route registration in `transport-carddav` [feature]
+- [x] Implement Axum router with CardDAV route registration in `transport-carddav` [feature]
   <!-- file: packages/transport-carddav/src/lib.rs -->
   <!-- purpose: Create HTTP server that actually binds and serves CardDAV requests -->
   <!-- requirements: C-001 -->
   <!-- leverage: axum dependency already declared -->
-- [ ] Implement PROPFIND handler for addressbook discovery (depth 0/1) [feature]
+- [x] Implement PROPFIND handler for addressbook discovery (depth 0/1) [feature]
   <!-- file: packages/transport-carddav/src/handlers/mod.rs -->
   <!-- purpose: Enable CardDAV clients to discover addressbooks and properties -->
   <!-- requirements: M-002 -->
   <!-- leverage: dav-utils dav_xml module -->
-- [ ] Implement REPORT handler for addressbook-query and addressbook-multiget [feature]
+- [x] Implement REPORT handler for addressbook-query and addressbook-multiget [feature]
   <!-- file: packages/transport-carddav/src/handlers/mod.rs -->
   <!-- purpose: Enable CardDAV clients to query and retrieve contact resources -->
   <!-- requirements: M-002 -->
   <!-- leverage: dav-utils vcard module -->
-- [ ] Implement GET/PUT/DELETE handlers for individual contact resources [feature]
+- [x] Implement GET/PUT/DELETE handlers for individual contact resources [feature]
   <!-- file: packages/transport-carddav/src/handlers/mod.rs -->
   <!-- purpose: Enable CRUD operations on individual contacts -->
   <!-- requirements: M-002 -->
   <!-- leverage: dav-utils etag module -->
-- [ ] Implement MKCOL handler for addressbook creation [feature]
+- [x] Implement MKCOL handler for addressbook creation [feature]
   <!-- file: packages/transport-carddav/src/handlers/mod.rs -->
   <!-- purpose: Enable creation of new addressbook collections -->
   <!-- requirements: M-002 -->
   <!-- leverage: none -->
-- [ ] Add CardDAV-specific error variants [fix]
+- [x] Add CardDAV-specific error variants [fix]
   <!-- file: packages/transport-carddav/src/error.rs -->
   <!-- purpose: Provide comprehensive error handling for real CardDAV operations -->
   <!-- requirements: C-001 -->
   <!-- leverage: existing error.rs structure -->
-- [ ] Define CardDAV types in types module [feature]
+- [x] Define CardDAV types in types module [feature]
   <!-- file: packages/transport-carddav/src/types.rs -->
   <!-- purpose: Define request/response types for CardDAV protocol handling -->
   <!-- requirements: M-002 -->
   <!-- leverage: none -->
-- [ ] Add integration tests for CardDAV transport [test]
+- [x] Add integration tests for CardDAV transport [test]
   <!-- file: packages/transport-carddav/src/tests/mod.rs -->
   <!-- purpose: Verify CardDAV protocol compliance for core operations -->
   <!-- requirements: m-009 -->

@@ -2,6 +2,10 @@
 
 ## 2026-03-28
 
+- QA phase-2 remediation — dav-and-webhooks WP 1.2: implement CalDAV transport with Axum router, PROPFIND handler for calendar discovery (depth 0/1), REPORT handler for calendar-query and calendar-multiget, GET/PUT/DELETE handlers with ETag support, MKCALENDAR handler, CalDAV-specific error variants, CalDAV types, and 14 integration tests.
+
+- QA phase-2 remediation — dav-and-webhooks WP 1.3: implement CardDAV transport with Axum router, PROPFIND handler for addressbook discovery (depth 0/1), REPORT handler for addressbook-query and addressbook-multiget, GET/PUT/DELETE handlers with ETag support, MKCOL handler, CardDAV-specific error variants, CardDAV types, and 14 integration tests.
+
 - QA phase-3 remediation — api-plugins WP 1.3: add RFC 6764 well-known endpoint support with 301 redirect builders and PROPFIND route registration on /.well-known/{caldav,carddav}. Add OPTIONS route handlers advertising DAV compliance headers (calendar-access for CalDAV, addressbook for CardDAV) per RFC 4791/6352. Add tests for redirect responses, DAV headers, Allow headers, and route registration for both plugins.
 
 - QA phase-3 remediation — core-application WP 1.5: implement PgSslMode::Prefer with actual TLS fallback behavior in pg_storage.rs. Separate Prefer from Require so it tries TLS first and falls back to plaintext on failure, matching expected PostgreSQL ssl_mode=prefer semantics. Verify rekey::derive_key() zeroed-salt fallback already guarded by #[cfg(test)].

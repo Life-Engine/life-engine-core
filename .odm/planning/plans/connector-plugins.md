@@ -55,22 +55,22 @@ This plan addresses the issues identified in the phase-3 QA review of the four c
 > depends: none
 > spec: .odm/qa/reports/phase-3/connector-plugins.md
 
-- [ ] Extract `RetryState` pattern from email connector into a shared utility or SDK module [major]
+- [x] Extract `RetryState` pattern from email connector into a shared utility or SDK module [major]
   <!-- file: packages/plugin-sdk or shared utility -->
   <!-- purpose: Avoid duplicating retry logic across 4 connectors -->
   <!-- requirements: 2 -->
   <!-- leverage: existing RetryState implementation in connector-email/src/lib.rs -->
-- [ ] Add retry/backoff state to `connector-contacts` plugin [major]
+- [x] Add retry/backoff state to `connector-contacts` plugin [major]
   <!-- file: plugins/engine/connector-contacts/src/lib.rs -->
   <!-- purpose: Sync failures can trigger rapid-fire retries without throttling -->
   <!-- requirements: 2 -->
   <!-- leverage: shared RetryState once extracted -->
-- [ ] Add retry/backoff state to `connector-calendar` plugin [major]
+- [x] Add retry/backoff state to `connector-calendar` plugin [major]
   <!-- file: plugins/engine/connector-calendar/src/lib.rs -->
   <!-- purpose: Same unthrottled retry concern -->
   <!-- requirements: 2 -->
   <!-- leverage: shared RetryState once extracted -->
-- [ ] Add retry/backoff state to `connector-filesystem` plugin [major]
+- [x] Add retry/backoff state to `connector-filesystem` plugin [major]
   <!-- file: plugins/engine/connector-filesystem/src/lib.rs -->
   <!-- purpose: Same unthrottled retry concern -->
   <!-- requirements: 2 -->

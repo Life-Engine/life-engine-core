@@ -48,8 +48,13 @@ impl FsBlobAdapter {
         p
     }
 
-    /// Detect MIME type from the key's filename extension.
-    fn detect_content_type(key: &BlobKey) -> String {
+    /// Detect MIME type from file magic bytes, falling back to extension.
+    fn detect_content_type(key: &BlobKey, data: &[u8]) -> String {
+        // Prefer magic-byte detection via `infer`.
+        if let Some(kind) = infer::get(data) {
+            return kind.mime_type().to_string();
+        }
+        // Fall back to extension-based detection.
         let path = Path::new(key.as_str());
         mime_guess::from_path(path)
             .first_raw()
@@ -123,7 +128,7 @@ impl BlobStorageAdapter for FsBlobAdapter {
         let checksum = hex::encode(Sha256::digest(&input.data));
         let content_type = input
             .content_type
-            .unwrap_or_else(|| Self::detect_content_type(&key));
+            .unwrap_or_else(|| Self::detect_content_type(&key, &input.data));
 
         let now = Utc::now();
 
@@ -464,16 +469,30 @@ mod tests {
         assert_eq!(read_meta.metadata.get("author").unwrap(), "test");
     }
 
-    // 4. MIME type detection from extension
+    // 4. MIME type detection — magic bytes take precedence, extension as fallback
     #[tokio::test]
-    async fn mime_type_detection() {
+    async fn mime_type_detection_magic_bytes() {
         let dir = TempDir::new().unwrap();
         let a = adapter(&dir);
 
-        let png_key = key("plugin-a/files/image.png");
-        let meta = a.store(png_key, sample_input(b"bytes")).await.unwrap();
+        // Real PNG header — infer should detect image/png from magic bytes.
+        let png_header = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR";
+        let png_key = key("plugin-a/files/image.dat");
+        let meta = a.store(png_key, sample_input(png_header)).await.unwrap();
         assert_eq!(meta.content_type, "image/png");
+    }
 
+    #[tokio::test]
+    async fn mime_type_detection_extension_fallback() {
+        let dir = TempDir::new().unwrap();
+        let a = adapter(&dir);
+
+        // Plain text with no recognisable magic bytes — falls back to extension.
+        let txt_key = key("plugin-a/files/readme.txt");
+        let meta = a.store(txt_key, sample_input(b"hello")).await.unwrap();
+        assert_eq!(meta.content_type, "text/plain");
+
+        // Unknown extension and no magic bytes.
         let unknown_key = key("plugin-a/files/data.xyz123");
         let meta = a
             .store(unknown_key, sample_input(b"bytes"))

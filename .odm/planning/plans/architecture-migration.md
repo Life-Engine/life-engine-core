@@ -315,27 +315,27 @@ Implement the concrete storage adapters (SQLite/SQLCipher, filesystem), the Stor
 
 ### 4.2 — Filesystem Blob Adapter
 
-- [ ] Implement `FilesystemBlobAdapter` in `packages/storage-sqlite/src/blob_fs.rs` (or a new crate) implementing the `BlobStorageAdapter` trait. Store blobs as files under a configured base directory. Use atomic write-then-rename strategy: write to a temporary file, then rename to the final path. This prevents partial writes from leaving corrupt files. Store metadata in sidecar `.meta.json` files alongside each blob.
+- [x] Implement `FilesystemBlobAdapter` in `packages/storage-sqlite/src/blob_fs.rs` (or a new crate) implementing the `BlobStorageAdapter` trait. Store blobs as files under a configured base directory. Use atomic write-then-rename strategy: write to a temporary file, then rename to the final path. This prevents partial writes from leaving corrupt files. Store metadata in sidecar `.meta.json` files alongside each blob.
   <!-- files: packages/storage-sqlite/src/blob_fs.rs -->
   <!-- purpose: Provide the default blob storage backend -->
   <!-- requirements: blob-storage-adapter 2.1, 3.1 -->
 
-- [ ] Implement streaming: `store` reads from `ByteStream` and writes to disk in chunks (64KB default), computing SHA-256 incrementally during the write. `retrieve` returns a `ByteStream` wrapping a `tokio::fs::File`. No full-file buffering in memory.
+- [x] Implement streaming: `store` reads from `ByteStream` and writes to disk in chunks (64KB default), computing SHA-256 incrementally during the write. `retrieve` returns a `ByteStream` wrapping a `tokio::fs::File`. No full-file buffering in memory.
   <!-- files: packages/storage-sqlite/src/blob_fs.rs -->
   <!-- purpose: Handle large files without memory pressure -->
   <!-- requirements: blob-storage-adapter 2.1, 3.1 -->
 
-- [ ] Implement `delete` (remove both blob file and sidecar), `exists` (check file existence), `copy` (filesystem copy with new sidecar), `list` (directory walk matching prefix), `metadata` (read sidecar file).
+- [x] Implement `delete` (remove both blob file and sidecar), `exists` (check file existence), `copy` (filesystem copy with new sidecar), `list` (directory walk matching prefix), `metadata` (read sidecar file).
   <!-- files: packages/storage-sqlite/src/blob_fs.rs -->
   <!-- purpose: Complete the blob adapter implementation -->
   <!-- requirements: blob-storage-adapter 4.1, 5.1, 6.1, 7.1, 8.1 -->
 
-- [ ] Implement MIME type detection: use the `infer` crate to detect content type from file magic bytes when `content_type` is not provided by the caller.
+- [x] Implement MIME type detection: use the `infer` crate to detect content type from file magic bytes when `content_type` is not provided by the caller.
   <!-- files: packages/storage-sqlite/src/blob_fs.rs -->
   <!-- purpose: Auto-detect content types for blobs stored without explicit MIME type -->
   <!-- requirements: blob-storage-adapter 14.1 -->
 
-- [ ] Write tests: store and retrieve round-trip, SHA-256 checksum verification, atomic write (verify no partial files on failure), large file streaming (10MB+), list by prefix, copy operation, metadata sidecar correctness.
+- [x] Write tests: store and retrieve round-trip, SHA-256 checksum verification, atomic write (verify no partial files on failure), large file streaming (10MB+), list by prefix, copy operation, metadata sidecar correctness.
   <!-- files: packages/storage-sqlite/tests/blob_fs_tests.rs -->
   <!-- purpose: Verify filesystem blob adapter correctness -->
   <!-- requirements: blob-storage-adapter 2.1 through 14.1 -->

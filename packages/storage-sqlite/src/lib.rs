@@ -7,6 +7,7 @@
 
 pub mod audit;
 pub mod backend;
+pub mod blob_fs;
 pub mod config;
 pub mod credentials;
 pub mod document;

@@ -145,7 +145,8 @@
     "executive-summary-remediation:2.3",
     "executive-summary-remediation:3.2",
     "executive-summary-remediation:3.3",
-    "executive-summary-remediation:3.4"
+    "executive-summary-remediation:3.4",
+    "architecture-migration:4.2"
   ],
   "history": [
     {
@@ -773,6 +774,14 @@
       "title": "Add Resource Limits and Connector Resilience",
       "timestamp": "2026-03-29T00:00:00Z",
       "tasks_completed": 7,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "4.2",
+      "plan": "architecture-migration.md",
+      "title": "Filesystem Blob Adapter",
+      "timestamp": "2026-03-29T00:00:00Z",
+      "tasks_completed": 5,
       "tasks_deferred": 0
     }
   ]

@@ -152,7 +152,21 @@
     "architecture-migration:4.4",
     "architecture-migration:5.1",
     "architecture-migration:5.2",
-    "architecture-migration:5.4"
+    "architecture-migration:5.4",
+    "architecture-migration:6.1",
+    "architecture-migration:6.2",
+    "architecture-migration:6.3",
+    "architecture-migration:7.1",
+    "architecture-migration:7.2",
+    "architecture-migration:7.3",
+    "architecture-migration:7.4",
+    "architecture-migration:8.1",
+    "architecture-migration:8.2",
+    "architecture-migration:8.3",
+    "architecture-migration:8.4",
+    "architecture-migration:8.5",
+    "architecture-migration:8.6",
+    "architecture-migration:8.7"
   ],
   "history": [
     {
@@ -837,6 +851,87 @@
       "title": "Audit Logging",
       "timestamp": "2026-03-29T00:00:00Z",
       "tasks_completed": 3,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "6.1",
+      "plan": "architecture-migration.md",
+      "title": "Plugin Manifest Specification",
+      "timestamp": "2026-03-29T00:00:00Z",
+      "commit": "ded7c40",
+      "tasks_completed": 4,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "6.2",
+      "plan": "architecture-migration.md",
+      "title": "Plugin Actions and Lifecycle",
+      "timestamp": "2026-03-29T00:00:00Z",
+      "tasks_completed": 5,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "6.3",
+      "plan": "architecture-migration.md",
+      "title": "Host Functions",
+      "timestamp": "2026-03-29T00:00:00Z",
+      "tasks_completed": 6,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "8.1",
+      "plan": "architecture-migration.md",
+      "title": "Workflow Definition and YAML Loading",
+      "timestamp": "2026-03-29T00:00:00Z",
+      "tasks_completed": 2,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "8.2",
+      "plan": "architecture-migration.md",
+      "title": "Pipeline Executor Core",
+      "timestamp": "2026-03-29T00:00:00Z",
+      "tasks_completed": 4,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "8.3",
+      "plan": "architecture-migration.md",
+      "title": "Control Flow",
+      "timestamp": "2026-03-29T00:00:00Z",
+      "tasks_completed": 5,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "8.4",
+      "plan": "architecture-migration.md",
+      "title": "Async Job Lifecycle",
+      "timestamp": "2026-03-29T00:00:00Z",
+      "tasks_completed": 2,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "8.5",
+      "plan": "architecture-migration.md",
+      "title": "Event Bus",
+      "timestamp": "2026-03-29T00:00:00Z",
+      "tasks_completed": 4,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "8.6",
+      "plan": "architecture-migration.md",
+      "title": "Trigger System",
+      "timestamp": "2026-03-29T00:00:00Z",
+      "tasks_completed": 3,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "8.7",
+      "plan": "architecture-migration.md",
+      "title": "Scheduler",
+      "timestamp": "2026-03-29T00:00:00Z",
+      "tasks_completed": 5,
       "tasks_deferred": 0
     }
   ]

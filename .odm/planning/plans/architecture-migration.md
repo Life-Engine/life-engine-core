@@ -504,59 +504,59 @@ Define the developer-facing contracts for plugin authors: manifest format, actio
 
 ### 6.2 — Plugin Actions and Lifecycle
 
-- [ ] Define the plugin action contract in `packages/plugin-sdk-rs/src/traits.rs`: the `#[plugin_action]` macro attribute marks a function as a workflow step. Every action receives `PipelineMessage` as input and returns `Result<PipelineMessage, PluginError>`. The SDK provides a `PluginContext` struct giving typed access to host functions: `ctx.storage().doc_read(...)`, `ctx.storage().doc_write(...)`, `ctx.events().emit(...)`, `ctx.config().read(...)`, `ctx.http().request(...)`.
+- [x] Define the plugin action contract in `packages/plugin-sdk-rs/src/traits.rs`: the `#[plugin_action]` macro attribute marks a function as a workflow step. Every action receives `PipelineMessage` as input and returns `Result<PipelineMessage, PluginError>`. The SDK provides a `PluginContext` struct giving typed access to host functions: `ctx.storage().doc_read(...)`, `ctx.storage().doc_write(...)`, `ctx.events().emit(...)`, `ctx.config().read(...)`, `ctx.http().request(...)`.
   <!-- files: packages/plugin-sdk-rs/src/traits.rs, packages/plugin-sdk-rs/src/context.rs -->
   <!-- purpose: Define the standard action signature all plugins implement -->
   <!-- requirements: plugin-actions 1.1, 2.1 -->
 
-- [ ] Define optional lifecycle hooks: `init(ctx: &PluginContext) -> Result<(), PluginError>` called once after the plugin is instantiated (before any actions run), and `shutdown(ctx: &PluginContext) -> Result<(), PluginError>` called when Core is shutting down. Both are optional — if not implemented, no-op defaults are used.
+- [x] Define optional lifecycle hooks: `init(ctx: &PluginContext) -> Result<(), PluginError>` called once after the plugin is instantiated (before any actions run), and `shutdown(ctx: &PluginContext) -> Result<(), PluginError>` called when Core is shutting down. Both are optional — if not implemented, no-op defaults are used.
   <!-- files: packages/plugin-sdk-rs/src/traits.rs -->
   <!-- purpose: Enable plugins to perform setup and teardown -->
   <!-- requirements: plugin-actions 3.1, 3.2 -->
 
-- [ ] Define error handling contract: actions return `Result<PipelineMessage, PluginError>`. A hard failure (`Err`) causes the executor to apply the step's `on_error` strategy. A soft warning is appended to `metadata.warnings` inside the returned `Ok(message)` — the workflow continues but the warning propagates to the final `WorkflowResponse.errors`.
+- [x] Define error handling contract: actions return `Result<PipelineMessage, PluginError>`. A hard failure (`Err`) causes the executor to apply the step's `on_error` strategy. A soft warning is appended to `metadata.warnings` inside the returned `Ok(message)` — the workflow continues but the warning propagates to the final `WorkflowResponse.errors`.
   <!-- files: packages/plugin-sdk-rs/src/error.rs -->
   <!-- purpose: Distinguish between fatal errors and non-fatal warnings -->
   <!-- requirements: plugin-actions 4.1, 4.2 -->
 
-- [ ] Document the connector pattern: a connector is a plugin that follows a standard flow — read config → fetch from external API via `ctx.http()` → normalise to CDM types → write documents via `ctx.storage()` → emit completion event via `ctx.events()`. This pattern is documented, not enforced — connectors are regular plugins that follow a convention.
+- [x] Document the connector pattern: a connector is a plugin that follows a standard flow — read config → fetch from external API via `ctx.http()` → normalise to CDM types → write documents via `ctx.storage()` → emit completion event via `ctx.events()`. This pattern is documented, not enforced — connectors are regular plugins that follow a convention.
   <!-- files: packages/plugin-sdk-rs/src/lib.rs (module-level docs) -->
   <!-- purpose: Guide connector plugin authors toward a proven pattern -->
   <!-- requirements: plugin-actions 5.1 -->
 
-- [ ] Write unit tests: action execution with mock PluginContext, lifecycle hook invocation order, error vs warning distinction, PluginContext method routing.
+- [x] Write unit tests: action execution with mock PluginContext, lifecycle hook invocation order, error vs warning distinction, PluginContext method routing.
   <!-- files: packages/plugin-sdk-rs/tests/ -->
   <!-- purpose: Verify plugin action contract -->
   <!-- requirements: plugin-actions 1.1 through 5.1 -->
 
 ### 6.3 — Host Functions
 
-- [ ] Define all host function signatures in `packages/plugin-sdk-rs/src/wasm_guest.rs` (guest-side stubs) and `packages/plugin-system/src/host_functions.rs` (host-side implementations). Document storage functions: `storage_doc_get(collection: &str, id: &str) -> Result<Value, PluginError>`, `storage_doc_list(collection: &str, query: QueryDescriptor) -> Result<DocumentList, PluginError>`, `storage_doc_count(collection: &str, filters: Option<FilterNode>) -> Result<u64, PluginError>`, `storage_doc_create(collection: &str, document: Value) -> Result<Value, PluginError>`, `storage_doc_update(collection: &str, id: &str, document: Value) -> Result<Value, PluginError>`, `storage_doc_partial_update(collection: &str, id: &str, patch: Value) -> Result<Value, PluginError>`, `storage_doc_batch_create(collection: &str, documents: Vec<Value>) -> Result<Vec<Value>, PluginError>`, `storage_doc_batch_update(collection: &str, updates: Vec<(String, Value)>) -> Result<Vec<Value>, PluginError>`, `storage_doc_delete(collection: &str, id: &str) -> Result<(), PluginError>`.
+- [x] Define all host function signatures in `packages/plugin-sdk-rs/src/wasm_guest.rs` (guest-side stubs) and `packages/plugin-system/src/host_functions.rs` (host-side implementations). Document storage functions: `storage_doc_get(collection: &str, id: &str) -> Result<Value, PluginError>`, `storage_doc_list(collection: &str, query: QueryDescriptor) -> Result<DocumentList, PluginError>`, `storage_doc_count(collection: &str, filters: Option<FilterNode>) -> Result<u64, PluginError>`, `storage_doc_create(collection: &str, document: Value) -> Result<Value, PluginError>`, `storage_doc_update(collection: &str, id: &str, document: Value) -> Result<Value, PluginError>`, `storage_doc_partial_update(collection: &str, id: &str, patch: Value) -> Result<Value, PluginError>`, `storage_doc_batch_create(collection: &str, documents: Vec<Value>) -> Result<Vec<Value>, PluginError>`, `storage_doc_batch_update(collection: &str, updates: Vec<(String, Value)>) -> Result<Vec<Value>, PluginError>`, `storage_doc_delete(collection: &str, id: &str) -> Result<(), PluginError>`.
   <!-- files: packages/plugin-sdk-rs/src/wasm_guest.rs, packages/plugin-system/src/host_functions.rs -->
   <!-- purpose: Define the complete document storage host function interface -->
   <!-- requirements: host-functions 1.1, 2.1, 3.1 -->
 
-- [ ] Define blob storage host functions: `storage_blob_store(key: &str, data: &[u8], content_type: &str) -> Result<BlobMeta, PluginError>`, `storage_blob_retrieve(key: &str) -> Result<Vec<u8>, PluginError>`, `storage_blob_delete(key: &str) -> Result<(), PluginError>`. Blob keys are automatically prefixed with the calling plugin's ID to enforce isolation.
+- [x] Define blob storage host functions: `storage_blob_store(key: &str, data: &[u8], content_type: &str) -> Result<BlobMeta, PluginError>`, `storage_blob_retrieve(key: &str) -> Result<Vec<u8>, PluginError>`, `storage_blob_delete(key: &str) -> Result<(), PluginError>`. Blob keys are automatically prefixed with the calling plugin's ID to enforce isolation.
   <!-- files: packages/plugin-sdk-rs/src/wasm_guest.rs, packages/plugin-system/src/host_functions.rs -->
   <!-- purpose: Define blob storage host functions with automatic key scoping -->
   <!-- requirements: host-functions 4.1 -->
 
-- [ ] Define event host function: `emit_event(name: &str, payload: Option<Value>) -> Result<(), PluginError>`. The host-side implementation validates that the event name is declared in the plugin's manifest, sets the source to the plugin's ID, and publishes to the event bus broadcast channel.
+- [x] Define event host function: `emit_event(name: &str, payload: Option<Value>) -> Result<(), PluginError>`. The host-side implementation validates that the event name is declared in the plugin's manifest, sets the source to the plugin's ID, and publishes to the event bus broadcast channel.
   <!-- files: packages/plugin-sdk-rs/src/wasm_guest.rs, packages/plugin-system/src/host_functions.rs -->
   <!-- purpose: Enable plugins to emit events into the event bus -->
   <!-- requirements: host-functions 5.1 -->
 
-- [ ] Define config host function: `config_read(key: &str) -> Result<Option<Value>, PluginError>`. Reads from the plugin's configuration section in Core config. The key is scoped to the plugin — a plugin cannot read another plugin's config.
+- [x] Define config host function: `config_read(key: &str) -> Result<Option<Value>, PluginError>`. Reads from the plugin's configuration section in Core config. The key is scoped to the plugin — a plugin cannot read another plugin's config.
   <!-- files: packages/plugin-sdk-rs/src/wasm_guest.rs, packages/plugin-system/src/host_functions.rs -->
   <!-- purpose: Provide plugins with access to their own configuration -->
   <!-- requirements: host-functions 6.1 -->
 
-- [ ] Define HTTP outbound host function: `http_request(method: &str, url: &str, headers: HashMap<String, String>, body: Option<Vec<u8>>) -> Result<HttpResponse, PluginError>`. The host-side implementation validates the URL domain against the plugin's declared `http_outbound` domains. Requests to undeclared domains are rejected with `PluginError::PermissionDenied`.
+- [x] Define HTTP outbound host function: `http_request(method: &str, url: &str, headers: HashMap<String, String>, body: Option<Vec<u8>>) -> Result<HttpResponse, PluginError>`. The host-side implementation validates the URL domain against the plugin's declared `http_outbound` domains. Requests to undeclared domains are rejected with `PluginError::PermissionDenied`.
   <!-- files: packages/plugin-sdk-rs/src/wasm_guest.rs, packages/plugin-system/src/host_functions.rs -->
   <!-- purpose: Enable controlled outbound HTTP access for plugins -->
   <!-- requirements: host-functions 7.1 -->
 
-- [ ] Write integration tests: call each host function from a test WASM plugin, verify correct routing through StorageContext, verify capability enforcement (call without required capability → error), verify blob key scoping.
+- [x] Write integration tests: call each host function from a test WASM plugin, verify correct routing through StorageContext, verify capability enforcement (call without required capability → error), verify blob key scoping.
   <!-- files: packages/plugin-system/tests/host_function_tests.rs -->
   <!-- purpose: Verify end-to-end host function behaviour -->
   <!-- requirements: host-functions 1.1 through 7.1 -->
@@ -572,58 +572,58 @@ Build the WASM runtime that loads, isolates, and manages plugin lifecycle. This 
 
 ### 7.1 — Plugin Discovery and Loading
 
-- [ ] Implement plugin directory scanning in `packages/plugin-system/src/discovery.rs`: scan a configured directory (default `plugins/`) for subdirectories containing both `plugin.wasm` and `manifest.toml`. Return a list of `DiscoveredPlugin` structs with path, manifest, and wasm binary path. Log a warning for directories missing either file.
+- [x] Implement plugin directory scanning in `packages/plugin-system/src/discovery.rs`: scan a configured directory (default `plugins/`) for subdirectories containing both `plugin.wasm` and `manifest.toml`. Return a list of `DiscoveredPlugin` structs with path, manifest, and wasm binary path. Log a warning for directories missing either file.
   <!-- files: packages/plugin-system/src/discovery.rs -->
   <!-- purpose: Find all installed plugins at startup -->
   <!-- requirements: plugin-system 1.1, 1.2 -->
 
-- [ ] Implement manifest loading and validation: read `manifest.toml`, deserialise into `PluginManifest`, run all validation checks defined in Phase 6 WP 6.1. If validation fails, the plugin is skipped (not loaded) and a clear error message is logged.
+- [x] Implement manifest loading and validation: read `manifest.toml`, deserialise into `PluginManifest`, run all validation checks defined in Phase 6 WP 6.1. If validation fails, the plugin is skipped (not loaded) and a clear error message is logged.
   <!-- files: packages/plugin-system/src/loader.rs -->
   <!-- purpose: Ensure only valid plugins are loaded -->
   <!-- requirements: plugin-system 1.3, 1.4 -->
 
 ### 7.2 — WASM Runtime Integration
 
-- [ ] Implement Extism plugin loading in `packages/plugin-system/src/runtime.rs`: create an `ExtismPlugin` instance from the `.wasm` binary. Register all host functions defined in Phase 6 WP 6.3 as Extism host functions. Configure resource limits: 64MB memory default (configurable per-plugin in manifest), 30-second execution timeout (configurable per-action in manifest).
+- [x] Implement Extism plugin loading in `packages/plugin-system/src/runtime.rs`: create an `ExtismPlugin` instance from the `.wasm` binary. Register all host functions defined in Phase 6 WP 6.3 as Extism host functions. Configure resource limits: 64MB memory default (configurable per-plugin in manifest), 30-second execution timeout (configurable per-action in manifest).
   <!-- files: packages/plugin-system/src/runtime.rs -->
   <!-- purpose: Load WASM plugins into sandboxed execution environments -->
   <!-- requirements: plugin-system 2.1, 2.2 -->
 
-- [ ] Implement action invocation: `PluginInstance::call(action: &str, input: PipelineMessage) -> Result<PipelineMessage, PluginError>`. Serialise the PipelineMessage to JSON, pass to the WASM function matching the action name, deserialise the output JSON back to PipelineMessage. Handle WASM traps (memory violations, timeout) as `PluginError::Crash`.
+- [x] Implement action invocation: `PluginInstance::call(action: &str, input: PipelineMessage) -> Result<PipelineMessage, PluginError>`. Serialise the PipelineMessage to JSON, pass to the WASM function matching the action name, deserialise the output JSON back to PipelineMessage. Handle WASM traps (memory violations, timeout) as `PluginError::Crash`.
   <!-- files: packages/plugin-system/src/runtime.rs -->
   <!-- purpose: Execute plugin actions with proper serialisation boundary -->
   <!-- requirements: plugin-system 2.3, 2.4 -->
 
 ### 7.3 — Capability Enforcement
 
-- [ ] Implement capability checking in `packages/plugin-system/src/capability.rs`: before executing any host function, check that the calling plugin's manifest declares the required capability. Maintain a `HashMap<PluginId, HashSet<Capability>>` built from approved manifests at startup. First-party plugins are auto-approved. Third-party plugins require explicit entries in Core config under `approved_plugins: { "plugin-id": ["storage:doc:read", "storage:doc:write", ...] }`.
+- [x] Implement capability checking in `packages/plugin-system/src/capability.rs`: before executing any host function, check that the calling plugin's manifest declares the required capability. Maintain a `HashMap<PluginId, HashSet<Capability>>` built from approved manifests at startup. First-party plugins are auto-approved. Third-party plugins require explicit entries in Core config under `approved_plugins: { "plugin-id": ["storage:doc:read", "storage:doc:write", ...] }`.
   <!-- files: packages/plugin-system/src/capability.rs -->
   <!-- purpose: Enforce deny-by-default capability model at runtime -->
   <!-- requirements: plugin-system 3.1, 3.2, 3.3 -->
 
-- [ ] Implement collection access enforcement: verify that storage operations target only collections declared in the plugin's manifest. A plugin calling `storage_doc_read("events", ...)` must have `events` in its `[collections]` section. Plugin-scoped collections (`{plugin_id}.private_data`) are automatically allowed for the owning plugin.
+- [x] Implement collection access enforcement: verify that storage operations target only collections declared in the plugin's manifest. A plugin calling `storage_doc_read("events", ...)` must have `events` in its `[collections]` section. Plugin-scoped collections (`{plugin_id}.private_data`) are automatically allowed for the owning plugin.
   <!-- files: packages/plugin-system/src/capability.rs -->
   <!-- purpose: Restrict plugins to their declared data scope -->
   <!-- requirements: plugin-system 3.4, 3.5 -->
 
 ### 7.4 — Plugin Lifecycle Management
 
-- [ ] Implement `PluginLifecycleManager` in `packages/plugin-system/src/lifecycle.rs` managing the lifecycle: `Discover → Load → Init → Running → Stop → Unload`. On startup: discover all plugins, load and validate manifests, instantiate WASM modules, call `init` hook. On shutdown: call `shutdown` hook for all running plugins, unload WASM modules. Track plugin state in a `HashMap<PluginId, PluginState>`.
+- [x] Implement `PluginLifecycleManager` in `packages/plugin-system/src/lifecycle.rs` managing the lifecycle: `Discover → Load → Init → Running → Stop → Unload`. On startup: discover all plugins, load and validate manifests, instantiate WASM modules, call `init` hook. On shutdown: call `shutdown` hook for all running plugins, unload WASM modules. Track plugin state in a `HashMap<PluginId, PluginState>`.
   <!-- files: packages/plugin-system/src/lifecycle.rs -->
   <!-- purpose: Manage plugin lifecycle from discovery to shutdown -->
   <!-- requirements: plugin-system 4.1, 4.2, 4.3 -->
 
-- [ ] Implement crash isolation: if a plugin action panics or traps in WASM, catch the error and return `PluginError::Crash`. The plugin instance remains loaded (Extism handles cleanup). The crash does not affect other plugins or Core. Log the crash with plugin ID, action name, and error detail.
+- [x] Implement crash isolation: if a plugin action panics or traps in WASM, catch the error and return `PluginError::Crash`. The plugin instance remains loaded (Extism handles cleanup). The crash does not affect other plugins or Core. Log the crash with plugin ID, action name, and error detail.
   <!-- files: packages/plugin-system/src/runtime.rs -->
   <!-- purpose: Ensure plugin crashes are isolated and recoverable -->
   <!-- requirements: plugin-system 2.5 -->
 
-- [ ] Implement the `PluginSystemExecutor` in `packages/plugin-system/src/execute.rs`: the interface the workflow engine uses to call plugin actions. `execute(plugin_id: &str, action: &str, message: PipelineMessage) -> Result<PipelineMessage, PluginError>`. This method resolves the plugin instance, checks capabilities, calls the action, and returns the result.
+- [x] Implement the `PluginSystemExecutor` in `packages/plugin-system/src/execute.rs`: the interface the workflow engine uses to call plugin actions. `execute(plugin_id: &str, action: &str, message: PipelineMessage) -> Result<PipelineMessage, PluginError>`. This method resolves the plugin instance, checks capabilities, calls the action, and returns the result.
   <!-- files: packages/plugin-system/src/execute.rs -->
   <!-- purpose: Provide the workflow engine with a single entry point for plugin execution -->
   <!-- requirements: plugin-system 5.1 -->
 
-- [ ] Write comprehensive tests: plugin discovery from directory, manifest validation rejection, WASM loading with host functions, action invocation round-trip, capability denial for unapproved operations, crash isolation (plugin trap does not affect caller), lifecycle hook ordering.
+- [x] Write comprehensive tests: plugin discovery from directory, manifest validation rejection, WASM loading with host functions, action invocation round-trip, capability denial for unapproved operations, crash isolation (plugin trap does not affect caller), lifecycle hook ordering.
   <!-- files: packages/plugin-system/tests/ -->
   <!-- purpose: Verify plugin system correctness end-to-end -->
   <!-- requirements: plugin-system 1.1 through 5.1 -->
@@ -639,139 +639,139 @@ Build the pipeline executor, control flow primitives, event bus, trigger system,
 
 ### 8.1 — Workflow Definition and YAML Loading
 
-- [ ] Define `WorkflowDefinition` struct in `packages/workflow-engine/src/definition.rs`: `id: String`, `description: Option<String>`, `mode: ExecutionMode` (Sync, Async), `trigger: TriggerDeclaration` (optional endpoint, event, and schedule fields), `steps: Vec<WorkflowStep>`. Define `WorkflowStep` enum with `Plugin { plugin_id, action, on_error: ErrorStrategy }` and `Condition(ConditionBlock)` variants. Define `ErrorStrategy` with variants `Halt`, `Retry { max_retries: u32, fallback: Option<Box<WorkflowStep>> }`, `Skip`. Default is `Halt`.
+- [x] Define `WorkflowDefinition` struct in `packages/workflow-engine/src/definition.rs`: `id: String`, `description: Option<String>`, `mode: ExecutionMode` (Sync, Async), `trigger: TriggerDeclaration` (optional endpoint, event, and schedule fields), `steps: Vec<WorkflowStep>`. Define `WorkflowStep` enum with `Plugin { plugin_id, action, on_error: ErrorStrategy }` and `Condition(ConditionBlock)` variants. Define `ErrorStrategy` with variants `Halt`, `Retry { max_retries: u32, fallback: Option<Box<WorkflowStep>> }`, `Skip`. Default is `Halt`.
   <!-- files: packages/workflow-engine/src/definition.rs -->
   <!-- purpose: Define the workflow data model loaded from YAML -->
   <!-- requirements: pipeline-executor 1.1, control-flow 1.1 -->
 
-- [ ] Implement YAML workflow loader: scan a configured directory for `.yaml`/`.yml` files, deserialise each into `WorkflowDefinition`, build an immutable `HashMap<String, WorkflowDefinition>`. Reject startup if two files declare the same `id`. Validate: all plugin references resolve to loaded plugins, all event trigger names follow naming conventions, all cron expressions parse. Validate nesting depth limit: condition blocks contain flat step lists only (no nested conditions).
+- [x] Implement YAML workflow loader: scan a configured directory for `.yaml`/`.yml` files, deserialise each into `WorkflowDefinition`, build an immutable `HashMap<String, WorkflowDefinition>`. Reject startup if two files declare the same `id`. Validate: all plugin references resolve to loaded plugins, all event trigger names follow naming conventions, all cron expressions parse. Validate nesting depth limit: condition blocks contain flat step lists only (no nested conditions).
   <!-- files: packages/workflow-engine/src/loader.rs -->
   <!-- purpose: Load all workflow definitions at startup -->
   <!-- requirements: pipeline-executor 3.1, 3.2, control-flow 4.1 -->
 
 ### 8.2 — Pipeline Executor Core
 
-- [ ] Implement `WorkflowExecutor` in `packages/workflow-engine/src/executor/mod.rs` with two methods: `async execute(&self, trigger: TriggerContext) -> WorkflowResponse` (sync execution) and `fn spawn(&self, trigger: TriggerContext) -> JobId` (async execution). The executor checks the workflow's `mode` field to determine which path to take. Both methods build an initial `PipelineMessage` from `TriggerContext`.
+- [x] Implement `WorkflowExecutor` in `packages/workflow-engine/src/executor/mod.rs` with two methods: `async execute(&self, trigger: TriggerContext) -> WorkflowResponse` (sync execution) and `fn spawn(&self, trigger: TriggerContext) -> JobId` (async execution). The executor checks the workflow's `mode` field to determine which path to take. Both methods build an initial `PipelineMessage` from `TriggerContext`.
   <!-- files: packages/workflow-engine/src/executor/mod.rs -->
   <!-- purpose: Provide the public API for workflow execution -->
   <!-- requirements: pipeline-executor 1.1, 1.2 -->
 
-- [ ] Implement initial PipelineMessage construction from TriggerContext: for `Endpoint`, the `WorkflowRequest.body` becomes the payload, params/query/identity go into metadata. For `Event`, the event payload becomes the PipelineMessage payload, event name and source go into metadata. For `Schedule`, the payload is empty, metadata has workflow_id and trigger_type "schedule".
+- [x] Implement initial PipelineMessage construction from TriggerContext: for `Endpoint`, the `WorkflowRequest.body` becomes the payload, params/query/identity go into metadata. For `Event`, the event payload becomes the PipelineMessage payload, event name and source go into metadata. For `Schedule`, the payload is empty, metadata has workflow_id and trigger_type "schedule".
   <!-- files: packages/workflow-engine/src/executor/message_builder.rs -->
   <!-- purpose: Build the correct initial message for each trigger type -->
   <!-- requirements: pipeline-executor 2.1, 2.2, 2.3 -->
 
-- [ ] Implement sequential step execution: iterate through `WorkflowDefinition.steps`, for each step: clone the current PipelineMessage (pre-step snapshot), call `PluginSystemExecutor::execute(plugin_id, action, message)`, if success replace current message with output and append StepTrace, if failure apply error strategy. Support `WorkflowStep::Condition` by evaluating the condition and recursively executing the appropriate branch.
+- [x] Implement sequential step execution: iterate through `WorkflowDefinition.steps`, for each step: clone the current PipelineMessage (pre-step snapshot), call `PluginSystemExecutor::execute(plugin_id, action, message)`, if success replace current message with output and append StepTrace, if failure apply error strategy. Support `WorkflowStep::Condition` by evaluating the condition and recursively executing the appropriate branch.
   <!-- files: packages/workflow-engine/src/executor/runner.rs -->
   <!-- purpose: Execute workflow steps in sequence with error handling -->
   <!-- requirements: pipeline-executor 4.1, 4.2, 4.3, control-flow 1.1, 1.2 -->
 
-- [ ] Implement concurrency limiting: use a `tokio::sync::Semaphore` with configurable permits (default 32) to cap concurrent workflow tasks. Both sync and async workflows acquire a permit before execution. If all permits are held, the workflow queues until one is released.
+- [x] Implement concurrency limiting: use a `tokio::sync::Semaphore` with configurable permits (default 32) to cap concurrent workflow tasks. Both sync and async workflows acquire a permit before execution. If all permits are held, the workflow queues until one is released.
   <!-- files: packages/workflow-engine/src/executor/mod.rs -->
   <!-- purpose: Prevent resource exhaustion from runaway workflows -->
   <!-- requirements: pipeline-executor 4.4 -->
 
 ### 8.3 — Control Flow
 
-- [ ] Implement condition evaluation in `packages/workflow-engine/src/executor/condition.rs`: `evaluate(condition: &ConditionBlock, message: &PipelineMessage) -> bool`. Resolve the `field` path (dot-separated) into the PipelineMessage payload using a `resolve_field` function. Apply the operator: `Equals` (exact match), `NotEquals`, `Exists` (field present, any value including null), `IsEmpty` (absent, null, empty string, or empty array). If the field path does not exist, the condition evaluates to false (else branch taken). This makes conditions safe by default.
+- [x] Implement condition evaluation in `packages/workflow-engine/src/executor/condition.rs`: `evaluate(condition: &ConditionBlock, message: &PipelineMessage) -> bool`. Resolve the `field` path (dot-separated) into the PipelineMessage payload using a `resolve_field` function. Apply the operator: `Equals` (exact match), `NotEquals`, `Exists` (field present, any value including null), `IsEmpty` (absent, null, empty string, or empty array). If the field path does not exist, the condition evaluates to false (else branch taken). This makes conditions safe by default.
   <!-- files: packages/workflow-engine/src/executor/condition.rs -->
   <!-- purpose: Evaluate conditional branches within workflows -->
   <!-- requirements: control-flow 2.1, 2.2, 2.3, 2.4, 2.5 -->
 
-- [ ] Implement branch execution: when a condition block is encountered, evaluate the condition, execute the `then` or `else` step list, and use the branch's final output as the current message for the step after the condition block (branch rejoining).
+- [x] Implement branch execution: when a condition block is encountered, evaluate the condition, execute the `then` or `else` step list, and use the branch's final output as the current message for the step after the condition block (branch rejoining).
   <!-- files: packages/workflow-engine/src/executor/runner.rs -->
   <!-- purpose: Handle conditional branching with correct message flow -->
   <!-- requirements: control-flow 5.1, 5.2 -->
 
-- [ ] Implement retry strategy: when a step fails with `on_error: retry`, replay the pre-step PipelineMessage clone as input up to `max_retries` times with exponential backoff (base 1s, capped at 30s). If retries are exhausted and a `fallback` step is declared, execute the fallback with the same pre-step message. If the fallback itself fails, halt the workflow.
+- [x] Implement retry strategy: when a step fails with `on_error: retry`, replay the pre-step PipelineMessage clone as input up to `max_retries` times with exponential backoff (base 1s, capped at 30s). If retries are exhausted and a `fallback` step is declared, execute the fallback with the same pre-step message. If the fallback itself fails, halt the workflow.
   <!-- files: packages/workflow-engine/src/executor/error_handler.rs -->
   <!-- purpose: Provide retry-based error recovery -->
   <!-- requirements: control-flow 7.1, 7.2, 7.3 -->
 
-- [ ] Implement skip strategy: when a step fails with `on_error: skip`, log the error, pass the pre-step PipelineMessage clone to the next step, and append the error to the response's `warnings` list. The workflow continues with `status: Ok` but the caller sees the degraded execution in `errors`.
+- [x] Implement skip strategy: when a step fails with `on_error: skip`, log the error, pass the pre-step PipelineMessage clone to the next step, and append the error to the response's `warnings` list. The workflow continues with `status: Ok` but the caller sees the degraded execution in `errors`.
   <!-- files: packages/workflow-engine/src/executor/error_handler.rs -->
   <!-- purpose: Enable graceful degradation for non-critical steps -->
   <!-- requirements: control-flow 8.1, 8.2 -->
 
-- [ ] Write unit tests: sequential execution with mock plugin, condition evaluation for all four operators, missing field defaults to else, branch rejoining, retry with backoff (mock failing then succeeding), skip with warning propagation, halt on error.
+- [x] Write unit tests: sequential execution with mock plugin, condition evaluation for all four operators, missing field defaults to else, branch rejoining, retry with backoff (mock failing then succeeding), skip with warning propagation, halt on error.
   <!-- files: packages/workflow-engine/tests/executor_tests.rs -->
   <!-- purpose: Verify executor and control flow correctness -->
   <!-- requirements: pipeline-executor 1.1 through 4.4, control-flow 1.1 through 8.2 -->
 
 ### 8.4 — Async Job Lifecycle
 
-- [ ] Implement `JobRegistry` in `packages/workflow-engine/src/executor/job_registry.rs`: `Arc<RwLock<HashMap<JobId, JobEntry>>>` where `JobEntry` has `status: JobStatus` (InProgress, Completed, Failed), `response: Option<WorkflowResponse>`, `created_at: Instant`. The executor writes to it when spawning/completing async workflows. Transport handlers read from it to poll job status via `GET /api/v1/jobs/:id`.
+- [x] Implement `JobRegistry` in `packages/workflow-engine/src/executor/job_registry.rs`: `Arc<RwLock<HashMap<JobId, JobEntry>>>` where `JobEntry` has `status: JobStatus` (InProgress, Completed, Failed), `response: Option<WorkflowResponse>`, `created_at: Instant`. The executor writes to it when spawning/completing async workflows. Transport handlers read from it to poll job status via `GET /api/v1/jobs/:id`.
   <!-- files: packages/workflow-engine/src/executor/job_registry.rs -->
   <!-- purpose: Track async workflow execution state -->
   <!-- requirements: pipeline-executor 5.1, 5.2 -->
 
-- [ ] Implement TTL-based cleanup: spawn a background Tokio task that periodically sweeps the registry and removes `Completed`/`Failed` entries older than the configured TTL (default 1 hour). After TTL, the job ID still returns `Completed` with no data attached.
+- [x] Implement TTL-based cleanup: spawn a background Tokio task that periodically sweeps the registry and removes `Completed`/`Failed` entries older than the configured TTL (default 1 hour). After TTL, the job ID still returns `Completed` with no data attached.
   <!-- files: packages/workflow-engine/src/executor/job_registry.rs -->
   <!-- purpose: Prevent unbounded memory growth from accumulated job records -->
   <!-- requirements: pipeline-executor 5.3 -->
 
 ### 8.5 — Event Bus
 
-- [ ] Implement the event bus in `packages/workflow-engine/src/event_bus.rs` using a Tokio broadcast channel. Define `Event` struct with `name: String`, `payload: Option<Value>`, `source: String`, `timestamp: DateTime<Utc>`, `depth: u8`. Implement `EventBus::emit(event: Event)` and `EventBus::subscribe() -> Receiver<Event>`. Events are delivered to all subscribers concurrently. No acknowledgement or retry — fire-and-forget.
+- [x] Implement the event bus in `packages/workflow-engine/src/event_bus.rs` using a Tokio broadcast channel. Define `Event` struct with `name: String`, `payload: Option<Value>`, `source: String`, `timestamp: DateTime<Utc>`, `depth: u8`. Implement `EventBus::emit(event: Event)` and `EventBus::subscribe() -> Receiver<Event>`. Events are delivered to all subscribers concurrently. No acknowledgement or retry — fire-and-forget.
   <!-- files: packages/workflow-engine/src/event_bus.rs -->
   <!-- purpose: Provide the internal pub/sub mechanism for plugin and system events -->
   <!-- requirements: event-bus 1.1, 1.2, 3.1, 3.2, 3.3 -->
 
-- [ ] Implement event naming enforcement: plugin events must be namespaced as `{plugin_id}.{action}.{outcome}`. System events use `system.*` prefix. Validate at emission time that the event name is declared in the emitting plugin's manifest. Reject undeclared events with a logged warning.
+- [x] Implement event naming enforcement: plugin events must be namespaced as `{plugin_id}.{action}.{outcome}`. System events use `system.*` prefix. Validate at emission time that the event name is declared in the emitting plugin's manifest. Reject undeclared events with a logged warning.
   <!-- files: packages/workflow-engine/src/event_bus.rs -->
   <!-- purpose: Enforce structured event naming -->
   <!-- requirements: event-bus 2.1, 2.2, 2.3 -->
 
-- [ ] Implement loop prevention via depth counter: every event carries a `depth` field starting at 0 for root events. When a workflow triggered by an event emits a new event, the child event's depth is `parent_depth + 1`. Events exceeding max depth (default 8, configurable) are dropped with a warning log.
+- [x] Implement loop prevention via depth counter: every event carries a `depth` field starting at 0 for root events. When a workflow triggered by an event emits a new event, the child event's depth is `parent_depth + 1`. Events exceeding max depth (default 8, configurable) are dropped with a warning log.
   <!-- files: packages/workflow-engine/src/event_bus.rs -->
   <!-- purpose: Prevent infinite event cascades -->
   <!-- requirements: event-bus 5.1, 5.2, 5.3 -->
 
-- [ ] Implement system events: emit `system.startup` after Core initialisation, `system.plugin.loaded` / `system.plugin.failed` during plugin loading, `system.workflow.completed` / `system.workflow.failed` after workflow execution. These use the same event bus — no separate channel.
+- [x] Implement system events: emit `system.startup` after Core initialisation, `system.plugin.loaded` / `system.plugin.failed` during plugin loading, `system.workflow.completed` / `system.workflow.failed` after workflow execution. These use the same event bus — no separate channel.
   <!-- files: packages/workflow-engine/src/event_bus.rs -->
   <!-- purpose: Enable reactive patterns based on system lifecycle -->
   <!-- requirements: event-bus 4.1, 4.2, 4.3, 4.4, 4.5 -->
 
 ### 8.6 — Trigger System
 
-- [ ] Implement the trigger registry in `packages/workflow-engine/src/triggers/mod.rs`: at startup, scan all loaded `WorkflowDefinition` entries and register triggers. Build three maps: endpoint triggers (`HashMap<(Method, Path), WorkflowId>` — one-to-one), event triggers (`HashMap<EventName, Vec<WorkflowId>>` — one-to-many), schedule triggers (forwarded to the Scheduler). Validate: no two workflows claim the same endpoint trigger, every endpoint trigger references a route that exists in the router config, event names follow naming conventions.
+- [x] Implement the trigger registry in `packages/workflow-engine/src/triggers/mod.rs`: at startup, scan all loaded `WorkflowDefinition` entries and register triggers. Build three maps: endpoint triggers (`HashMap<(Method, Path), WorkflowId>` — one-to-one), event triggers (`HashMap<EventName, Vec<WorkflowId>>` — one-to-many), schedule triggers (forwarded to the Scheduler). Validate: no two workflows claim the same endpoint trigger, every endpoint trigger references a route that exists in the router config, event names follow naming conventions.
   <!-- files: packages/workflow-engine/src/triggers/mod.rs -->
   <!-- purpose: Resolve incoming signals to workflow executions -->
   <!-- requirements: trigger-system 1.1, 2.1, 2.2, 3.1, 4.1, 4.2 -->
 
-- [ ] Implement trigger resolution: `resolve_endpoint(method, path) -> Option<WorkflowId>`, `resolve_event(event_name) -> Vec<WorkflowId>`, schedule resolution handled by the Scheduler. For events, all matching workflows are spawned independently and concurrently. For endpoints, exactly one workflow is returned.
+- [x] Implement trigger resolution: `resolve_endpoint(method, path) -> Option<WorkflowId>`, `resolve_event(event_name) -> Vec<WorkflowId>`, schedule resolution handled by the Scheduler. For events, all matching workflows are spawned independently and concurrently. For endpoints, exactly one workflow is returned.
   <!-- files: packages/workflow-engine/src/triggers/resolver.rs -->
   <!-- purpose: Map signals to workflow IDs for execution -->
   <!-- requirements: trigger-system 5.1, 5.2, 5.3 -->
 
-- [ ] Wire event triggers to the event bus: subscribe to the broadcast channel and for each received event, look up matching workflows in the trigger map and spawn each via the executor.
+- [x] Wire event triggers to the event bus: subscribe to the broadcast channel and for each received event, look up matching workflows in the trigger map and spawn each via the executor.
   <!-- files: packages/workflow-engine/src/triggers/event_listener.rs -->
   <!-- purpose: Connect event bus to workflow execution -->
   <!-- requirements: trigger-system 3.1, 3.2 -->
 
 ### 8.7 — Scheduler
 
-- [ ] Implement `ScheduleEntry` and `ScheduleRegistry` in `packages/workflow-engine/src/scheduler/`: parse cron expressions from workflow trigger declarations, build an immutable registry at startup. Invalid cron expressions cause a startup failure with a clear error message.
+- [x] Implement `ScheduleEntry` and `ScheduleRegistry` in `packages/workflow-engine/src/scheduler/`: parse cron expressions from workflow trigger declarations, build an immutable registry at startup. Invalid cron expressions cause a startup failure with a clear error message.
   <!-- files: packages/workflow-engine/src/scheduler/types.rs, packages/workflow-engine/src/scheduler/registry.rs -->
   <!-- purpose: Register all schedule triggers at startup -->
   <!-- requirements: scheduler 1.1, 6.1, 6.2 -->
 
-- [ ] Implement the scheduler loop in `packages/workflow-engine/src/scheduler/mod.rs`: a single Tokio task that collects all schedule entries, computes next fire times from UTC now, sleeps until the earliest, fires all due workflows, recalculates, and repeats. Use the `cron` crate for expression parsing and next-fire calculation. All times are UTC — no timezone support in v1.
+- [x] Implement the scheduler loop in `packages/workflow-engine/src/scheduler/mod.rs`: a single Tokio task that collects all schedule entries, computes next fire times from UTC now, sleeps until the earliest, fires all due workflows, recalculates, and repeats. Use the `cron` crate for expression parsing and next-fire calculation. All times are UTC — no timezone support in v1.
   <!-- files: packages/workflow-engine/src/scheduler/mod.rs -->
   <!-- purpose: Fire workflows on cron-based schedules -->
   <!-- requirements: scheduler 3.1, 3.2, 3.3, 2.1, 2.2 -->
 
-- [ ] Implement missed tick handling: if Core was offline when a tick was due, the scheduler calculates the next future fire time on restart — no catch-up, no persistence of last-run timestamps.
+- [x] Implement missed tick handling: if Core was offline when a tick was due, the scheduler calculates the next future fire time on restart — no catch-up, no persistence of last-run timestamps.
   <!-- files: packages/workflow-engine/src/scheduler/mod.rs -->
   <!-- purpose: Handle graceful recovery after downtime -->
   <!-- requirements: scheduler 4.1, 4.2 -->
 
-- [ ] Implement overlap prevention: before spawning a scheduled workflow, check the `JobRegistry` for an existing `InProgress` instance of the same workflow. If one exists, skip the tick and log at debug level.
+- [x] Implement overlap prevention: before spawning a scheduled workflow, check the `JobRegistry` for an existing `InProgress` instance of the same workflow. If one exists, skip the tick and log at debug level.
   <!-- files: packages/workflow-engine/src/scheduler/mod.rs -->
   <!-- purpose: Prevent resource pile-up from overlapping scheduled executions -->
   <!-- requirements: scheduler 5.1, 5.2 -->
 
-- [ ] Write comprehensive tests: cron parsing and next-fire calculation, registry construction with valid/invalid expressions, overlap skip logic, PipelineMessage shape for schedule triggers, event bus integration, trigger resolution for all three types.
+- [x] Write comprehensive tests: cron parsing and next-fire calculation, registry construction with valid/invalid expressions, overlap skip logic, PipelineMessage shape for schedule triggers, event bus integration, trigger resolution for all three types.
   <!-- files: packages/workflow-engine/tests/ -->
   <!-- purpose: Verify workflow engine orchestration correctness -->
   <!-- requirements: scheduler 1.1 through 7.4, trigger-system 1.1 through 5.3, event-bus 1.1 through 5.3 -->

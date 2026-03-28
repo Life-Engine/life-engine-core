@@ -29,8 +29,38 @@ pub struct ResourceEntry {
     pub content_type: String,
 }
 
+/// The WebDAV Depth header value for PROPFIND requests.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Depth {
+    /// Only the target resource itself.
+    Zero,
+    /// The target resource and its immediate children.
+    One,
+}
+
+impl Depth {
+    /// Parse a Depth header value string.
+    ///
+    /// Defaults to `Depth::One` if the value is absent or unrecognized,
+    /// per RFC 4918 Section 9.1.
+    pub fn from_header(value: Option<&str>) -> Self {
+        match value {
+            Some("0") => Depth::Zero,
+            _ => Depth::One,
+        }
+    }
+}
+
 /// Build a PROPFIND multi-status XML response for the address book.
+///
+/// When `depth` is `Depth::Zero`, only the collection entry is returned.
+/// When `Depth::One`, both the collection and child resources are included.
 pub fn build_propfind_xml(response: &PropfindResponse) -> String {
+    build_propfind_xml_with_depth(response, Depth::One)
+}
+
+/// Build a PROPFIND response with explicit Depth control.
+pub fn build_propfind_xml_with_depth(response: &PropfindResponse, depth: Depth) -> String {
     let mut xml = String::new();
     xml.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\r\n");
     xml.push_str("<D:multistatus xmlns:D=\"DAV:\" xmlns:CR=\"urn:ietf:params:xml:ns:carddav\" xmlns:CS=\"http://calendarserver.org/ns/\">\r\n");
@@ -49,29 +79,35 @@ pub fn build_propfind_xml(response: &PropfindResponse) -> String {
         "        <CS:getctag>{}</CS:getctag>\r\n",
         xml_escape(&response.ctag)
     ));
+    xml.push_str("        <CR:supported-address-data>\r\n");
+    xml.push_str("          <CR:address-data-type content-type=\"text/vcard\" version=\"4.0\"/>\r\n");
+    xml.push_str("          <CR:address-data-type content-type=\"text/vcard\" version=\"3.0\"/>\r\n");
+    xml.push_str("        </CR:supported-address-data>\r\n");
     xml.push_str("      </D:prop>\r\n");
     xml.push_str("      <D:status>HTTP/1.1 200 OK</D:status>\r\n");
     xml.push_str("    </D:propstat>\r\n");
     xml.push_str("  </D:response>\r\n");
 
-    // Individual resource entries
-    for entry in &response.resources {
-        xml.push_str("  <D:response>\r\n");
-        xml.push_str(&format!("    <D:href>{}</D:href>\r\n", xml_escape(&entry.href)));
-        xml.push_str("    <D:propstat>\r\n");
-        xml.push_str("      <D:prop>\r\n");
-        xml.push_str(&format!(
-            "        <D:getetag>{}</D:getetag>\r\n",
-            xml_escape(&entry.etag)
-        ));
-        xml.push_str(&format!(
-            "        <D:getcontenttype>{}</D:getcontenttype>\r\n",
-            xml_escape(&entry.content_type)
-        ));
-        xml.push_str("      </D:prop>\r\n");
-        xml.push_str("      <D:status>HTTP/1.1 200 OK</D:status>\r\n");
-        xml.push_str("    </D:propstat>\r\n");
-        xml.push_str("  </D:response>\r\n");
+    // Individual resource entries (only included at Depth:1)
+    if depth == Depth::One {
+        for entry in &response.resources {
+            xml.push_str("  <D:response>\r\n");
+            xml.push_str(&format!("    <D:href>{}</D:href>\r\n", xml_escape(&entry.href)));
+            xml.push_str("    <D:propstat>\r\n");
+            xml.push_str("      <D:prop>\r\n");
+            xml.push_str(&format!(
+                "        <D:getetag>{}</D:getetag>\r\n",
+                xml_escape(&entry.etag)
+            ));
+            xml.push_str(&format!(
+                "        <D:getcontenttype>{}</D:getcontenttype>\r\n",
+                xml_escape(&entry.content_type)
+            ));
+            xml.push_str("      </D:prop>\r\n");
+            xml.push_str("      <D:status>HTTP/1.1 200 OK</D:status>\r\n");
+            xml.push_str("    </D:propstat>\r\n");
+            xml.push_str("  </D:response>\r\n");
+        }
     }
 
     xml.push_str("</D:multistatus>");
@@ -148,6 +184,7 @@ mod tests {
             name: ContactName {
                 given: "Test".into(),
                 family: "Contact".into(),
+                display: None,
                 prefix: None,
                 suffix: None,
                 middle: None,
@@ -167,6 +204,73 @@ mod tests {
             created_at: Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap(),
             updated_at: Utc.with_ymd_and_hms(2026, 3, 15, 12, 0, 0).unwrap(),
         }
+    }
+
+    // --- Depth header parsing ---
+
+    #[test]
+    fn depth_zero_from_header() {
+        assert_eq!(Depth::from_header(Some("0")), Depth::Zero);
+    }
+
+    #[test]
+    fn depth_one_from_header() {
+        assert_eq!(Depth::from_header(Some("1")), Depth::One);
+    }
+
+    #[test]
+    fn depth_defaults_to_one_when_absent() {
+        assert_eq!(Depth::from_header(None), Depth::One);
+    }
+
+    // --- PROPFIND Depth tests ---
+
+    #[test]
+    fn propfind_depth_zero_omits_resource_entries() {
+        let response = PropfindResponse {
+            display_name: "Contacts".into(),
+            ctag: "ctag-d0".into(),
+            resources: vec![ResourceEntry {
+                href: "/ab/ct-001.vcf".into(),
+                etag: "\"e1\"".into(),
+                content_type: "text/vcard".into(),
+            }],
+        };
+        let xml = build_propfind_xml_with_depth(&response, Depth::Zero);
+        assert!(xml.contains("<D:displayname>Contacts</D:displayname>"));
+        assert!(xml.contains("<CR:addressbook/>"));
+        assert!(!xml.contains("ct-001.vcf"), "Depth:0 should not include resource entries");
+    }
+
+    #[test]
+    fn propfind_depth_one_includes_resource_entries() {
+        let response = PropfindResponse {
+            display_name: "Contacts".into(),
+            ctag: "ctag-d1".into(),
+            resources: vec![ResourceEntry {
+                href: "/ab/ct-001.vcf".into(),
+                etag: "\"e1\"".into(),
+                content_type: "text/vcard".into(),
+            }],
+        };
+        let xml = build_propfind_xml_with_depth(&response, Depth::One);
+        assert!(xml.contains("ct-001.vcf"));
+    }
+
+    // --- supported-address-data ---
+
+    #[test]
+    fn propfind_xml_contains_supported_address_data() {
+        let response = PropfindResponse {
+            display_name: "Contacts".into(),
+            ctag: "ct".into(),
+            resources: vec![],
+        };
+        let xml = build_propfind_xml(&response);
+        assert!(xml.contains("<CR:supported-address-data>"));
+        assert!(xml.contains("content-type=\"text/vcard\""));
+        assert!(xml.contains("version=\"4.0\""));
+        assert!(xml.contains("version=\"3.0\""));
     }
 
     // --- PROPFIND tests ---

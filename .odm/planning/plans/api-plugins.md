@@ -110,32 +110,32 @@ This plan addresses the 29 issues identified in the phase-3 QA review of the Cal
 > depends: 1.1
 > spec: .odm/qa/reports/phase-3/api-plugins.md
 
-- [ ] Add `current-user-principal` property to principal PROPFIND response in `api-caldav/src/discovery.rs` [major]
+- [x] Add `current-user-principal` property to principal PROPFIND response in `api-caldav/src/discovery.rs` [major]
   <!-- file: plugins/engine/api-caldav/src/discovery.rs -->
   <!-- purpose: Apple Calendar and DAVx5 require this per RFC 5397 for user principal discovery -->
   <!-- requirements: 5 -->
   <!-- leverage: existing build_principal_propfind_xml function -->
-- [ ] Add `current-user-principal` property to principal PROPFIND response in `api-carddav/src/discovery.rs` [major]
+- [x] Add `current-user-principal` property to principal PROPFIND response in `api-carddav/src/discovery.rs` [major]
   <!-- file: plugins/engine/api-carddav/src/discovery.rs -->
   <!-- purpose: Same RFC 5397 requirement for CardDAV -->
   <!-- requirements: 5 -->
   <!-- leverage: existing build_principal_propfind_xml function -->
-- [ ] Implement Depth header handling in PROPFIND for `api-caldav/src/protocol.rs` (Depth:0 and Depth:1) [major]
+- [x] Implement Depth header handling in PROPFIND for `api-caldav/src/protocol.rs` (Depth:0 and Depth:1) [major]
   <!-- file: plugins/engine/api-caldav/src/protocol.rs -->
   <!-- purpose: Depth:0 requests during initial discovery currently return incorrect results -->
   <!-- requirements: 8 -->
   <!-- leverage: existing build_propfind_xml function -->
-- [ ] Implement Depth header handling in PROPFIND for `api-carddav/src/protocol.rs` (Depth:0 and Depth:1) [major]
+- [x] Implement Depth header handling in PROPFIND for `api-carddav/src/protocol.rs` (Depth:0 and Depth:1) [major]
   <!-- file: plugins/engine/api-carddav/src/protocol.rs -->
   <!-- purpose: Same Depth header compliance for CardDAV -->
   <!-- requirements: 8 -->
   <!-- leverage: existing build_propfind_xml function -->
-- [ ] Add `supported-report-set` property to discovery PROPFIND responses in both plugins [minor]
+- [x] Add `supported-report-set` property to discovery PROPFIND responses in both plugins [minor]
   <!-- file: plugins/engine/api-caldav/src/discovery.rs, plugins/engine/api-carddav/src/discovery.rs -->
   <!-- purpose: Advertise supported reports so clients do not have to guess -->
   <!-- requirements: 25 -->
   <!-- leverage: none -->
-- [ ] Add `supported-address-data` property to CardDAV collection PROPFIND response [minor]
+- [x] Add `supported-address-data` property to CardDAV collection PROPFIND response [minor]
   <!-- file: plugins/engine/api-carddav/src/protocol.rs -->
   <!-- purpose: Indicate supported vCard versions per RFC 6352 Section 6.2.2 -->
   <!-- requirements: 24 -->

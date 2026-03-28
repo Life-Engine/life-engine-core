@@ -31,6 +31,13 @@ pub fn build_principal_propfind_xml() -> String {
     xml.push_str(&format!(
         "        <CR:addressbook-home-set><D:href>{CARDDAV_ADDRESSBOOK_URL}</D:href></CR:addressbook-home-set>\r\n"
     ));
+    xml.push_str(&format!(
+        "        <D:current-user-principal><D:href>{CARDDAV_PRINCIPAL_URL}</D:href></D:current-user-principal>\r\n"
+    ));
+    xml.push_str("        <D:supported-report-set>\r\n");
+    xml.push_str("          <D:supported-report><D:report><CR:addressbook-multiget/></D:report></D:supported-report>\r\n");
+    xml.push_str("          <D:supported-report><D:report><CR:addressbook-query/></D:report></D:supported-report>\r\n");
+    xml.push_str("        </D:supported-report-set>\r\n");
     xml.push_str("      </D:prop>\r\n");
     xml.push_str("      <D:status>HTTP/1.1 200 OK</D:status>\r\n");
     xml.push_str("    </D:propstat>\r\n");
@@ -90,6 +97,23 @@ mod tests {
         let xml = build_principal_propfind_xml();
         assert!(xml.contains("<D:principal/>"));
         assert!(xml.contains("<D:collection/>"));
+    }
+
+    #[test]
+    fn principal_propfind_xml_contains_current_user_principal() {
+        let xml = build_principal_propfind_xml();
+        assert!(xml.contains("<D:current-user-principal>"));
+        assert!(xml.contains(&format!(
+            "<D:current-user-principal><D:href>{CARDDAV_PRINCIPAL_URL}</D:href></D:current-user-principal>"
+        )));
+    }
+
+    #[test]
+    fn principal_propfind_xml_contains_supported_report_set() {
+        let xml = build_principal_propfind_xml();
+        assert!(xml.contains("<D:supported-report-set>"));
+        assert!(xml.contains("<CR:addressbook-multiget/>"));
+        assert!(xml.contains("<CR:addressbook-query/>"));
     }
 
     #[test]

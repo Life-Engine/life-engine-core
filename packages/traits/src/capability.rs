@@ -6,10 +6,12 @@
 use std::fmt;
 use std::str::FromStr;
 
+use serde::{Deserialize, Serialize};
+
 use crate::error::{EngineError, Severity};
 
 /// A host function access grant that plugins must declare and have approved.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Capability {
     /// Read from the document storage layer.
     StorageRead,
@@ -31,6 +33,12 @@ pub enum Capability {
     EventsSubscribe,
     /// Read configuration values.
     ConfigRead,
+    /// Read access to the plugin's credential store.
+    CredentialsRead,
+    /// Write access to the plugin's credential store.
+    CredentialsWrite,
+    /// Structured logging through Core's logging subsystem.
+    Logging,
 }
 
 impl fmt::Display for Capability {
@@ -46,6 +54,9 @@ impl fmt::Display for Capability {
             Capability::EventsEmit => write!(f, "events:emit"),
             Capability::EventsSubscribe => write!(f, "events:subscribe"),
             Capability::ConfigRead => write!(f, "config:read"),
+            Capability::CredentialsRead => write!(f, "credentials:read"),
+            Capability::CredentialsWrite => write!(f, "credentials:write"),
+            Capability::Logging => write!(f, "logging"),
         }
     }
 }
@@ -79,6 +90,9 @@ impl FromStr for Capability {
             "events:emit" => Ok(Capability::EventsEmit),
             "events:subscribe" => Ok(Capability::EventsSubscribe),
             "config:read" => Ok(Capability::ConfigRead),
+            "credentials:read" => Ok(Capability::CredentialsRead),
+            "credentials:write" => Ok(Capability::CredentialsWrite),
+            "logging" => Ok(Capability::Logging),
             _ => Err(ParseCapabilityError {
                 value: s.to_string(),
             }),
@@ -146,6 +160,9 @@ mod tests {
             Capability::EventsEmit,
             Capability::EventsSubscribe,
             Capability::ConfigRead,
+            Capability::CredentialsRead,
+            Capability::CredentialsWrite,
+            Capability::Logging,
         ];
 
         for cap in &capabilities {
@@ -167,6 +184,9 @@ mod tests {
         assert_eq!(Capability::EventsEmit.to_string(), "events:emit");
         assert_eq!(Capability::EventsSubscribe.to_string(), "events:subscribe");
         assert_eq!(Capability::ConfigRead.to_string(), "config:read");
+        assert_eq!(Capability::CredentialsRead.to_string(), "credentials:read");
+        assert_eq!(Capability::CredentialsWrite.to_string(), "credentials:write");
+        assert_eq!(Capability::Logging.to_string(), "logging");
     }
 
     #[test]

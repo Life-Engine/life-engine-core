@@ -24,9 +24,9 @@ use life_engine_plugin_sdk::{
 // Extension namespace validation
 use life_engine_plugin_sdk::{validate_extension_namespace, ExtensionError};
 
-// Traits crate re-exports (Capability aliased as WasmCapability to avoid conflict)
+// Traits crate re-exports (Capability is the unified type)
 use life_engine_plugin_sdk::{
-    Action, CapabilityViolation, EngineError, Plugin, Severity, StorageBackend, WasmCapability,
+    Action, Capability, CapabilityViolation, EngineError, Plugin, Severity, StorageBackend,
 };
 
 // Prelude re-exports everything needed
@@ -77,7 +77,7 @@ fn sdk_reexports_traits_types() {
     fn _assert_types_exist() {
         let _: Option<Action> = None;
         let _: Option<Severity> = None;
-        let _: Option<WasmCapability> = None;
+        let _: Option<Capability> = None;
         let _: Option<CapabilityViolation> = None;
     }
 }

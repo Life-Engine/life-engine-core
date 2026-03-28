@@ -96,12 +96,9 @@ pub use life_engine_types::{
 };
 
 // Re-export all infrastructure traits and types from the traits crate.
-// Note: The traits crate `Capability` is re-exported as `WasmCapability` to avoid
-// conflicting with the existing SDK `Capability` enum used by `CorePlugin`.
 pub use life_engine_traits;
 pub use life_engine_traits::{
-    Action, EngineError, Plugin, Severity, StorageBackend,
-    Capability as WasmCapability, CapabilityViolation,
+    Action, CapabilityViolation, EngineError, Plugin, Severity, StorageBackend,
 };
 
 /// Convenience prelude for plugin authors.
@@ -127,6 +124,7 @@ pub mod prelude {
     };
     pub use crate::error::PluginError;
     pub use crate::lifecycle::LifecycleHooks;
+    pub use crate::retry::RetryState;
 
     // CDM and pipeline types
     pub use life_engine_types::{
@@ -141,7 +139,6 @@ pub mod prelude {
 
     // WASM plugin traits and types (from life-engine-traits)
     pub use life_engine_traits::{
-        Action, EngineError, Plugin, Severity, StorageBackend,
-        Capability as WasmCapability, CapabilityViolation,
+        Action, CapabilityViolation, EngineError, Plugin, Severity, StorageBackend,
     };
 }

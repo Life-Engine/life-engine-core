@@ -179,7 +179,7 @@ fn single_dependency_ergonomics() {
     fn _assert_storage_context_usable<S: life_engine_plugin_sdk::StorageBackend>() {
         let _: Option<StorageContext<S>> = None;
     }
-    let _: Option<WasmCapability> = None;
+    let _: Option<Capability> = None;
 
     // CDM types available through the SDK
     let _: Option<life_engine_plugin_sdk::Task> = None;

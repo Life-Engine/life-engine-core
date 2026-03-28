@@ -118,13 +118,13 @@ impl<S: StorageBackend> StorageContext<S> {
 
     /// Delete a record from a collection.
     ///
-    /// Requires the `storage:write` capability.
+    /// Requires the `storage:delete` capability.
     pub async fn delete(
         &self,
         collection: &str,
         id: Uuid,
     ) -> Result<(), Box<dyn EngineError>> {
-        self.require(Capability::StorageWrite, "delete storage record")?;
+        self.require(Capability::StorageDelete, "delete storage record")?;
         self.backend
             .mutate(StorageMutation::Delete {
                 plugin_id: self.plugin_id.clone(),
@@ -190,6 +190,16 @@ impl<'a, S: StorageBackend> QueryBuilder<'a, S> {
         self
     }
 
+    /// Filter where `field` does not equal `value`.
+    pub fn where_not_eq(mut self, field: &str, value: impl Into<serde_json::Value>) -> Self {
+        self.filters.push(QueryFilter {
+            field: field.to_string(),
+            operator: FilterOp::NotEq,
+            value: value.into(),
+        });
+        self
+    }
+
     /// Sort results by `field` in ascending order.
     pub fn order_by(mut self, field: &str) -> Self {
         self.sort.push(SortField {
@@ -231,7 +241,7 @@ impl<'a, S: StorageBackend> QueryBuilder<'a, S> {
             plugin_id: self.ctx.plugin_id.clone(),
             filters: self.filters,
             sort: self.sort,
-            limit: self.limit,
+            limit: Some(self.limit.unwrap_or(1000)),
             offset: self.offset,
         };
         self.ctx.backend.execute(query).await
@@ -249,7 +259,7 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     fn all_caps() -> HashSet<Capability> {
-        HashSet::from([Capability::StorageRead, Capability::StorageWrite])
+        HashSet::from([Capability::StorageRead, Capability::StorageWrite, Capability::StorageDelete])
     }
 
     fn read_only() -> HashSet<Capability> {
@@ -529,7 +539,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn delete_without_storage_write_returns_cap_002() {
+    async fn delete_without_storage_delete_returns_cap_002() {
         let backend = MockBackend::new();
         let ctx = StorageContext::new(backend, "test-plugin", read_only());
 

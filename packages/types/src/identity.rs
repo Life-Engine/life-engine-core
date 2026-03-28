@@ -1,7 +1,6 @@
-//! Identity and trigger context types for the workflow engine contract.
+//! Identity type for the workflow engine contract.
 //!
 //! `Identity` represents the authenticated (or guest) caller of a workflow.
-//! `TriggerContext` describes how a workflow was triggered.
 
 use std::collections::HashMap;
 
@@ -11,7 +10,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// Every `WorkflowRequest` carries an `Identity`. Authenticated routes
 /// populate it from the auth token; public routes use `Identity::guest()`.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Identity {
     /// The authenticated subject (e.g. user ID, or `"anonymous"` for guests).
     pub subject: String,
@@ -33,27 +32,3 @@ impl Identity {
     }
 }
 
-/// Describes how a workflow was triggered.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum TriggerContext {
-    /// Triggered by an HTTP/GraphQL endpoint.
-    Endpoint {
-        /// HTTP method (e.g. `"GET"`, `"POST"`).
-        method: String,
-        /// Request path (e.g. `"/api/v1/tasks"`).
-        path: String,
-    },
-    /// Triggered by an internal event.
-    Event {
-        /// Event type name (e.g. `"record.created"`).
-        event_type: String,
-        /// Source plugin or subsystem.
-        source: String,
-    },
-    /// Triggered by a cron schedule.
-    Schedule {
-        /// Cron expression (e.g. `"0 */5 * * *"`).
-        cron_expr: String,
-    },
-}

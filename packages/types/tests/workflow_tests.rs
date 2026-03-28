@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use chrono::Utc;
 use serde_json::json;
 
-use life_engine_types::identity::{Identity, TriggerContext};
+use life_engine_types::identity::Identity;
 use life_engine_types::workflow::{
     RequestMeta, ResponseMeta, WorkflowError, WorkflowRequest, WorkflowResponse, WorkflowStatus,
 };
@@ -274,57 +274,6 @@ mod identity {
 }
 
 // ---------------------------------------------------------------------------
-// TriggerContext
-// ---------------------------------------------------------------------------
-mod trigger_context {
-    use super::*;
-
-    #[test]
-    fn endpoint_variant() {
-        let ctx = TriggerContext::Endpoint {
-            method: "POST".into(),
-            path: "/api/v1/tasks".into(),
-        };
-        if let TriggerContext::Endpoint { method, path } = &ctx {
-            assert_eq!(method, "POST");
-            assert_eq!(path, "/api/v1/tasks");
-        } else {
-            panic!("Expected Endpoint variant");
-        }
-    }
-
-    #[test]
-    fn event_variant() {
-        let ctx = TriggerContext::Event {
-            event_type: "record.created".into(),
-            source: "email-plugin".into(),
-        };
-        if let TriggerContext::Event {
-            event_type,
-            source,
-        } = &ctx
-        {
-            assert_eq!(event_type, "record.created");
-            assert_eq!(source, "email-plugin");
-        } else {
-            panic!("Expected Event variant");
-        }
-    }
-
-    #[test]
-    fn schedule_variant() {
-        let ctx = TriggerContext::Schedule {
-            cron_expr: "0 */5 * * *".into(),
-        };
-        if let TriggerContext::Schedule { cron_expr } = &ctx {
-            assert_eq!(cron_expr, "0 */5 * * *");
-        } else {
-            panic!("Expected Schedule variant");
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
 // Serialisation round-trips
 // ---------------------------------------------------------------------------
 mod serialisation {
@@ -407,31 +356,6 @@ mod serialisation {
         let restored: Identity = serde_json::from_str(&json).expect("deserialize identity");
         assert_eq!(restored.subject, id.subject);
         assert_eq!(restored.claims.get("scope"), id.claims.get("scope"));
-    }
-
-    #[test]
-    fn trigger_context_round_trip() {
-        let contexts = [
-            TriggerContext::Endpoint {
-                method: "GET".into(),
-                path: "/health".into(),
-            },
-            TriggerContext::Event {
-                event_type: "sync.complete".into(),
-                source: "calendar".into(),
-            },
-            TriggerContext::Schedule {
-                cron_expr: "0 0 * * *".into(),
-            },
-        ];
-        for ctx in &contexts {
-            let json = serde_json::to_string(ctx).expect("serialize trigger");
-            let restored: TriggerContext =
-                serde_json::from_str(&json).expect("deserialize trigger");
-            let original_json = serde_json::to_value(ctx).unwrap();
-            let restored_json = serde_json::to_value(&restored).unwrap();
-            assert_eq!(original_json, restored_json);
-        }
     }
 
     #[test]

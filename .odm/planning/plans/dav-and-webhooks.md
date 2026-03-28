@@ -156,37 +156,37 @@ Work packages are ordered by dependency: foundational DAV XML parsing (1.1) enab
 > depends: none
 > spec: .odm/qa/reports/phase-2/dav-and-webhooks.md
 
-- [ ] Implement Axum router with webhook receiving endpoint in `transport-webhook` [feature]
+- [x] Implement Axum router with webhook receiving endpoint in `transport-webhook` [feature]
   <!-- file: packages/transport-webhook/src/lib.rs -->
   <!-- purpose: Create HTTP server that binds and receives inbound webhook requests -->
   <!-- requirements: C-001 -->
   <!-- leverage: axum dependency already declared -->
-- [ ] Implement HMAC signature verification for inbound webhooks [feature]
+- [x] Implement HMAC signature verification for inbound webhooks [feature]
   <!-- file: packages/transport-webhook/src/handlers/mod.rs -->
   <!-- purpose: Validate webhook payload signatures to prevent spoofing -->
   <!-- requirements: M-003 -->
   <!-- leverage: none -->
-- [ ] Implement replay protection via timestamp checking [feature]
+- [x] Implement replay protection via timestamp checking [feature]
   <!-- file: packages/transport-webhook/src/handlers/mod.rs -->
   <!-- purpose: Reject stale webhook deliveries to prevent replay attacks -->
   <!-- requirements: M-003 -->
   <!-- leverage: none -->
-- [ ] Implement idempotency key handling [feature]
+- [x] Implement idempotency key handling [feature]
   <!-- file: packages/transport-webhook/src/handlers/mod.rs -->
   <!-- purpose: Deduplicate webhook deliveries using idempotency keys -->
   <!-- requirements: M-003 -->
   <!-- leverage: none -->
-- [ ] Implement content-type validation [feature]
+- [x] Implement content-type validation [feature]
   <!-- file: packages/transport-webhook/src/handlers/mod.rs -->
   <!-- purpose: Reject webhook payloads with unexpected content types -->
   <!-- requirements: M-003 -->
   <!-- leverage: none -->
-- [ ] Add webhook-specific error variants for signature, timeout, validation [fix]
+- [x] Add webhook-specific error variants for signature, timeout, validation [fix]
   <!-- file: packages/transport-webhook/src/error.rs -->
   <!-- purpose: Provide comprehensive error handling for webhook operations -->
   <!-- requirements: C-001 -->
   <!-- leverage: existing error.rs structure -->
-- [ ] Add integration tests for inbound webhook handling [test]
+- [x] Add integration tests for inbound webhook handling [test]
   <!-- file: packages/transport-webhook/src/tests/mod.rs -->
   <!-- purpose: Verify webhook receiving, signature validation, and replay protection -->
   <!-- requirements: m-009 -->

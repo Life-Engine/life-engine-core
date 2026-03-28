@@ -2,6 +2,7 @@
 //!
 //! Provides AES-256-GCM encryption, Argon2id key derivation, and HMAC utilities.
 
+pub mod credential;
 pub mod encryption;
 pub mod error;
 pub mod hmac;

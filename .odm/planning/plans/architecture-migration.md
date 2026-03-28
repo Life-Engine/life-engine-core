@@ -449,7 +449,7 @@ Layer encryption-at-rest and audit logging onto the storage infrastructure built
 
 ### 5.3 — Per-Record Credential Encryption
 
-- [ ] Implement credential encryption in StorageContext: when writing to the `credentials` collection, encrypt the `encrypted` field of each credential document using AES-256-GCM with a key derived from the master passphrase via a separate HKDF context (so the credential key is distinct from the database key). Decrypt on read. This provides defence-in-depth — even if the database encryption is compromised, individual credentials remain encrypted.
+- [x] Implement credential encryption in StorageContext: when writing to the `credentials` collection, encrypt the `encrypted` field of each credential document using AES-256-GCM with a key derived from the master passphrase via a separate HKDF context (so the credential key is distinct from the database key). Decrypt on read. This provides defence-in-depth — even if the database encryption is compromised, individual credentials remain encrypted.
   <!-- files: packages/traits/src/storage_context.rs, packages/crypto/src/credential.rs -->
   <!-- purpose: Add per-record encryption for sensitive credential data -->
   <!-- requirements: encryption-and-audit 4.1, 4.2 -->

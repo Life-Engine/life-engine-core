@@ -11,6 +11,7 @@ use chrono::Utc;
 use serde_json::Value;
 use tokio::sync::mpsc;
 use uuid::Uuid;
+use zeroize::Zeroizing;
 
 use crate::blob::{BlobInput, BlobKey, BlobMeta};
 use crate::schema::SchemaRegistry;
@@ -97,11 +98,17 @@ pub struct AuditEvent {
     pub payload: Value,
 }
 
+/// The collection name that triggers per-record credential encryption.
+const CREDENTIALS_COLLECTION: &str = "credentials";
+
 /// Enforcement layer wrapping `StorageRouter`.
 pub struct StorageContext {
     router: Arc<StorageRouter>,
     schema_registry: Arc<SchemaRegistry>,
     audit_tx: mpsc::UnboundedSender<AuditEvent>,
+    /// Master key for per-record credential encryption (HKDF-derived per record).
+    /// When `Some`, credentials are encrypted before storage and decrypted on read.
+    credential_master_key: Option<Zeroizing<[u8; 32]>>,
 }
 
 impl StorageContext {
@@ -115,6 +122,22 @@ impl StorageContext {
             router,
             schema_registry,
             audit_tx,
+            credential_master_key: None,
+        }
+    }
+
+    /// Create a new `StorageContext` with per-record credential encryption enabled.
+    pub fn with_credential_encryption(
+        router: Arc<StorageRouter>,
+        schema_registry: Arc<SchemaRegistry>,
+        audit_tx: mpsc::UnboundedSender<AuditEvent>,
+        credential_master_key: Zeroizing<[u8; 32]>,
+    ) -> Self {
+        Self {
+            router,
+            schema_registry,
+            audit_tx,
+            credential_master_key: Some(credential_master_key),
         }
     }
 
@@ -184,6 +207,101 @@ impl StorageContext {
         let _ = self.audit_tx.send(event);
     }
 
+    /// Encrypt the `claims` field of a credential document before storage.
+    ///
+    /// Only operates when credential encryption is enabled and the document
+    /// has both an `id` and a `claims` field. Sets `encrypted: true` on the
+    /// document after encrypting.
+    fn encrypt_credential_claims(&self, doc: &mut Value) -> Result<(), StorageError> {
+        let master_key = match &self.credential_master_key {
+            Some(k) => k,
+            None => return Ok(()),
+        };
+
+        let obj = match doc.as_object_mut() {
+            Some(o) => o,
+            None => return Ok(()),
+        };
+
+        // Only encrypt if claims field exists and is not already encrypted.
+        if obj.get("encrypted").and_then(|v| v.as_bool()) == Some(true) {
+            return Ok(());
+        }
+
+        let claims = match obj.get("claims") {
+            Some(c) => c.clone(),
+            None => return Ok(()),
+        };
+
+        let id = obj
+            .get("id")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| StorageError::Internal {
+                message: "credential document missing 'id' field".to_string(),
+            })?;
+
+        let encrypted = life_engine_crypto::credential::encrypt_claims(master_key, id, &claims)
+            .map_err(|e| StorageError::Internal {
+                message: format!("credential encryption failed: {e}"),
+            })?;
+
+        obj.insert("claims".to_string(), Value::String(encrypted));
+        obj.insert("encrypted".to_string(), Value::Bool(true));
+
+        Ok(())
+    }
+
+    /// Decrypt the `claims` field of a credential document after reading.
+    ///
+    /// Only operates when credential encryption is enabled and the document
+    /// has `encrypted: true`.
+    fn decrypt_credential_claims(&self, doc: &mut Value) -> Result<(), StorageError> {
+        let master_key = match &self.credential_master_key {
+            Some(k) => k,
+            None => return Ok(()),
+        };
+
+        let obj = match doc.as_object_mut() {
+            Some(o) => o,
+            None => return Ok(()),
+        };
+
+        if obj.get("encrypted").and_then(|v| v.as_bool()) != Some(true) {
+            return Ok(());
+        }
+
+        let ciphertext = obj
+            .get("claims")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| StorageError::Internal {
+                message: "encrypted credential missing string 'claims' field".to_string(),
+            })?
+            .to_string();
+
+        let id = obj
+            .get("id")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| StorageError::Internal {
+                message: "credential document missing 'id' field".to_string(),
+            })?;
+
+        let decrypted = life_engine_crypto::credential::decrypt_claims(master_key, id, &ciphertext)
+            .map_err(|e| StorageError::Internal {
+                message: format!("credential decryption failed: {e}"),
+            })?;
+
+        obj.insert("claims".to_string(), decrypted);
+        obj.remove("encrypted");
+
+        Ok(())
+    }
+
+    /// Returns true if the resolved collection name is the credentials collection.
+    fn is_credentials_collection(resolved: &str) -> bool {
+        resolved == CREDENTIALS_COLLECTION
+            || resolved.ends_with(&format!(".{CREDENTIALS_COLLECTION}"))
+    }
+
     /// Inject/manage system fields on a document for create operations.
     fn inject_system_fields_create(doc: &mut Value) {
         let now = Utc::now().to_rfc3339();
@@ -243,7 +361,13 @@ impl StorageContext {
     ) -> Result<Value, StorageError> {
         Self::check_capability(caller, StorageCapability::DocRead)?;
         let resolved = Self::resolve_collection(caller, collection, plugin_scoped)?;
-        self.router.doc_get(&resolved, id).await
+        let mut doc = self.router.doc_get(&resolved, id).await?;
+
+        if Self::is_credentials_collection(&resolved) {
+            self.decrypt_credential_claims(&mut doc)?;
+        }
+
+        Ok(doc)
     }
 
     /// Execute a query and return matching documents.
@@ -256,7 +380,16 @@ impl StorageContext {
         Self::check_capability(caller, StorageCapability::DocRead)?;
         descriptor.collection =
             Self::resolve_collection(caller, &descriptor.collection, plugin_scoped)?;
-        self.router.doc_query(descriptor).await
+        let is_cred = Self::is_credentials_collection(&descriptor.collection);
+        let mut result = self.router.doc_query(descriptor).await?;
+
+        if is_cred {
+            for doc in &mut result.documents {
+                self.decrypt_credential_claims(doc)?;
+            }
+        }
+
+        Ok(result)
     }
 
     /// Count documents matching optional filters.
@@ -308,6 +441,10 @@ impl StorageContext {
             .unwrap_or("")
             .to_string();
 
+        if Self::is_credentials_collection(&resolved) {
+            self.encrypt_credential_claims(&mut document)?;
+        }
+
         let result = self.router.doc_create(&resolved, document).await?;
 
         self.emit_audit(AuditEvent {
@@ -353,6 +490,10 @@ impl StorageContext {
         }
 
         Self::inject_system_fields_update(&mut document);
+
+        if Self::is_credentials_collection(&resolved) {
+            self.encrypt_credential_claims(&mut document)?;
+        }
 
         let result = self.router.doc_update(&resolved, id, document).await?;
 

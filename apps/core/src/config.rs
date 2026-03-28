@@ -1089,30 +1089,161 @@ pub mod startup {
         default_config_dir().map(|dir| dir.join("config.toml"))
     }
 
-    /// Starter config.toml content with commented-out sections explaining each option.
+    /// Starter config.toml content with working defaults for a first-run experience.
+    ///
+    /// All sections are active (not commented out) so Core starts with a
+    /// functional configuration. Storage defaults to SQLite, the REST+GraphQL
+    /// transport binds to localhost:8080, and plugins/workflows use relative
+    /// paths under the data directory.
     const STARTER_CONFIG: &str = r#"# Life Engine Core Configuration
-# See documentation for all available options.
+# Generated on first run. Edit to customise your instance.
 
-# [storage]
-# path = "data/core.db"
+[storage]
+# Document storage — SQLite adapter
+backend = "sqlite"
+path = "data/core.db"
+# Uncomment and set a passphrase for at-rest encryption:
 # passphrase = ""  # Or set LIFE_ENGINE_STORAGE_PASSPHRASE env var
 
-# [auth]
-# provider = "local-token"  # Options: local-token, oidc, webauthn
+# Blob storage — filesystem adapter
+[storage.blob]
+backend = "filesystem"
+path = "data/blobs"
 
-# [logging]
-# level = "info"            # Options: trace, debug, info, warn, error
-# format = "json"           # Options: json, pretty
+[auth]
+provider = "local-token"  # Options: local-token, oidc, webauthn
 
-# [plugins]
-# path = "plugins"
+[logging]
+level = "info"            # Options: trace, debug, info, warn, error
+format = "json"           # Options: json, pretty
 
-# [workflows]
-# path = "workflows"
+[plugins]
+path = "plugins"
 
-# [transports.rest]
-# port = 3000
+[workflows]
+path = "workflows"
+
+# REST and GraphQL on localhost:8080
+[transports.rest]
+host = "127.0.0.1"
+port = 8080
 "#;
+
+    /// Default listeners.yaml content for the REST+GraphQL transport.
+    const DEFAULT_LISTENERS_YAML: &str = r#"# Life Engine Listener Configuration
+# Generated on first run. Edit to customise transport bindings.
+
+listeners:
+  - binding: default
+    address: "127.0.0.1"
+    port: 8080
+    # tls:
+    #   cert: /path/to/cert.pem
+    #   key: /path/to/key.pem
+    handlers:
+      - handler_type: rest
+        routes:
+          - method: GET
+            path: /api/v1/health
+            workflow: system.health
+            public: true
+          - method: GET
+            path: "/api/v1/data/:collection"
+            workflow: collection.list
+          - method: POST
+            path: "/api/v1/data/:collection"
+            workflow: collection.create
+          - method: GET
+            path: "/api/v1/data/:collection/:id"
+            workflow: collection.get
+          - method: PUT
+            path: "/api/v1/data/:collection/:id"
+            workflow: collection.update
+          - method: DELETE
+            path: "/api/v1/data/:collection/:id"
+            workflow: collection.delete
+      - handler_type: graphql
+        routes:
+          - method: POST
+            path: /graphql
+            workflow: graphql.query
+"#;
+
+    /// Default storage.toml content with SQLite document adapter and
+    /// filesystem blob adapter.
+    const DEFAULT_STORAGE_TOML: &str = r#"# Life Engine Storage Configuration
+# Generated on first run. Edit to customise storage backends.
+
+[document]
+# SQLite document adapter
+backend = "sqlite"
+path = "data/core.db"
+
+# Connection pool settings
+max_connections = 8
+busy_timeout_ms = 5000
+
+# WAL mode is enabled by default for concurrent reads
+journal_mode = "wal"
+
+[blob]
+# Filesystem blob adapter
+backend = "filesystem"
+path = "data/blobs"
+
+# Maximum blob size in bytes (default: 50 MiB)
+max_blob_size = 52428800
+
+# Cleanup interval for orphaned blobs in seconds
+cleanup_interval_secs = 3600
+"#;
+
+    /// Generate default companion configuration files in the given data
+    /// directory on first run.
+    ///
+    /// Creates `listeners.yaml` and `storage.toml` alongside the main
+    /// `config.toml`. Existing files are never overwritten — only missing
+    /// files are generated. Returns the list of files that were created.
+    pub fn generate_default_configs(data_dir: &std::path::Path) -> Vec<PathBuf> {
+        let mut created = Vec::new();
+
+        if let Err(e) = std::fs::create_dir_all(data_dir) {
+            tracing::warn!(
+                path = %data_dir.display(),
+                error = %e,
+                "failed to create data directory for default configs"
+            );
+            return created;
+        }
+
+        let files: &[(&str, &str)] = &[
+            ("listeners.yaml", DEFAULT_LISTENERS_YAML),
+            ("storage.toml", DEFAULT_STORAGE_TOML),
+        ];
+
+        for (name, content) in files {
+            let path = data_dir.join(name);
+            if path.exists() {
+                tracing::debug!(path = %path.display(), "config file already exists, skipping");
+                continue;
+            }
+            match std::fs::write(&path, content) {
+                Ok(()) => {
+                    tracing::info!(path = %path.display(), "wrote default {name}");
+                    created.push(path);
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        path = %path.display(),
+                        error = %e,
+                        "failed to write default {name}"
+                    );
+                }
+            }
+        }
+
+        created
+    }
 
     /// Load configuration from a TOML file with `LIFE_ENGINE_*` environment
     /// variable overrides.
@@ -1126,7 +1257,9 @@ pub mod startup {
     /// **env vars > TOML file > defaults**.
     ///
     /// If no config file exists at the resolved path, a starter config is
-    /// created with commented-out sections explaining each option.
+    /// created with commented-out sections explaining each option. Companion
+    /// files (`listeners.yaml`, `storage.toml`) are generated in the config
+    /// directory alongside `config.toml`.
     pub fn load_config(path: Option<&str>) -> Result<CoreConfig, ConfigError> {
         // 1. Determine config file path.
         let config_path = match path {
@@ -1179,6 +1312,16 @@ pub mod startup {
                         path = %config_path.display(),
                         "wrote starter config.toml"
                     );
+                }
+                // Generate companion config files in the same directory.
+                if let Some(config_dir) = config_path.parent() {
+                    let generated = generate_default_configs(config_dir);
+                    if !generated.is_empty() {
+                        tracing::info!(
+                            count = generated.len(),
+                            "generated default companion config files"
+                        );
+                    }
                 }
                 toml::map::Map::new()
             }
@@ -2203,6 +2346,121 @@ some_key = "some_value"
             assert_eq!(
                 plugin_cfg.config.get("some_key").and_then(|v| v.as_str()),
                 Some("some_value")
+            );
+        }
+
+        // ---- WP 10.3: Default configuration generation tests ----
+
+        #[test]
+        fn starter_config_parses_as_valid_toml() {
+            let config: CoreConfig = toml::from_str(STARTER_CONFIG).unwrap();
+            assert_eq!(
+                config.storage.get("backend").and_then(|v| v.as_str()),
+                Some("sqlite")
+            );
+            assert_eq!(
+                config.storage.get("path").and_then(|v| v.as_str()),
+                Some("data/core.db")
+            );
+            assert_eq!(
+                config.auth.get("provider").and_then(|v| v.as_str()),
+                Some("local-token")
+            );
+            assert!(config.transports.contains_key("rest"));
+            assert_eq!(
+                config.transports["rest"]
+                    .get("port")
+                    .and_then(|v| v.as_integer()),
+                Some(8080)
+            );
+            assert_eq!(config.logging.level, "info");
+            assert_eq!(config.logging.format, "json");
+            assert_eq!(config.plugins.path, "plugins");
+            assert_eq!(config.workflows.path, "workflows");
+        }
+
+        #[test]
+        fn starter_config_passes_validation() {
+            let config: CoreConfig = toml::from_str(STARTER_CONFIG).unwrap();
+            assert!(validate_config(&config).is_ok());
+        }
+
+        #[test]
+        fn generate_default_configs_creates_files() {
+            let dir = tempfile::tempdir().unwrap();
+            let created = generate_default_configs(dir.path());
+            assert_eq!(created.len(), 2);
+            assert!(dir.path().join("listeners.yaml").exists());
+            assert!(dir.path().join("storage.toml").exists());
+        }
+
+        #[test]
+        fn generate_default_configs_skips_existing_files() {
+            let dir = tempfile::tempdir().unwrap();
+            // Pre-create listeners.yaml with custom content.
+            let existing = dir.path().join("listeners.yaml");
+            std::fs::write(&existing, "custom content").unwrap();
+
+            let created = generate_default_configs(dir.path());
+            // Only storage.toml should have been created.
+            assert_eq!(created.len(), 1);
+            assert!(created[0].ends_with("storage.toml"));
+            // Existing file should not have been overwritten.
+            assert_eq!(std::fs::read_to_string(&existing).unwrap(), "custom content");
+        }
+
+        #[test]
+        fn generate_default_configs_creates_directory() {
+            let dir = tempfile::tempdir().unwrap();
+            let nested = dir.path().join("sub").join("dir");
+            let created = generate_default_configs(&nested);
+            assert_eq!(created.len(), 2);
+            assert!(nested.join("listeners.yaml").exists());
+            assert!(nested.join("storage.toml").exists());
+        }
+
+        #[test]
+        fn first_run_generates_all_config_files() {
+            let _lock = ENV_LOCK.lock().unwrap();
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("config.toml");
+
+            // load_config on a non-existent path triggers first-run generation.
+            let config = load_config(Some(path.to_str().unwrap())).unwrap();
+
+            // config.toml should have been written.
+            assert!(path.exists());
+
+            // Companion files should also exist.
+            assert!(dir.path().join("listeners.yaml").exists());
+            assert!(dir.path().join("storage.toml").exists());
+
+            // The config should have working defaults.
+            assert_eq!(
+                config.storage.get("backend").and_then(|v| v.as_str()),
+                Some("sqlite")
+            );
+            assert!(config.transports.contains_key("rest"));
+        }
+
+        #[test]
+        fn subsequent_load_does_not_overwrite() {
+            let _lock = ENV_LOCK.lock().unwrap();
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("config.toml");
+
+            // First run — generates defaults.
+            let _ = load_config(Some(path.to_str().unwrap())).unwrap();
+
+            // Modify listeners.yaml to test it is not overwritten.
+            let listeners_path = dir.path().join("listeners.yaml");
+            std::fs::write(&listeners_path, "custom: true").unwrap();
+
+            // Second load — file exists, should not regenerate.
+            let _ = load_config(Some(path.to_str().unwrap())).unwrap();
+            assert_eq!(
+                std::fs::read_to_string(&listeners_path).unwrap(),
+                "custom: true"
             );
         }
     }

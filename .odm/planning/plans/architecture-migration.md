@@ -934,7 +934,7 @@ Wire all layers together into the Core binary, create system workflows, generate
 
 ### 10.3 — Default Configuration Generation
 
-- [ ] Implement first-run configuration generation: when Core starts with no existing config directory, generate default files: `config.yaml` (core settings, auth, storage, plugin, network sections), `listeners.yaml` (default REST+GraphQL listener on localhost:8080), `storage.toml` (SQLite document adapter, filesystem blob adapter, default paths and timeouts). Write to the configured data directory. On subsequent starts, load existing config without overwriting.
+- [x] Implement first-run configuration generation: when Core starts with no existing config directory, generate default files: `config.yaml` (core settings, auth, storage, plugin, network sections), `listeners.yaml` (default REST+GraphQL listener on localhost:8080), `storage.toml` (SQLite document adapter, filesystem blob adapter, default paths and timeouts). Write to the configured data directory. On subsequent starts, load existing config without overwriting.
   <!-- files: apps/core/src/config.rs -->
   <!-- purpose: Zero-configuration first run experience -->
   <!-- requirements: transport-layer 2.1, storage-router 2.1 -->

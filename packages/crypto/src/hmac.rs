@@ -5,6 +5,14 @@ use sha2::Sha256;
 
 type HmacSha256 = Hmac<Sha256>;
 
+/// Produce an HMAC-SHA256 tag as a fixed-size 32-byte array.
+pub fn hmac_sha256(key: &[u8], data: &[u8]) -> [u8; 32] {
+    let mut mac =
+        HmacSha256::new_from_slice(key).expect("HMAC-SHA256 accepts any key length");
+    mac.update(data);
+    mac.finalize().into_bytes().into()
+}
+
 /// Produce an HMAC-SHA256 tag for the given data.
 pub fn hmac_sign(key: &[u8], data: &[u8]) -> Vec<u8> {
     let mut mac =

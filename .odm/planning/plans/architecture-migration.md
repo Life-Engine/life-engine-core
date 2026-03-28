@@ -425,12 +425,12 @@ Layer encryption-at-rest and audit logging onto the storage infrastructure built
 
 ### 5.1 — Shared Crypto Crate
 
-- [ ] Implement `packages/crypto/` with four primitives: `aes_256_gcm_encrypt(plaintext: &[u8], key: &[u8]) -> Result<Vec<u8>>` and `aes_256_gcm_decrypt(ciphertext: &[u8], key: &[u8]) -> Result<Vec<u8>>` using random nonces prepended to ciphertext; `argon2id_derive_key(passphrase: &str, salt: &[u8], params: Argon2Params) -> [u8; 32]` with configurable memory (default 64MB), iterations (default 3), and parallelism (default 4); `hmac_sha256(key: &[u8], message: &[u8]) -> [u8; 32]`. All functions are pure, stateless, and reusable across modules.
+- [x] Implement `packages/crypto/` with four primitives: `aes_256_gcm_encrypt(plaintext: &[u8], key: &[u8]) -> Result<Vec<u8>>` and `aes_256_gcm_decrypt(ciphertext: &[u8], key: &[u8]) -> Result<Vec<u8>>` using random nonces prepended to ciphertext; `argon2id_derive_key(passphrase: &str, salt: &[u8], params: Argon2Params) -> [u8; 32]` with configurable memory (default 64MB), iterations (default 3), and parallelism (default 4); `hmac_sha256(key: &[u8], message: &[u8]) -> [u8; 32]`. All functions are pure, stateless, and reusable across modules.
   <!-- files: packages/crypto/src/lib.rs, packages/crypto/src/aes.rs, packages/crypto/src/kdf.rs, packages/crypto/src/hmac.rs -->
   <!-- purpose: Provide shared crypto primitives used by all modules needing encryption -->
   <!-- requirements: encryption-and-audit 1.1, 2.1, 2.2, 2.3 -->
 
-- [ ] Write unit tests: encrypt-decrypt round-trip, incorrect key returns error, Argon2 parameter validation, HMAC produces consistent output for same inputs.
+- [x] Write unit tests: encrypt-decrypt round-trip, incorrect key returns error, Argon2 parameter validation, HMAC produces consistent output for same inputs.
   <!-- files: packages/crypto/tests/ -->
   <!-- purpose: Verify crypto primitive correctness -->
   <!-- requirements: encryption-and-audit 1.1, 2.1 -->

@@ -1,6 +1,14 @@
-# ADR-001: Rust for Core backend
+---
+title: "ADR-001: Rust for Core Backend"
+type: adr
+created: 2026-03-27
+status: active
+---
+
+# ADR-001: Rust for Core Backend
 
 ## Status
+
 Accepted
 
 ## Context

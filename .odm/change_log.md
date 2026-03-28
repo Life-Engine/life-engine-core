@@ -2,6 +2,8 @@
 
 ## 2026-03-29
 
+- Architecture Migration WP 1.3/1.4 — CDM JSON Schemas and Workflow Engine Contract Types: add TriggerContext enum (Endpoint, Event, Schedule variants) to new packages/types/src/trigger.rs with re-export at crate root. WorkflowRequest, WorkflowResponse, WorkflowStatus, Identity, and helpers were already implemented. Add 5 TriggerContext tests. WP 1.3 verified complete — 6 schema files at .odm/doc/schemas/ with 22 passing validation tests. Phase 1 (Foundation Types) now fully complete.
+
 - Architecture Migration WP 1.2 — CDM Rust Structs: add get_ext and set_ext helper functions to packages/types/src/extensions.rs for reading and writing plugin-namespaced extension fields with merge-not-replace semantics. Re-export helpers at crate root. All 6 CDM structs, nested types, and 350 tests were already in place from prior work packages. 8 new extension helper tests added.
 
 - Architecture Migration WP 1.1 — PipelineMessage Core Types: add PipelineEnvelope, PipelineMetadata, StepTrace, StepOutcome, and IdentitySummary types to packages/types/src/pipeline.rs. These implement the new pipeline architecture spec alongside existing types for incremental migration. Add 8 tests covering full-field round-trip, empty/nested/large (1MB+) payloads, trace accumulation, identity projection, and outcome serialisation. Fix pre-existing ContactName test referencing removed display field.

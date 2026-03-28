@@ -96,39 +96,39 @@ Establish the shared type definitions that every other layer depends on. These t
 
 ### 1.3 — CDM JSON Schemas
 
-- [ ] Create JSON Schema (Draft 2020-12) files for all 6 CDM collections: `schemas/events.schema.json`, `schemas/tasks.schema.json`, `schemas/contacts.schema.json`, `schemas/notes.schema.json`, `schemas/emails.schema.json`, `schemas/credentials.schema.json`. Each schema must include `$id` metadata, `uuid` format on `id` fields, accurate `$defs` for nested types, and `required` arrays matching the Rust struct's non-Optional fields. These schemas are the reference for validation — the Rust structs are authoritative for type definitions.
+- [x] Create JSON Schema (Draft 2020-12) files for all 6 CDM collections: `schemas/events.schema.json`, `schemas/tasks.schema.json`, `schemas/contacts.schema.json`, `schemas/notes.schema.json`, `schemas/emails.schema.json`, `schemas/credentials.schema.json`. Each schema must include `$id` metadata, `uuid` format on `id` fields, accurate `$defs` for nested types, and `required` arrays matching the Rust struct's non-Optional fields. These schemas are the reference for validation — the Rust structs are authoritative for type definitions.
   <!-- files: schemas/*.schema.json -->
   <!-- purpose: Provide JSON Schema definitions for runtime validation and plugin interop -->
   <!-- requirements: cdm-specification 12.1, 12.2 -->
 
-- [ ] Write schema validation tests: for each CDM collection, construct valid and invalid JSON payloads and validate them against the schema files. Test that required fields are enforced, enum values are constrained, and optional fields are truly optional.
+- [x] Write schema validation tests: for each CDM collection, construct valid and invalid JSON payloads and validate them against the schema files. Test that required fields are enforced, enum values are constrained, and optional fields are truly optional.
   <!-- files: packages/types/tests/schema_validation_tests.rs -->
   <!-- purpose: Verify JSON schemas match Rust struct definitions -->
   <!-- requirements: cdm-specification 12.1, 12.2 -->
 
 ### 1.4 — Workflow Engine Contract Types
 
-- [ ] Define `WorkflowRequest` struct with fields: `workflow: String` (e.g. "collection.list"), `identity: Identity`, `params: HashMap<String, String>` (path params), `query: HashMap<String, String>` (query string / GraphQL args), `body: Option<Value>` (parsed request body), `meta: RequestMeta` (request id, timestamp, source binding). Define `RequestMeta` with `request_id: String`, `timestamp: DateTime<Utc>`, `source_binding: String`.
+- [x] Define `WorkflowRequest` struct with fields: `workflow: String` (e.g. "collection.list"), `identity: Identity`, `params: HashMap<String, String>` (path params), `query: HashMap<String, String>` (query string / GraphQL args), `body: Option<Value>` (parsed request body), `meta: RequestMeta` (request id, timestamp, source binding). Define `RequestMeta` with `request_id: String`, `timestamp: DateTime<Utc>`, `source_binding: String`.
   <!-- files: packages/types/src/workflow.rs -->
   <!-- purpose: Establish the input contract between transport handlers and the workflow engine -->
   <!-- requirements: workflow-engine-contract 1.1, 1.2 -->
 
-- [ ] Define `WorkflowResponse` struct with fields: `status: WorkflowStatus`, `data: Option<Value>`, `errors: Vec<WorkflowError>`, `meta: ResponseMeta`. Define `ResponseMeta` with `request_id: String`, `duration_ms: u64`, `traces: Vec<StepTrace>`. Define `WorkflowError` with `code: String`, `message: String`, `detail: Option<Value>`.
+- [x] Define `WorkflowResponse` struct with fields: `status: WorkflowStatus`, `data: Option<Value>`, `errors: Vec<WorkflowError>`, `meta: ResponseMeta`. Define `ResponseMeta` with `request_id: String`, `duration_ms: u64`, `traces: Vec<StepTrace>`. Define `WorkflowError` with `code: String`, `message: String`, `detail: Option<Value>`.
   <!-- files: packages/types/src/workflow.rs -->
   <!-- purpose: Establish the output contract from the workflow engine back to transport handlers -->
   <!-- requirements: workflow-engine-contract 2.1, 2.2 -->
 
-- [ ] Define `WorkflowStatus` enum with variants: `Ok`, `Created`, `NotFound`, `Denied`, `Invalid`, `Error`. Each variant must carry distinct semantics across multiple protocols (Rule A). Document each variant's intended meaning. Include `impl WorkflowStatus` with `is_success(&self) -> bool` and `http_status_code(&self) -> u16` helpers.
+- [x] Define `WorkflowStatus` enum with variants: `Ok`, `Created`, `NotFound`, `Denied`, `Invalid`, `Error`. Each variant must carry distinct semantics across multiple protocols (Rule A). Document each variant's intended meaning. Include `impl WorkflowStatus` with `is_success(&self) -> bool` and `http_status_code(&self) -> u16` helpers.
   <!-- files: packages/types/src/workflow.rs -->
   <!-- purpose: Provide a minimal, protocol-agnostic status vocabulary -->
   <!-- requirements: workflow-engine-contract 3.1, 3.2 -->
 
-- [ ] Define `Identity` struct with fields: `subject: String`, `issuer: String`, `claims: HashMap<String, Value>`. This is the full identity from auth middleware, passed as `Extension<Identity>` in Axum and included in every WorkflowRequest. Define `TriggerContext` enum with variants: `Endpoint(WorkflowRequest)`, `Event { name: String, payload: Option<Value>, source: String }`, `Schedule { workflow_id: String }`.
+- [x] Define `Identity` struct with fields: `subject: String`, `issuer: String`, `claims: HashMap<String, Value>`. This is the full identity from auth middleware, passed as `Extension<Identity>` in Axum and included in every WorkflowRequest. Define `TriggerContext` enum with variants: `Endpoint(WorkflowRequest)`, `Event { name: String, payload: Option<Value>, source: String }`, `Schedule { workflow_id: String }`.
   <!-- files: packages/types/src/identity.rs, packages/types/src/trigger.rs -->
   <!-- purpose: Establish identity and trigger context types used throughout the system -->
   <!-- requirements: workflow-engine-contract 4.1, pipeline-executor 2.1 -->
 
-- [ ] Write unit tests for all contract types: serialisation round-trips, WorkflowStatus helper methods, TriggerContext variant construction.
+- [x] Write unit tests for all contract types: serialisation round-trips, WorkflowStatus helper methods, TriggerContext variant construction.
   <!-- files: packages/types/tests/workflow_tests.rs -->
   <!-- purpose: Validate contract type stability -->
   <!-- requirements: workflow-engine-contract 1.1 through 4.1 -->

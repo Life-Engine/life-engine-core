@@ -17,6 +17,7 @@ pub mod notes;
 pub mod pipeline;
 pub mod storage;
 pub mod tasks;
+pub mod trigger;
 pub mod workflow;
 
 // Re-export all canonical types at crate root for convenience.
@@ -42,6 +43,7 @@ pub use storage::{
 };
 pub use tasks::{Task, TaskPriority, TaskStatus};
 pub use identity::Identity;
+pub use trigger::TriggerContext;
 pub use workflow::{RequestMeta, ResponseMeta, WorkflowError, WorkflowRequest, WorkflowResponse, WorkflowStatus};
 
 #[cfg(test)]

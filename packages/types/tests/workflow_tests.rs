@@ -9,6 +9,7 @@ use chrono::Utc;
 use serde_json::json;
 
 use life_engine_types::identity::Identity;
+use life_engine_types::trigger::TriggerContext;
 use life_engine_types::workflow::{
     RequestMeta, ResponseMeta, WorkflowError, WorkflowRequest, WorkflowResponse, WorkflowStatus,
 };
@@ -270,6 +271,104 @@ mod identity {
         assert_eq!(id.subject, "anonymous");
         assert_eq!(id.issuer, "system");
         assert!(id.claims.is_empty());
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Req 8 — TriggerContext
+// ---------------------------------------------------------------------------
+mod trigger_context {
+    use super::*;
+
+    #[test]
+    fn endpoint_variant_wraps_request() {
+        let req = WorkflowRequest {
+            workflow: "collection.list".into(),
+            identity: Identity::guest(),
+            params: HashMap::new(),
+            query: HashMap::new(),
+            body: None,
+            meta: RequestMeta {
+                request_id: "r-tc-1".into(),
+                timestamp: Utc::now(),
+                source_binding: "rest".into(),
+            },
+        };
+        let ctx = TriggerContext::Endpoint(req);
+        if let TriggerContext::Endpoint(inner) = &ctx {
+            assert_eq!(inner.workflow, "collection.list");
+        } else {
+            panic!("expected Endpoint variant");
+        }
+    }
+
+    #[test]
+    fn event_variant_fields() {
+        let ctx = TriggerContext::Event {
+            name: "contact.created".into(),
+            payload: Some(json!({"id": "c-1"})),
+            source: "connector-google".into(),
+        };
+        if let TriggerContext::Event {
+            name,
+            payload,
+            source,
+        } = &ctx
+        {
+            assert_eq!(name, "contact.created");
+            assert!(payload.is_some());
+            assert_eq!(source, "connector-google");
+        } else {
+            panic!("expected Event variant");
+        }
+    }
+
+    #[test]
+    fn event_variant_payload_none() {
+        let ctx = TriggerContext::Event {
+            name: "system.heartbeat".into(),
+            payload: None,
+            source: "scheduler".into(),
+        };
+        if let TriggerContext::Event { payload, .. } = &ctx {
+            assert!(payload.is_none());
+        } else {
+            panic!("expected Event variant");
+        }
+    }
+
+    #[test]
+    fn schedule_variant() {
+        let ctx = TriggerContext::Schedule {
+            workflow_id: "backup.daily".into(),
+        };
+        if let TriggerContext::Schedule { workflow_id } = &ctx {
+            assert_eq!(workflow_id, "backup.daily");
+        } else {
+            panic!("expected Schedule variant");
+        }
+    }
+
+    #[test]
+    fn trigger_context_round_trip() {
+        let contexts = vec![
+            TriggerContext::Event {
+                name: "task.updated".into(),
+                payload: Some(json!({"id": "t-1"})),
+                source: "plugin-a".into(),
+            },
+            TriggerContext::Schedule {
+                workflow_id: "sync.hourly".into(),
+            },
+        ];
+        for ctx in &contexts {
+            let json = serde_json::to_string(ctx).expect("serialize trigger context");
+            let restored: TriggerContext =
+                serde_json::from_str(&json).expect("deserialize trigger context");
+            // Verify round-trip by re-serialising
+            let json2 = serde_json::to_string(&restored).expect("re-serialize");
+            assert_eq!(json, json2);
+        }
     }
 }
 

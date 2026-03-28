@@ -295,12 +295,12 @@ This plan addresses the 29 issues identified in the phase-3 QA review of the Cal
 > depends: none
 > spec: .odm/qa/reports/phase-3/api-plugins.md
 
-- [ ] Add warning log when `open_multistatus` drops invalid namespace declarations [minor]
+- [x] Add warning log when `open_multistatus` drops invalid namespace declarations [minor]
   <!-- file: packages/dav-utils/src/dav_xml.rs -->
   <!-- purpose: Surface namespace validation failures instead of silently swallowing them -->
   <!-- requirements: 28 -->
   <!-- leverage: existing validation at dav_xml.rs:117 -->
-- [ ] Fix space handling before extra namespace declarations in `open_multistatus` [minor]
+- [x] Fix space handling before extra namespace declarations in `open_multistatus` [minor]
   <!-- file: packages/dav-utils/src/dav_xml.rs -->
   <!-- purpose: Prevent malformed XML when callers omit leading space in namespace strings -->
   <!-- requirements: 29 -->

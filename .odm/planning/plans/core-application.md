@@ -12,7 +12,7 @@ This plan addresses the issues identified in the phase-3 QA review of the `apps/
 
 **Source:** .odm/qa/reports/phase-3/core-application.md
 
-**Progress:** 0 / 8 work packages complete
+**Progress:** 3 / 8 work packages complete
 
 ---
 
@@ -20,22 +20,22 @@ This plan addresses the issues identified in the phase-3 QA review of the `apps/
 > depends: none
 > spec: .odm/qa/reports/phase-3/core-application.md
 
-- [ ] Check `config.network.behind_proxy` before parsing `X-Forwarded-For` in auth middleware [critical]
+- [x] Check `config.network.behind_proxy` before parsing `X-Forwarded-For` in auth middleware [critical]
   <!-- file: apps/core/src/auth/middleware.rs -->
   <!-- purpose: Attacker on directly-exposed instance can spoof IP to bypass rate limiting -->
   <!-- requirements: 1 -->
   <!-- leverage: existing behind_proxy config flag -->
-- [ ] Check `config.network.behind_proxy` before parsing `X-Forwarded-For` in rate limit middleware [critical]
+- [x] Check `config.network.behind_proxy` before parsing `X-Forwarded-For` in rate limit middleware [critical]
   <!-- file: apps/core/src/rate_limit.rs -->
   <!-- purpose: Same IP spoofing issue in general rate limiter -->
   <!-- requirements: 1 -->
   <!-- leverage: existing behind_proxy config flag -->
-- [ ] When not behind a proxy, always use `ConnectInfo<SocketAddr>` for client IP [critical]
+- [x] When not behind a proxy, always use `ConnectInfo<SocketAddr>` for client IP [critical]
   <!-- file: apps/core/src/auth/middleware.rs, apps/core/src/rate_limit.rs -->
   <!-- purpose: Ensure direct connections use the real socket address -->
   <!-- requirements: 1 -->
   <!-- leverage: axum ConnectInfo extractor -->
-- [ ] Add tests verifying X-Forwarded-For is ignored when behind_proxy is false [critical]
+- [x] Add tests verifying X-Forwarded-For is ignored when behind_proxy is false [critical]
   <!-- file: apps/core/src/auth/middleware.rs, apps/core/src/rate_limit.rs -->
   <!-- purpose: Regression prevention -->
   <!-- requirements: 1 -->
@@ -100,12 +100,12 @@ This plan addresses the issues identified in the phase-3 QA review of the `apps/
 > depends: none
 > spec: .odm/qa/reports/phase-3/core-application.md
 
-- [ ] Implement actual fallback behavior for `PgSslMode::Prefer` (try TLS, catch error, retry plaintext) [major]
+- [x] Implement actual fallback behavior for `PgSslMode::Prefer` (try TLS, catch error, retry plaintext) [major]
   <!-- file: apps/core/src/pg_storage.rs -->
   <!-- purpose: Prefer variant currently behaves identically to Require; no fallback to plaintext -->
   <!-- requirements: 5 -->
   <!-- leverage: existing PgSslMode enum -->
-- [ ] Mark `rekey::derive_key()` zeroed-salt fallback as `#[cfg(test)]` [major]
+- [x] Mark `rekey::derive_key()` zeroed-salt fallback as `#[cfg(test)]` [major]
   <!-- file: apps/core/src/rekey.rs -->
   <!-- purpose: Public function with zeroed salt could be accidentally used in production -->
   <!-- requirements: 6 -->

@@ -148,10 +148,38 @@ impl PgStorage {
                 tracing::warn!("PostgreSQL TLS is disabled — credentials will be sent in plaintext");
                 pool_config.create_pool(Some(Runtime::Tokio1), NoTls)?
             }
-            PgSslMode::Prefer | PgSslMode::Require => {
+            PgSslMode::Prefer => {
+                // Try TLS first; fall back to plaintext if TLS negotiation fails.
+                match make_rustls_config() {
+                    Ok(tls_config) => {
+                        let tls_connector = MakeRustlsConnect::new(tls_config);
+                        match pool_config.create_pool(Some(Runtime::Tokio1), tls_connector) {
+                            Ok(pool) => {
+                                tracing::info!("PostgreSQL connected with TLS (prefer mode)");
+                                pool
+                            }
+                            Err(tls_err) => {
+                                tracing::warn!(
+                                    error = %tls_err,
+                                    "TLS connection failed, falling back to plaintext (prefer mode)"
+                                );
+                                pool_config.create_pool(Some(Runtime::Tokio1), NoTls)?
+                            }
+                        }
+                    }
+                    Err(config_err) => {
+                        tracing::warn!(
+                            error = %config_err,
+                            "TLS configuration failed, falling back to plaintext (prefer mode)"
+                        );
+                        pool_config.create_pool(Some(Runtime::Tokio1), NoTls)?
+                    }
+                }
+            }
+            PgSslMode::Require => {
                 let tls_config = make_rustls_config()?;
                 let tls_connector = MakeRustlsConnect::new(tls_config);
-                tracing::info!("PostgreSQL TLS mode: {}", config.ssl_mode);
+                tracing::info!("PostgreSQL TLS mode: require");
                 pool_config.create_pool(Some(Runtime::Tokio1), tls_connector)?
             }
         };

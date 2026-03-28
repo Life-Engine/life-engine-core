@@ -12,7 +12,7 @@
 //! cleans it up via a `Drop`-based guard, ensuring cleanup even on panic.
 
 use chrono::Utc;
-use connector_filesystem::s3::{CloudStorageConnector, S3Client, S3Config};
+use connector_filesystem::s3::{CloudStorageConnector, S3Client, S3Config, S3Credentials};
 use life_engine_test_utils::connectors::minio_s3_config;
 use uuid::Uuid;
 
@@ -94,9 +94,17 @@ impl TestBucket {
             endpoint: cfg.endpoint,
             region: "us-east-1".into(),
             bucket: self.bucket.clone(),
+            credential_key: "s3_credentials".into(),
+            prefix: None,
+        }
+    }
+
+    /// Build `S3Credentials` from the MinIO test config.
+    fn s3_credentials(&self) -> S3Credentials {
+        let cfg = minio_s3_config();
+        S3Credentials {
             access_key_id: cfg.access_key,
             secret_access_key: cfg.secret_key,
-            prefix: None,
         }
     }
 
@@ -192,11 +200,12 @@ async fn put_and_get_object() -> anyhow::Result<()> {
 
     let tb = TestBucket::create().await?;
     let client = tb.s3_client();
+    let creds = tb.s3_credentials();
 
     let payload = b"Hello, Life Engine S3 integration test!";
-    client.put_object("greeting.txt", payload).await?;
+    client.put_object("greeting.txt", payload, &creds).await?;
 
-    let downloaded = client.get_object("greeting.txt").await?;
+    let downloaded = client.get_object("greeting.txt", &creds).await?;
     assert_eq!(
         downloaded, payload,
         "downloaded bytes must match uploaded bytes exactly"
@@ -213,6 +222,7 @@ async fn list_objects_returns_uploaded_files() -> anyhow::Result<()> {
 
     let tb = TestBucket::create().await?;
     let client = tb.s3_client();
+    let creds = tb.s3_credentials();
 
     let files: Vec<(&str, &[u8], &str, u64)> = vec![
         ("report.pdf", b"fake pdf content here", "application/pdf", 20),
@@ -221,10 +231,10 @@ async fn list_objects_returns_uploaded_files() -> anyhow::Result<()> {
     ];
 
     for (name, data, _, _) in &files {
-        client.put_object(&format!("docs/{name}"), data).await?;
+        client.put_object(&format!("docs/{name}"), data, &creds).await?;
     }
 
-    let listed = client.list_objects("docs/").await?;
+    let listed = client.list_objects("docs/", &creds).await?;
     assert_eq!(listed.len(), 3, "expected 3 objects under docs/ prefix");
 
     for (name, _, expected_mime, expected_size) in &files {
@@ -256,13 +266,14 @@ async fn delete_object_existing() -> anyhow::Result<()> {
 
     let tb = TestBucket::create().await?;
     let client = tb.s3_client();
+    let creds = tb.s3_credentials();
 
-    client.put_object("to-delete.txt", b"delete me").await?;
+    client.put_object("to-delete.txt", b"delete me", &creds).await?;
 
-    let existed = client.delete_object("to-delete.txt").await?;
+    let existed = client.delete_object("to-delete.txt", &creds).await?;
     assert!(existed, "delete_object should return true for existing object");
 
-    let get_result = client.get_object("to-delete.txt").await;
+    let get_result = client.get_object("to-delete.txt", &creds).await;
     assert!(
         get_result.is_err(),
         "get_object should fail after deletion"
@@ -278,9 +289,10 @@ async fn delete_object_nonexistent() -> anyhow::Result<()> {
 
     let tb = TestBucket::create().await?;
     let client = tb.s3_client();
+    let creds = tb.s3_credentials();
 
     let key = format!("never-existed-{}.txt", Uuid::new_v4());
-    let existed = client.delete_object(&key).await?;
+    let existed = client.delete_object(&key, &creds).await?;
     assert!(
         !existed,
         "delete_object should return false for non-existent object"
@@ -297,19 +309,20 @@ async fn list_objects_with_prefix_filter() -> anyhow::Result<()> {
 
     let tb = TestBucket::create().await?;
     let client = tb.s3_client();
+    let creds = tb.s3_credentials();
 
     // Upload files under two different prefixes
-    client.put_object("docs/readme.md", b"# README").await?;
-    client.put_object("docs/guide.md", b"# Guide").await?;
+    client.put_object("docs/readme.md", b"# README", &creds).await?;
+    client.put_object("docs/guide.md", b"# Guide", &creds).await?;
     client
-        .put_object("images/logo.png", b"fake png bytes")
+        .put_object("images/logo.png", b"fake png bytes", &creds)
         .await?;
     client
-        .put_object("images/banner.jpg", b"fake jpg bytes")
+        .put_object("images/banner.jpg", b"fake jpg bytes", &creds)
         .await?;
 
     // List only the docs/ prefix
-    let docs = client.list_objects("docs/").await?;
+    let docs = client.list_objects("docs/", &creds).await?;
     assert_eq!(docs.len(), 2, "expected exactly 2 objects under docs/");
 
     let doc_names: Vec<&str> = docs.iter().map(|f| f.name.as_str()).collect();
@@ -331,7 +344,7 @@ async fn list_objects_with_prefix_filter() -> anyhow::Result<()> {
     }
 
     // Also verify the images/ prefix works independently
-    let images = client.list_objects("images/").await?;
+    let images = client.list_objects("images/", &creds).await?;
     assert_eq!(images.len(), 2, "expected exactly 2 objects under images/");
 
     Ok(())
@@ -345,6 +358,7 @@ async fn round_trip_lifecycle() -> anyhow::Result<()> {
 
     let tb = TestBucket::create().await?;
     let client = tb.s3_client();
+    let creds = tb.s3_credentials();
 
     let prefix = format!("lifecycle-{}", Uuid::new_v4());
     let key = format!("{prefix}/roundtrip.txt");
@@ -352,12 +366,12 @@ async fn round_trip_lifecycle() -> anyhow::Result<()> {
 
     // Step 1: put_object
     client
-        .put_object(&key, payload)
+        .put_object(&key, payload, &creds)
         .await
         .expect("put_object should succeed");
 
     // Step 2: list_objects — verify the object appears under our prefix
-    let listed = client.list_objects(&format!("{prefix}/")).await?;
+    let listed = client.list_objects(&format!("{prefix}/"), &creds).await?;
     assert_eq!(
         listed.len(),
         1,
@@ -374,35 +388,35 @@ async fn round_trip_lifecycle() -> anyhow::Result<()> {
     );
 
     // Step 3: get_object — verify byte-for-byte content match
-    let downloaded = client.get_object(&key).await?;
+    let downloaded = client.get_object(&key, &creds).await?;
     assert_eq!(
         downloaded, payload,
         "get_object bytes must match put_object bytes exactly"
     );
 
     // Step 4: delete_object — verify returns true for existing object
-    let existed = client.delete_object(&key).await?;
+    let existed = client.delete_object(&key, &creds).await?;
     assert!(
         existed,
         "delete_object should return true for an existing object"
     );
 
     // Step 5: verify object is gone — list should be empty
-    let listed_after = client.list_objects(&format!("{prefix}/")).await?;
+    let listed_after = client.list_objects(&format!("{prefix}/"), &creds).await?;
     assert!(
         listed_after.is_empty(),
         "list_objects should return 0 objects after deletion"
     );
 
     // Step 6: verify get_object fails after deletion
-    let get_after_delete = client.get_object(&key).await;
+    let get_after_delete = client.get_object(&key, &creds).await;
     assert!(
         get_after_delete.is_err(),
         "get_object should fail after the object has been deleted"
     );
 
     // Step 7: verify delete_object returns false for already-deleted object
-    let second_delete = client.delete_object(&key).await?;
+    let second_delete = client.delete_object(&key, &creds).await?;
     assert!(
         !second_delete,
         "delete_object should return false for an already-deleted object"
@@ -420,10 +434,11 @@ async fn sync_state_tracking() -> anyhow::Result<()> {
 
     let tb = TestBucket::create().await?;
     let mut client = tb.s3_client();
+    let creds = tb.s3_credentials();
 
     // Upload a file so there is a real object to track
     let data = b"sync state tracking test data";
-    client.put_object("tracked-file.txt", data).await?;
+    client.put_object("tracked-file.txt", data, &creds).await?;
 
     // Verify initial sync state is empty
     assert!(

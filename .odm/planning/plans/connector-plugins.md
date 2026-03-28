@@ -20,17 +20,17 @@ This plan addresses the issues identified in the phase-3 QA review of the four c
 > depends: none
 > spec: .odm/qa/reports/phase-3/connector-plugins.md
 
-- [ ] Replace `secret_access_key: String` in `S3Config` with `credential_key: String` referencing the credential store [critical]
+- [x] Replace `secret_access_key: String` in `S3Config` with `credential_key: String` referencing the credential store [critical]
   <!-- file: plugins/engine/connector-filesystem/src/s3.rs -->
   <!-- purpose: S3 connector breaks the credential management pattern used by all other connectors; secrets stored directly in config struct -->
   <!-- requirements: 1 -->
   <!-- leverage: credential store key pattern used by email, contacts, calendar connectors -->
-- [ ] Update `S3Client` to retrieve the secret from the credential store at connection time [critical]
+- [x] Update `S3Client` to retrieve the secret from the credential store at connection time [critical]
   <!-- file: plugins/engine/connector-filesystem/src/s3.rs -->
   <!-- purpose: Wire credential store lookup into S3 operations -->
   <!-- requirements: 1 -->
   <!-- leverage: none -->
-- [ ] Update S3 integration tests to use credential store pattern [critical]
+- [x] Update S3 integration tests to use credential store pattern [critical]
   <!-- file: plugins/engine/connector-filesystem/tests/s3_integration.rs -->
   <!-- purpose: Tests must reflect new credential handling -->
   <!-- requirements: 1 -->

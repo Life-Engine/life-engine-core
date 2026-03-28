@@ -2,6 +2,7 @@
 
 ## 2026-03-28
 
+- QA phase-3 remediation — connector-plugins WP 1.1: replace direct secret_access_key/access_key_id fields in S3Config with credential_key referencing the credential store. Add S3Credentials struct for runtime credential passing. Update CloudStorageConnector trait and S3Client impl to accept credentials parameter on all operations. Update integration tests to use credential store pattern.
 - QA phase-3 remediation — connector-plugins WP 1.9: add symlink cycle detection (via canonical path tracking) and max depth limit (64) to filesystem connector scan_directory. Remove unused notify crate dependency. Remove unnecessary watch_paths clone in scan(). Fix let-chains in should_include for stable Rust compatibility.
 
 - QA phase-3 remediation — connector-plugins WP 1.2: refactor let-chains in connector-calendar handle_event() and google.rs to use nested if-let blocks for Rust stable compatibility. Local urlencoding module already provides explicit implementation (no transitive dependency risk).

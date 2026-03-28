@@ -12,6 +12,11 @@ use life_engine_types::FileMetadata;
 use serde::{Deserialize, Serialize};
 
 /// Configuration for an S3-compatible storage endpoint.
+///
+/// Credentials (access key ID and secret access key) are not stored in
+/// this config struct. Instead, `credential_key` names the key under
+/// which the credentials are stored in the credential store as a JSON
+/// object: `{ "access_key_id": "...", "secret_access_key": "..." }`.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct S3Config {
     /// The S3 endpoint URL (e.g. `https://s3.amazonaws.com` or MinIO URL).
@@ -20,13 +25,25 @@ pub struct S3Config {
     pub region: String,
     /// The S3 bucket name.
     pub bucket: String,
-    /// The access key ID for authentication.
-    pub access_key_id: String,
-    /// The secret access key for authentication.
-    #[serde(skip_serializing)]
-    pub secret_access_key: String,
+    /// The key used to look up S3 credentials in the credential store.
+    #[serde(default = "default_s3_credential_key")]
+    pub credential_key: String,
     /// Optional key prefix to scope operations.
     pub prefix: Option<String>,
+}
+
+/// Default credential key for S3 credentials.
+fn default_s3_credential_key() -> String {
+    "s3_credentials".to_string()
+}
+
+/// Credentials retrieved from the credential store for S3 operations.
+#[derive(Debug, Clone, Deserialize)]
+pub struct S3Credentials {
+    /// The AWS access key ID.
+    pub access_key_id: String,
+    /// The AWS secret access key.
+    pub secret_access_key: String,
 }
 
 impl std::fmt::Debug for S3Config {
@@ -35,8 +52,7 @@ impl std::fmt::Debug for S3Config {
             .field("endpoint", &self.endpoint)
             .field("region", &self.region)
             .field("bucket", &self.bucket)
-            .field("access_key_id", &self.access_key_id)
-            .field("secret_access_key", &"[REDACTED]")
+            .field("credential_key", &self.credential_key)
             .field("prefix", &self.prefix)
             .finish()
     }
@@ -65,20 +81,22 @@ pub struct ObjectState {
 /// Trait for cloud storage connectors (S3, MinIO, etc.).
 ///
 /// Provides a common interface for listing, reading, writing, and
-/// deleting objects in cloud storage.
+/// deleting objects in cloud storage. Credentials are passed to each
+/// operation and should be retrieved from the credential store using
+/// the config's `credential_key`.
 #[async_trait]
 pub trait CloudStorageConnector: Send + Sync {
     /// List objects matching the given prefix.
-    async fn list_objects(&self, prefix: &str) -> anyhow::Result<Vec<FileMetadata>>;
+    async fn list_objects(&self, prefix: &str, credentials: &S3Credentials) -> anyhow::Result<Vec<FileMetadata>>;
 
     /// Download an object's contents by key.
-    async fn get_object(&self, key: &str) -> anyhow::Result<Vec<u8>>;
+    async fn get_object(&self, key: &str, credentials: &S3Credentials) -> anyhow::Result<Vec<u8>>;
 
     /// Upload data to the given key.
-    async fn put_object(&self, key: &str, data: &[u8]) -> anyhow::Result<()>;
+    async fn put_object(&self, key: &str, data: &[u8], credentials: &S3Credentials) -> anyhow::Result<()>;
 
     /// Delete an object by key. Returns `true` if the object existed.
-    async fn delete_object(&self, key: &str) -> anyhow::Result<bool>;
+    async fn delete_object(&self, key: &str, credentials: &S3Credentials) -> anyhow::Result<bool>;
 }
 
 /// S3 client that manages configuration and sync state.
@@ -144,11 +162,13 @@ impl S3Client {
     /// Build an `aws_sdk_s3::Client` from the stored `S3Config`.
     ///
     /// Uses explicit credentials, path-style addressing (required for MinIO),
-    /// and the endpoint / region from the configuration.
-    fn build_sdk_client(&self) -> aws_sdk_s3::Client {
+    /// and the endpoint / region from the configuration. The `credentials`
+    /// parameter should be retrieved from the credential store using the
+    /// config's `credential_key`.
+    fn build_sdk_client(&self, credentials: &S3Credentials) -> aws_sdk_s3::Client {
         let creds = aws_sdk_s3::config::Credentials::new(
-            &self.config.access_key_id,
-            &self.config.secret_access_key,
+            &credentials.access_key_id,
+            &credentials.secret_access_key,
             None,
             None,
             "life-engine-s3-client",
@@ -167,54 +187,68 @@ impl S3Client {
 #[cfg(feature = "integration")]
 #[async_trait]
 impl CloudStorageConnector for S3Client {
-    async fn list_objects(&self, prefix: &str) -> anyhow::Result<Vec<FileMetadata>> {
+    async fn list_objects(&self, prefix: &str, credentials: &S3Credentials) -> anyhow::Result<Vec<FileMetadata>> {
         use uuid::Uuid;
 
-        let client = self.build_sdk_client();
+        let client = self.build_sdk_client(credentials);
         let full_prefix = self.full_key(prefix);
 
-        let resp = client
-            .list_objects_v2()
-            .bucket(&self.config.bucket)
-            .prefix(&full_prefix)
-            .send()
-            .await?;
-
         let mut results = Vec::new();
-        for obj in resp.contents() {
-            let key = obj.key().unwrap_or_default();
-            let name = key.rsplit('/').next().unwrap_or(key).to_string();
-            let size = obj.size().unwrap_or_default() as u64;
-            let last_modified = obj
-                .last_modified()
-                .and_then(|dt| {
-                    DateTime::from_timestamp(dt.secs(), dt.subsec_nanos())
-                })
-                .unwrap_or_else(Utc::now);
+        let mut continuation_token: Option<String> = None;
 
-            let mime_type = crate::normalizer::detect_mime_type(std::path::Path::new(&name));
+        loop {
+            let mut request = client
+                .list_objects_v2()
+                .bucket(&self.config.bucket)
+                .prefix(&full_prefix);
 
-            results.push(FileMetadata {
-                id: Uuid::new_v4(),
-                filename: name,
-                path: format!("s3://{}/{}", self.config.bucket, key),
-                mime_type,
-                size_bytes: size,
-                checksum: obj.e_tag().map(|e| e.trim_matches('"').to_string()).unwrap_or_default(),
-                storage_backend: Some("s3".into()),
-                source: "s3".into(),
-                source_id: key.to_string(),
-                extensions: None,
-                created_at: last_modified,
-                updated_at: last_modified,
-            });
+            if let Some(ref token) = continuation_token {
+                request = request.continuation_token(token);
+            }
+
+            let resp = request.send().await?;
+
+            for obj in resp.contents() {
+                let key = obj.key().unwrap_or_default();
+                let name = key.rsplit('/').next().unwrap_or(key).to_string();
+                let size = obj.size().unwrap_or_default() as u64;
+                let last_modified = obj
+                    .last_modified()
+                    .and_then(|dt| {
+                        DateTime::from_timestamp(dt.secs(), dt.subsec_nanos())
+                    })
+                    .unwrap_or_else(Utc::now);
+
+                let mime_type = crate::normalizer::detect_mime_type(std::path::Path::new(&name));
+
+                results.push(FileMetadata {
+                    id: Uuid::new_v4(),
+                    filename: name,
+                    path: format!("s3://{}/{}", self.config.bucket, key),
+                    mime_type,
+                    size_bytes: size,
+                    checksum: obj.e_tag().map(|e| e.trim_matches('"').to_string()).unwrap_or_default(),
+                    storage_backend: Some("s3".into()),
+                    source: "s3".into(),
+                    source_id: key.to_string(),
+                    extensions: None,
+                    created_at: last_modified,
+                    updated_at: last_modified,
+                });
+            }
+
+            if resp.is_truncated() == Some(true) {
+                continuation_token = resp.next_continuation_token().map(|s| s.to_string());
+            } else {
+                break;
+            }
         }
 
         Ok(results)
     }
 
-    async fn get_object(&self, key: &str) -> anyhow::Result<Vec<u8>> {
-        let client = self.build_sdk_client();
+    async fn get_object(&self, key: &str, credentials: &S3Credentials) -> anyhow::Result<Vec<u8>> {
+        let client = self.build_sdk_client(credentials);
         let full_key = self.full_key(key);
 
         let resp = client
@@ -228,10 +262,10 @@ impl CloudStorageConnector for S3Client {
         Ok(body.into_bytes().to_vec())
     }
 
-    async fn put_object(&self, key: &str, data: &[u8]) -> anyhow::Result<()> {
+    async fn put_object(&self, key: &str, data: &[u8], credentials: &S3Credentials) -> anyhow::Result<()> {
         use aws_sdk_s3::primitives::ByteStream;
 
-        let client = self.build_sdk_client();
+        let client = self.build_sdk_client(credentials);
         let full_key = self.full_key(key);
 
         client
@@ -245,8 +279,8 @@ impl CloudStorageConnector for S3Client {
         Ok(())
     }
 
-    async fn delete_object(&self, key: &str) -> anyhow::Result<bool> {
-        let client = self.build_sdk_client();
+    async fn delete_object(&self, key: &str, credentials: &S3Credentials) -> anyhow::Result<bool> {
+        let client = self.build_sdk_client(credentials);
         let full_key = self.full_key(key);
 
         // Check if object exists first
@@ -281,33 +315,51 @@ mod tests {
             endpoint: "https://s3.amazonaws.com".into(),
             region: "us-east-1".into(),
             bucket: "my-bucket".into(),
-            access_key_id: "AKID".into(),
-            secret_access_key: "SECRET".into(),
+            credential_key: "my_s3_creds".into(),
             prefix: Some("files/".into()),
         };
         let json = serde_json::to_string(&config).expect("serialize");
-        // secret_access_key is redacted from serialization output
-        assert!(!json.contains("SECRET"));
-        // Deserialization from a complete JSON string still works
-        let full_json = r#"{"endpoint":"https://s3.amazonaws.com","region":"us-east-1","bucket":"my-bucket","access_key_id":"AKID","secret_access_key":"SECRET","prefix":"files/"}"#;
+        assert!(json.contains("my_s3_creds"), "credential_key should be serialized");
+        // No secrets in config
+        assert!(!json.contains("secret_access_key"));
+        // Deserialization works
+        let full_json = r#"{"endpoint":"https://s3.amazonaws.com","region":"us-east-1","bucket":"my-bucket","credential_key":"my_s3_creds","prefix":"files/"}"#;
         let restored: S3Config = serde_json::from_str(full_json).expect("deserialize");
         assert_eq!(restored.endpoint, "https://s3.amazonaws.com");
         assert_eq!(restored.region, "us-east-1");
         assert_eq!(restored.bucket, "my-bucket");
+        assert_eq!(restored.credential_key, "my_s3_creds");
         assert_eq!(restored.prefix, Some("files/".into()));
     }
 
     #[test]
-    fn s3_client_construction() {
-        let config = S3Config {
+    fn s3_config_default_credential_key() {
+        let json = r#"{"endpoint":"https://s3.amazonaws.com","region":"us-east-1","bucket":"b"}"#;
+        let config: S3Config = serde_json::from_str(json).expect("deserialize");
+        assert_eq!(config.credential_key, "s3_credentials");
+    }
+
+    #[test]
+    fn s3_credentials_deserialization() {
+        let json = r#"{"access_key_id":"AKID","secret_access_key":"SECRET"}"#;
+        let creds: S3Credentials = serde_json::from_str(json).expect("deserialize");
+        assert_eq!(creds.access_key_id, "AKID");
+        assert_eq!(creds.secret_access_key, "SECRET");
+    }
+
+    fn test_config(bucket: &str, prefix: Option<&str>) -> S3Config {
+        S3Config {
             endpoint: "http://localhost:9000".into(),
             region: "us-east-1".into(),
-            bucket: "test-bucket".into(),
-            access_key_id: "minioadmin".into(),
-            secret_access_key: "minioadmin".into(),
-            prefix: None,
-        };
-        let client = S3Client::new(config);
+            bucket: bucket.into(),
+            credential_key: "s3_credentials".into(),
+            prefix: prefix.map(String::from),
+        }
+    }
+
+    #[test]
+    fn s3_client_construction() {
+        let client = S3Client::new(test_config("test-bucket", None));
         assert_eq!(client.config().bucket, "test-bucket");
         assert!(client.sync_state().last_sync.is_none());
         assert!(client.sync_state().known_objects.is_empty());
@@ -315,43 +367,19 @@ mod tests {
 
     #[test]
     fn s3_full_key_with_prefix() {
-        let config = S3Config {
-            endpoint: "http://localhost:9000".into(),
-            region: "us-east-1".into(),
-            bucket: "test".into(),
-            access_key_id: "key".into(),
-            secret_access_key: "secret".into(),
-            prefix: Some("uploads/".into()),
-        };
-        let client = S3Client::new(config);
+        let client = S3Client::new(test_config("test", Some("uploads/")));
         assert_eq!(client.full_key("document.pdf"), "uploads/document.pdf");
     }
 
     #[test]
     fn s3_full_key_without_prefix() {
-        let config = S3Config {
-            endpoint: "http://localhost:9000".into(),
-            region: "us-east-1".into(),
-            bucket: "test".into(),
-            access_key_id: "key".into(),
-            secret_access_key: "secret".into(),
-            prefix: None,
-        };
-        let client = S3Client::new(config);
+        let client = S3Client::new(test_config("test", None));
         assert_eq!(client.full_key("document.pdf"), "document.pdf");
     }
 
     #[test]
     fn s3_track_object() {
-        let config = S3Config {
-            endpoint: "http://localhost:9000".into(),
-            region: "us-east-1".into(),
-            bucket: "test".into(),
-            access_key_id: "key".into(),
-            secret_access_key: "secret".into(),
-            prefix: None,
-        };
-        let mut client = S3Client::new(config);
+        let mut client = S3Client::new(test_config("test", None));
         let now = Utc::now();
 
         client.track_object("file.txt", 1024, now, Some("abc123".into()));
@@ -365,15 +393,7 @@ mod tests {
 
     #[test]
     fn s3_mark_synced() {
-        let config = S3Config {
-            endpoint: "http://localhost:9000".into(),
-            region: "us-east-1".into(),
-            bucket: "test".into(),
-            access_key_id: "key".into(),
-            secret_access_key: "secret".into(),
-            prefix: None,
-        };
-        let mut client = S3Client::new(config);
+        let mut client = S3Client::new(test_config("test", None));
         assert!(client.sync_state().last_sync.is_none());
 
         client.mark_synced();

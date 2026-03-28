@@ -139,7 +139,8 @@
     "architecture-migration:3.4",
     "architecture-migration:3.5",
     "executive-summary-remediation:2.2",
-    "architecture-migration:4.1"
+    "architecture-migration:4.1",
+    "executive-summary-remediation:2.4"
   ],
   "history": [
     {
@@ -727,6 +728,14 @@
       "title": "SQLite Document Adapter",
       "timestamp": "2026-03-29T00:00:00Z",
       "tasks_completed": 8,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "2.4",
+      "plan": "executive-summary-remediation.md",
+      "title": "Consolidate Cryptography and Fix DAV Serialization",
+      "timestamp": "2026-03-29T00:00:00Z",
+      "tasks_completed": 5,
       "tasks_deferred": 0
     }
   ]

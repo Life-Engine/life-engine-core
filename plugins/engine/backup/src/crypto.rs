@@ -1,13 +1,13 @@
 //! Encryption and decryption for backup archives.
 //!
 //! Uses Argon2id for key derivation (same algorithm as SQLCipher),
-//! AES-256-GCM for authenticated encryption, and gzip for compression.
+//! AES-256-GCM (via `life_engine_crypto`) for authenticated encryption,
+//! and gzip for compression.
 
 use crate::types::Argon2Params;
-use aes_gcm::aead::{Aead, KeyInit, OsRng};
-use aes_gcm::{AeadCore, Aes256Gcm, Nonce};
 use anyhow::Result;
-use rand::RngCore;
+use rand::rngs::OsRng;
+use rand::TryRngCore;
 use sha2::{Digest, Sha256};
 
 /// Length of the derived key in bytes (256-bit for AES-256).
@@ -16,13 +16,12 @@ const KEY_LENGTH: usize = 32;
 /// Length of the random salt in bytes.
 const SALT_LENGTH: usize = 16;
 
-/// Nonce size for AES-256-GCM (96 bits).
-const NONCE_SIZE: usize = 12;
-
 /// Generate a random 16-byte salt using OS entropy.
 pub fn generate_salt() -> [u8; SALT_LENGTH] {
     let mut salt = [0u8; SALT_LENGTH];
-    OsRng.fill_bytes(&mut salt);
+    OsRng
+        .try_fill_bytes(&mut salt)
+        .expect("OS RNG should not fail");
     salt
 }
 
@@ -75,37 +74,30 @@ pub fn decompress(data: &[u8]) -> Result<Vec<u8>> {
 ///
 /// The output format is: `[12-byte nonce][ciphertext+tag]`.
 /// The key must be exactly 32 bytes.
+///
+/// Delegates to [`life_engine_crypto::encrypt`].
 pub fn encrypt(plaintext: &[u8], key: &[u8]) -> Result<Vec<u8>> {
-    let cipher = Aes256Gcm::new_from_slice(key)
+    let key_arr: [u8; 32] = key
+        .try_into()
         .map_err(|_| anyhow::anyhow!("encryption key must be 32 bytes"))?;
-    let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
-    let ciphertext = cipher
-        .encrypt(&nonce, plaintext)
-        .map_err(|_| anyhow::anyhow!("AES-256-GCM encryption failed"))?;
-
-    let mut output = Vec::with_capacity(NONCE_SIZE + ciphertext.len());
-    output.extend_from_slice(&nonce);
-    output.extend_from_slice(&ciphertext);
-
-    Ok(output)
+    life_engine_crypto::encrypt(&key_arr, plaintext)
+        .map_err(|e| anyhow::anyhow!("AES-256-GCM encryption failed: {e}"))
 }
 
 /// Decrypt data that was encrypted with [`encrypt`].
 ///
 /// Verifies the AES-256-GCM authentication tag before returning plaintext.
+///
+/// Delegates to [`life_engine_crypto::decrypt`].
 pub fn decrypt(encrypted: &[u8], key: &[u8]) -> Result<Vec<u8>> {
-    if encrypted.len() < NONCE_SIZE + 16 {
-        anyhow::bail!("encrypted data too short");
-    }
-
-    let (nonce_bytes, ciphertext) = encrypted.split_at(NONCE_SIZE);
-    let nonce = Nonce::from_slice(nonce_bytes);
-    let cipher = Aes256Gcm::new_from_slice(key)
+    let key_arr: [u8; 32] = key
+        .try_into()
         .map_err(|_| anyhow::anyhow!("encryption key must be 32 bytes"))?;
-    let plaintext = cipher
-        .decrypt(nonce, ciphertext)
-        .map_err(|_| anyhow::anyhow!("backup integrity check failed: authentication failed (wrong passphrase or corrupted data)"))?;
-    Ok(plaintext)
+    life_engine_crypto::decrypt(&key_arr, encrypted).map_err(|e| {
+        anyhow::anyhow!(
+            "backup integrity check failed: authentication failed (wrong passphrase or corrupted data): {e}"
+        )
+    })
 }
 
 /// Compute SHA-256 checksum of data.
@@ -210,7 +202,10 @@ mod tests {
         let encrypted = encrypt(plaintext, &key1).unwrap();
         let result = decrypt(&encrypted, &key2);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("authentication failed"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("authentication failed"));
     }
 
     #[test]
@@ -231,7 +226,6 @@ mod tests {
         let key = derive_key("test-pass", &test_salt(), &test_params()).unwrap();
         let result = decrypt(&[0u8; 10], &key);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("too short"));
     }
 
     #[test]

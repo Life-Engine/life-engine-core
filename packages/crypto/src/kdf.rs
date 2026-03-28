@@ -5,22 +5,27 @@
 
 use argon2::{Algorithm, Argon2, Params, Version};
 use rand::rngs::OsRng;
-use rand::RngCore;
+use rand::TryRngCore;
+use zeroize::Zeroizing;
 
 use crate::error::CryptoError;
 
 /// Derives a 32-byte encryption key from a passphrase and salt using Argon2id.
 ///
 /// Parameters: memory_cost = 65536 (64 MB), time_cost = 3, parallelism = 4.
-pub fn derive_key(passphrase: &str, salt: &[u8]) -> Result<[u8; 32], CryptoError> {
+///
+/// The returned key is wrapped in [`Zeroizing`] so it is automatically
+/// cleared from memory when dropped, preventing key material from
+/// persisting on the heap.
+pub fn derive_key(passphrase: &str, salt: &[u8]) -> Result<Zeroizing<[u8; 32]>, CryptoError> {
     let params = Params::new(65536, 3, 4, Some(32))
         .map_err(|e| CryptoError::KeyDerivationFailed(e.to_string()))?;
 
     let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
 
-    let mut key = [0u8; 32];
+    let mut key = Zeroizing::new([0u8; 32]);
     argon2
-        .hash_password_into(passphrase.as_bytes(), salt, &mut key)
+        .hash_password_into(passphrase.as_bytes(), salt, &mut *key)
         .map_err(|e| CryptoError::KeyDerivationFailed(e.to_string()))?;
 
     Ok(key)
@@ -29,7 +34,7 @@ pub fn derive_key(passphrase: &str, salt: &[u8]) -> Result<[u8; 32], CryptoError
 /// Generates a random 16-byte salt using `OsRng`.
 pub fn generate_salt() -> [u8; 16] {
     let mut salt = [0u8; 16];
-    OsRng.fill_bytes(&mut salt);
+    OsRng.try_fill_bytes(&mut salt).expect("OS RNG should not fail");
     salt
 }
 

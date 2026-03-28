@@ -4,9 +4,11 @@
 //! used across the credential store, identity store, and other subsystems.
 //! Each subsystem uses a distinct domain separator to ensure key
 //! independence.
+//!
+//! AES-256-GCM encryption and HMAC operations delegate to the canonical
+//! `life_engine_crypto` crate; this module adds HKDF-based domain key
+//! derivation on top.
 
-use aes_gcm::aead::{Aead, KeyInit, OsRng};
-use aes_gcm::{AeadCore, Aes256Gcm, Nonce};
 use hkdf::Hkdf;
 use sha2::Sha256;
 
@@ -27,14 +29,11 @@ pub fn derive_key(secret: &str, domain: &str) -> Vec<u8> {
 ///
 /// Returns the 12-byte nonce prepended to the ciphertext+tag.
 /// The key must be exactly 32 bytes.
+///
+/// Delegates to [`life_engine_crypto::encrypt`].
 pub fn encrypt(data: &[u8], key: &[u8]) -> Result<Vec<u8>, aes_gcm::Error> {
-    let cipher = Aes256Gcm::new_from_slice(key).expect("key must be 32 bytes");
-    let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
-    let ciphertext = cipher.encrypt(&nonce, data)?;
-    let mut output = Vec::with_capacity(12 + ciphertext.len());
-    output.extend_from_slice(&nonce);
-    output.extend_from_slice(&ciphertext);
-    Ok(output)
+    let key_arr: [u8; 32] = key.try_into().expect("key must be 32 bytes");
+    life_engine_crypto::encrypt(&key_arr, data).map_err(|_| aes_gcm::Error)
 }
 
 /// Decrypt data produced by [`encrypt`].
@@ -42,28 +41,30 @@ pub fn encrypt(data: &[u8], key: &[u8]) -> Result<Vec<u8>, aes_gcm::Error> {
 /// Expects the first 12 bytes to be the nonce, followed by the
 /// ciphertext+tag. Returns an error if the data is too short,
 /// the key is wrong, or the ciphertext has been tampered with.
+///
+/// Delegates to [`life_engine_crypto::decrypt`].
 pub fn decrypt(data: &[u8], key: &[u8]) -> Result<Vec<u8>, aes_gcm::Error> {
-    if data.len() < 12 {
-        return Err(aes_gcm::Error);
-    }
-    let (nonce_bytes, ciphertext) = data.split_at(12);
-    let nonce = Nonce::from_slice(nonce_bytes);
-    let cipher = Aes256Gcm::new_from_slice(key).expect("key must be 32 bytes");
-    cipher.decrypt(nonce, ciphertext)
+    let key_arr: [u8; 32] = key.try_into().expect("key must be 32 bytes");
+    life_engine_crypto::decrypt(&key_arr, data).map_err(|_| aes_gcm::Error)
 }
 
 /// Compute HMAC-SHA256 of data with a signing key.
 ///
-/// Returns the hex-encoded MAC. Uses the `hmac` crate for a proper
-/// HMAC construction that is resistant to length-extension attacks.
+/// Returns the hex-encoded MAC.
+///
+/// Delegates to [`life_engine_crypto::hmac_sign`].
 pub fn hmac_sha256(key: &[u8], data: &[u8]) -> String {
-    use hmac::{Hmac, Mac};
-    type HmacSha256 = Hmac<Sha256>;
+    hex::encode(life_engine_crypto::hmac_sign(key, data))
+}
 
-    let mut mac =
-        <HmacSha256 as Mac>::new_from_slice(key).expect("HMAC-SHA256 accepts any key length");
-    mac.update(data);
-    hex::encode(mac.finalize().into_bytes())
+/// Verify an HMAC-SHA256 tag (hex-encoded) using constant-time comparison.
+///
+/// Delegates to [`life_engine_crypto::hmac_verify`].
+pub fn hmac_sha256_verify(key: &[u8], data: &[u8], hex_tag: &str) -> bool {
+    match hex::decode(hex_tag) {
+        Ok(tag_bytes) => life_engine_crypto::hmac_verify(key, data, &tag_bytes),
+        Err(_) => false,
+    }
 }
 
 /// Domain separator for the plugin credential store.
@@ -187,5 +188,19 @@ mod tests {
         let h1 = hmac_sha256(&k1, b"data");
         let h2 = hmac_sha256(&k2, b"data");
         assert_ne!(h1, h2);
+    }
+
+    #[test]
+    fn hmac_sha256_verify_accepts_correct_tag() {
+        let key = derive_key("key", "sign");
+        let tag = hmac_sha256(&key, b"data");
+        assert!(hmac_sha256_verify(&key, b"data", &tag));
+    }
+
+    #[test]
+    fn hmac_sha256_verify_rejects_wrong_tag() {
+        let key = derive_key("key", "sign");
+        let tag = hmac_sha256(&key, b"data");
+        assert!(!hmac_sha256_verify(&key, b"wrong-data", &tag));
     }
 }

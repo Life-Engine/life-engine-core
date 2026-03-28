@@ -30,9 +30,9 @@ fn hmac_integrity_with_derived_key() {
     let key = derive_key("hmac-test-passphrase", &salt).unwrap();
     let data = b"data to authenticate";
 
-    let tag = hmac_sign(&key, data);
-    assert!(hmac_verify(&key, data, &tag));
+    let tag = hmac_sign(key.as_ref(), data);
+    assert!(hmac_verify(key.as_ref(), data, &tag));
 
     // Tampered data fails
-    assert!(!hmac_verify(&key, b"tampered data", &tag));
+    assert!(!hmac_verify(key.as_ref(), b"tampered data", &tag));
 }

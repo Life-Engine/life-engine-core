@@ -12,7 +12,7 @@ This plan addresses all findings from the QA executive summary report across thr
 
 Work packages are organized by domain area within each tier. Tier 2 WPs depend on their related Tier 1 WPs being complete first (where applicable). Tier 3 WPs depend on related Tier 2 WPs.
 
-**Progress:** 7 / 13 work packages complete
+**Progress:** 8 / 13 work packages complete
 
 ---
 
@@ -195,27 +195,27 @@ Work packages are organized by domain area within each tier. Tier 2 WPs depend o
 > depends: 1.1
 > spec: .odm/qa/reports/EXECUTIVE-SUMMARY.md
 
-- [ ] Remove duplicate AES-256-GCM implementation from `apps/core/src/crypto.rs` and redirect to `packages/crypto/` [functional]
+- [x] Remove duplicate AES-256-GCM implementation from `apps/core/src/crypto.rs` and redirect to `packages/crypto/` [functional]
   <!-- file: apps/core/src/crypto.rs -->
   <!-- purpose: Eliminate one of three duplicate encryption implementations -->
   <!-- requirements: Tier 2, item 17 -->
   <!-- leverage: packages/crypto/ as canonical implementation -->
-- [ ] Remove duplicate AES-256-GCM implementation from `plugins/engine/backup/src/crypto.rs` and redirect to `packages/crypto/` [functional]
+- [x] Remove duplicate AES-256-GCM implementation from `plugins/engine/backup/src/crypto.rs` and redirect to `packages/crypto/` [functional]
   <!-- file: plugins/engine/backup/src/crypto.rs -->
   <!-- purpose: Eliminate second duplicate encryption implementation -->
   <!-- requirements: Tier 2, item 17 -->
   <!-- leverage: packages/crypto/ as canonical implementation -->
-- [ ] Add `zeroize` dependency to `packages/crypto/` and use `Zeroizing<[u8; 32]>` for derived keys [functional]
+- [x] Add `zeroize` dependency to `packages/crypto/` and use `Zeroizing<[u8; 32]>` for derived keys [functional]
   <!-- file: packages/crypto/src/kdf.rs -->
   <!-- purpose: Prevent derived key material from persisting in memory -->
   <!-- requirements: Tier 2, item 18 -->
   <!-- leverage: existing kdf.rs -->
-- [ ] Fix UTF-8 line folding in CalDAV serializer to use `char_indices()` instead of byte offsets [functional]
+- [x] Fix UTF-8 line folding in CalDAV serializer to use `char_indices()` instead of byte offsets [functional]
   <!-- file: plugins/engine/api-caldav/src/serializer.rs -->
   <!-- purpose: Prevent silent corruption of non-ASCII characters during line folding -->
   <!-- requirements: Tier 2, item 15 -->
   <!-- leverage: existing fold_line function -->
-- [ ] Fix UTF-8 line folding in CardDAV serializer to use `char_indices()` instead of byte offsets [functional]
+- [x] Fix UTF-8 line folding in CardDAV serializer to use `char_indices()` instead of byte offsets [functional]
   <!-- file: plugins/engine/api-carddav/src/serializer.rs -->
   <!-- purpose: Prevent silent corruption of non-ASCII characters during line folding -->
   <!-- requirements: Tier 2, item 15 -->

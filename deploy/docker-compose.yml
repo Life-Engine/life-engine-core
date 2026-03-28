@@ -13,6 +13,7 @@ services:
       LIFE_ENGINE_STORAGE_PATH: "/data/core.db"
       LIFE_ENGINE_STORAGE_PASSPHRASE: "${LIFE_ENGINE_STORAGE_PASSPHRASE}"
       LIFE_ENGINE_AUTH_PROVIDER: "local-token"
+      LIFE_ENGINE_BEHIND_PROXY: "true"
       LIFE_ENGINE_TRANSPORTS_REST_PORT: "3750"
     volumes:
       - core-data:/data

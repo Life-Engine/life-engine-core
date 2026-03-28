@@ -15,7 +15,6 @@ use crate::config::Argon2Settings;
 use crate::error::CoreError;
 
 use argon2::Argon2;
-use rand::rngs::OsRng;
 use rand::RngCore;
 use rusqlite::Connection;
 use std::path::Path;
@@ -29,7 +28,7 @@ const SALT_LENGTH: usize = 16;
 /// Generate a random 16-byte salt.
 fn generate_salt() -> [u8; SALT_LENGTH] {
     let mut salt = [0u8; SALT_LENGTH];
-    OsRng.fill_bytes(&mut salt);
+    rand::rng().fill_bytes(&mut salt);
     salt
 }
 

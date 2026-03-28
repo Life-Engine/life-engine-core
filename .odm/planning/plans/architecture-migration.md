@@ -456,17 +456,17 @@ Layer encryption-at-rest and audit logging onto the storage infrastructure built
 
 ### 5.4 — Audit Logging
 
-- [ ] Implement audit log persistence: subscribe to `system.storage.*` and `system.blob.*` events via the event bus. Write each event to an `audit_log` collection with fields: `event_type`, `collection`, `document_id`, `identity_subject`, `timestamp`, `detail: Value`. The audit log collection is internal (not accessible to plugins). Implement daily rotation (partition by date) and 90-day retention (delete entries older than 90 days on a daily schedule).
+- [x] Implement audit log persistence: subscribe to `system.storage.*` and `system.blob.*` events via the event bus. Write each event to an `audit_log` collection with fields: `event_type`, `collection`, `document_id`, `identity_subject`, `timestamp`, `detail: Value`. The audit log collection is internal (not accessible to plugins). Implement daily rotation (partition by date) and 90-day retention (delete entries older than 90 days on a daily schedule).
   <!-- files: apps/core/src/audit.rs -->
   <!-- purpose: Persist security-relevant events for local review -->
   <!-- requirements: encryption-and-audit 5.1, 5.2, 5.3, 5.4 -->
 
-- [ ] Implement security event logging: in addition to storage events, log auth attempts (success/failure), credential access, plugin installs/removals, permission changes, and connector auth/revocation as audit events.
+- [x] Implement security event logging: in addition to storage events, log auth attempts (success/failure), credential access, plugin installs/removals, permission changes, and connector auth/revocation as audit events.
   <!-- files: apps/core/src/audit.rs -->
   <!-- purpose: Comprehensive security audit trail -->
   <!-- requirements: encryption-and-audit 6.1, 6.2 -->
 
-- [ ] Write tests: audit event emission and persistence, retention enforcement (entries older than 90 days are removed), credential encryption round-trip.
+- [x] Write tests: audit event emission and persistence, retention enforcement (entries older than 90 days are removed), credential encryption round-trip.
   <!-- files: apps/core/tests/audit_tests.rs -->
   <!-- purpose: Verify audit system correctness -->
   <!-- requirements: encryption-and-audit 5.1 through 6.2 -->

@@ -103,6 +103,107 @@ async fn handle_bus_event(
                 Some(&serde_json::json!({"error": error})),
             )?;
         }
+        BusEvent::BlobStored {
+            blob_key,
+            plugin_id,
+        } => {
+            let conn = conn.lock().await;
+            AuditLogger::log_event_full(
+                &conn,
+                "system.blob.stored",
+                None,
+                Some(blob_key),
+                None,
+                Some(plugin_id),
+                None,
+            )?;
+        }
+        BusEvent::BlobDeleted {
+            blob_key,
+            plugin_id,
+        } => {
+            let conn = conn.lock().await;
+            AuditLogger::log_event_full(
+                &conn,
+                "system.blob.deleted",
+                None,
+                Some(blob_key),
+                None,
+                Some(plugin_id),
+                None,
+            )?;
+        }
+        BusEvent::AuthSuccess {
+            identity_subject,
+            method,
+        } => {
+            let conn = conn.lock().await;
+            AuditLogger::log_event_full(
+                &conn,
+                "auth_success",
+                None,
+                None,
+                Some(identity_subject),
+                None,
+                Some(&serde_json::json!({"method": method})),
+            )?;
+        }
+        BusEvent::AuthFailure { client_ip, reason } => {
+            let conn = conn.lock().await;
+            AuditLogger::log_event_full(
+                &conn,
+                "auth_failure",
+                None,
+                None,
+                None,
+                None,
+                Some(&serde_json::json!({"client_ip": client_ip, "reason": reason})),
+            )?;
+        }
+        BusEvent::CredentialEvent {
+            action,
+            plugin_id,
+            key,
+        } => {
+            let event_type = match action.as_str() {
+                "access" => "credential_access",
+                _ => "credential_modify",
+            };
+            let conn = conn.lock().await;
+            AuditLogger::log_event_full(
+                &conn,
+                event_type,
+                None,
+                None,
+                None,
+                Some(plugin_id),
+                Some(&serde_json::json!({"key": key, "action": action})),
+            )?;
+        }
+        BusEvent::PluginUnloaded { plugin_id } => {
+            let conn = conn.lock().await;
+            AuditLogger::log_event_full(
+                &conn,
+                "plugin_disable",
+                None,
+                None,
+                None,
+                Some(plugin_id),
+                None,
+            )?;
+        }
+        BusEvent::ConnectorEvent { action, plugin_id } => {
+            let conn = conn.lock().await;
+            AuditLogger::log_event_full(
+                &conn,
+                "connector_auth",
+                None,
+                None,
+                None,
+                Some(plugin_id),
+                Some(&serde_json::json!({"action": action})),
+            )?;
+        }
         // NewRecords and SyncComplete are informational — not auditable writes.
         BusEvent::NewRecords { .. } | BusEvent::SyncComplete { .. } => {}
     }
@@ -293,6 +394,258 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM audit_log", [], |row| row.get(0))
             .unwrap();
         assert_eq!(count, 0, "non-auditable events should not create log entries");
+
+        drop(db);
+        handle.abort();
+    }
+
+    #[tokio::test]
+    async fn subscriber_logs_blob_stored() {
+        let bus = MessageBus::new();
+        let conn = std::sync::Arc::new(tokio::sync::Mutex::new(create_test_db()));
+        let rx = bus.subscribe();
+
+        let handle = spawn_audit_subscriber(rx, conn.clone());
+
+        bus.publish(BusEvent::BlobStored {
+            blob_key: "photos/img-001.jpg".into(),
+            plugin_id: "com.photos".into(),
+        });
+
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        let db = conn.lock().await;
+        let (event_type, document_id, plugin_id): (String, Option<String>, Option<String>) = db
+            .query_row(
+                "SELECT event_type, document_id, plugin_id FROM audit_log LIMIT 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+
+        assert_eq!(event_type, "system.blob.stored");
+        assert_eq!(document_id.as_deref(), Some("photos/img-001.jpg"));
+        assert_eq!(plugin_id.as_deref(), Some("com.photos"));
+
+        drop(db);
+        handle.abort();
+    }
+
+    #[tokio::test]
+    async fn subscriber_logs_blob_deleted() {
+        let bus = MessageBus::new();
+        let conn = std::sync::Arc::new(tokio::sync::Mutex::new(create_test_db()));
+        let rx = bus.subscribe();
+
+        let handle = spawn_audit_subscriber(rx, conn.clone());
+
+        bus.publish(BusEvent::BlobDeleted {
+            blob_key: "photos/img-001.jpg".into(),
+            plugin_id: "com.photos".into(),
+        });
+
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        let db = conn.lock().await;
+        let event_type: String = db
+            .query_row(
+                "SELECT event_type FROM audit_log LIMIT 1",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+
+        assert_eq!(event_type, "system.blob.deleted");
+
+        drop(db);
+        handle.abort();
+    }
+
+    #[tokio::test]
+    async fn subscriber_logs_auth_success() {
+        let bus = MessageBus::new();
+        let conn = std::sync::Arc::new(tokio::sync::Mutex::new(create_test_db()));
+        let rx = bus.subscribe();
+
+        let handle = spawn_audit_subscriber(rx, conn.clone());
+
+        bus.publish(BusEvent::AuthSuccess {
+            identity_subject: "token-abc".into(),
+            method: "bearer_token".into(),
+        });
+
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        let db = conn.lock().await;
+        let (event_type, identity_subject): (String, Option<String>) = db
+            .query_row(
+                "SELECT event_type, identity_subject FROM audit_log LIMIT 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+
+        assert_eq!(event_type, "auth_success");
+        assert_eq!(identity_subject.as_deref(), Some("token-abc"));
+
+        drop(db);
+        handle.abort();
+    }
+
+    #[tokio::test]
+    async fn subscriber_logs_auth_failure() {
+        let bus = MessageBus::new();
+        let conn = std::sync::Arc::new(tokio::sync::Mutex::new(create_test_db()));
+        let rx = bus.subscribe();
+
+        let handle = spawn_audit_subscriber(rx, conn.clone());
+
+        bus.publish(BusEvent::AuthFailure {
+            client_ip: "192.168.1.100".into(),
+            reason: "token_expired".into(),
+        });
+
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        let db = conn.lock().await;
+        let (event_type, details): (String, Option<String>) = db
+            .query_row(
+                "SELECT event_type, details FROM audit_log LIMIT 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+
+        assert_eq!(event_type, "auth_failure");
+        let details: serde_json::Value = serde_json::from_str(&details.unwrap()).unwrap();
+        assert_eq!(details["client_ip"], "192.168.1.100");
+        assert_eq!(details["reason"], "token_expired");
+
+        drop(db);
+        handle.abort();
+    }
+
+    #[tokio::test]
+    async fn subscriber_logs_credential_access() {
+        let bus = MessageBus::new();
+        let conn = std::sync::Arc::new(tokio::sync::Mutex::new(create_test_db()));
+        let rx = bus.subscribe();
+
+        let handle = spawn_audit_subscriber(rx, conn.clone());
+
+        bus.publish(BusEvent::CredentialEvent {
+            action: "access".into(),
+            plugin_id: "com.email".into(),
+            key: "imap_password".into(),
+        });
+
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        let db = conn.lock().await;
+        let (event_type, plugin_id, details): (String, Option<String>, Option<String>) = db
+            .query_row(
+                "SELECT event_type, plugin_id, details FROM audit_log LIMIT 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+
+        assert_eq!(event_type, "credential_access");
+        assert_eq!(plugin_id.as_deref(), Some("com.email"));
+        let details: serde_json::Value = serde_json::from_str(&details.unwrap()).unwrap();
+        assert_eq!(details["key"], "imap_password");
+
+        drop(db);
+        handle.abort();
+    }
+
+    #[tokio::test]
+    async fn subscriber_logs_credential_modify() {
+        let bus = MessageBus::new();
+        let conn = std::sync::Arc::new(tokio::sync::Mutex::new(create_test_db()));
+        let rx = bus.subscribe();
+
+        let handle = spawn_audit_subscriber(rx, conn.clone());
+
+        bus.publish(BusEvent::CredentialEvent {
+            action: "modify".into(),
+            plugin_id: "com.email".into(),
+            key: "smtp_password".into(),
+        });
+
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        let db = conn.lock().await;
+        let event_type: String = db
+            .query_row(
+                "SELECT event_type FROM audit_log LIMIT 1",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+
+        assert_eq!(event_type, "credential_modify");
+
+        drop(db);
+        handle.abort();
+    }
+
+    #[tokio::test]
+    async fn subscriber_logs_plugin_unloaded() {
+        let bus = MessageBus::new();
+        let conn = std::sync::Arc::new(tokio::sync::Mutex::new(create_test_db()));
+        let rx = bus.subscribe();
+
+        let handle = spawn_audit_subscriber(rx, conn.clone());
+
+        bus.publish(BusEvent::PluginUnloaded {
+            plugin_id: "com.test.removed".into(),
+        });
+
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        let db = conn.lock().await;
+        let (event_type, plugin_id): (String, Option<String>) = db
+            .query_row(
+                "SELECT event_type, plugin_id FROM audit_log LIMIT 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+
+        assert_eq!(event_type, "plugin_disable");
+        assert_eq!(plugin_id.as_deref(), Some("com.test.removed"));
+
+        drop(db);
+        handle.abort();
+    }
+
+    #[tokio::test]
+    async fn subscriber_logs_connector_event() {
+        let bus = MessageBus::new();
+        let conn = std::sync::Arc::new(tokio::sync::Mutex::new(create_test_db()));
+        let rx = bus.subscribe();
+
+        let handle = spawn_audit_subscriber(rx, conn.clone());
+
+        bus.publish(BusEvent::ConnectorEvent {
+            action: "auth".into(),
+            plugin_id: "com.email.imap".into(),
+        });
+
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        let db = conn.lock().await;
+        let (event_type, plugin_id): (String, Option<String>) = db
+            .query_row(
+                "SELECT event_type, plugin_id FROM audit_log LIMIT 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+
+        assert_eq!(event_type, "connector_auth");
+        assert_eq!(plugin_id.as_deref(), Some("com.email.imap"));
 
         drop(db);
         handle.abort();

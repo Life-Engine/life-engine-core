@@ -41,7 +41,15 @@ pub async fn event_stream(
             BusEvent::SyncComplete { .. } => "sync_complete",
             BusEvent::PluginLoaded { .. } => "plugin_loaded",
             BusEvent::PluginError { .. } => "plugin_error",
-            BusEvent::RecordChanged { .. } | BusEvent::RecordDeleted { .. } => {
+            BusEvent::RecordChanged { .. }
+            | BusEvent::RecordDeleted { .. }
+            | BusEvent::BlobStored { .. }
+            | BusEvent::BlobDeleted { .. }
+            | BusEvent::AuthSuccess { .. }
+            | BusEvent::AuthFailure { .. }
+            | BusEvent::CredentialEvent { .. }
+            | BusEvent::PluginUnloaded { .. }
+            | BusEvent::ConnectorEvent { .. } => {
                 return None;
             }
         };

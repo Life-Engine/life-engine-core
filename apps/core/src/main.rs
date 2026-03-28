@@ -527,6 +527,7 @@ async fn main() -> anyhow::Result<()> {
     let auth_mw_state = AuthMiddlewareState {
         auth_provider: Arc::clone(&auth_provider),
         rate_limiter,
+        message_bus: Some(Arc::clone(&message_bus)),
     };
     tracing::info!(provider = %config.auth.provider, "auth provider initialized");
     if webauthn_provider.is_some() {
@@ -572,9 +573,11 @@ async fn main() -> anyhow::Result<()> {
 
     // ── Step 8/10: Discover and load plugins ─────────────────────────
     let step_start = Instant::now();
-    let plugin_loader = Arc::new(Mutex::new(
-        PluginLoader::with_schema_registry(Arc::clone(&schema_registry)),
-    ));
+    let plugin_loader = Arc::new(Mutex::new({
+        let mut loader = PluginLoader::with_schema_registry(Arc::clone(&schema_registry));
+        loader.set_message_bus(Arc::clone(&message_bus));
+        loader
+    }));
     {
         let mut loader = plugin_loader.lock().await;
         let errors = loader.load_all().await;

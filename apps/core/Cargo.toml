@@ -76,7 +76,6 @@ tokio-postgres-rustls = { workspace = true }
 rustls-native-certs = { workspace = true }
 
 [dev-dependencies]
-life-engine-test-utils = { path = "../../packages/test-utils" }
 tempfile = "3"
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"

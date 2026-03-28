@@ -53,6 +53,62 @@ pub enum BusEvent {
         /// Description of the error.
         error: String,
     },
+
+    /// A blob was stored.
+    BlobStored {
+        /// The blob key.
+        blob_key: String,
+        /// The plugin that stored the blob.
+        plugin_id: String,
+    },
+
+    /// A blob was deleted.
+    BlobDeleted {
+        /// The blob key.
+        blob_key: String,
+        /// The plugin that deleted the blob.
+        plugin_id: String,
+    },
+
+    /// Authentication succeeded.
+    AuthSuccess {
+        /// The identity subject (e.g. token_id or user_id).
+        identity_subject: String,
+        /// The authentication method used.
+        method: String,
+    },
+
+    /// Authentication failed.
+    AuthFailure {
+        /// The client IP address.
+        client_ip: String,
+        /// The reason for failure.
+        reason: String,
+    },
+
+    /// A credential was accessed or modified.
+    CredentialEvent {
+        /// The event sub-type: "access", "modify", or "delete".
+        action: String,
+        /// The plugin that owns the credential.
+        plugin_id: String,
+        /// The credential key.
+        key: String,
+    },
+
+    /// A plugin was unloaded/removed.
+    PluginUnloaded {
+        /// The plugin that was unloaded.
+        plugin_id: String,
+    },
+
+    /// A connector authorisation event.
+    ConnectorEvent {
+        /// The event sub-type: "auth" or "revoke".
+        action: String,
+        /// The connector plugin id.
+        plugin_id: String,
+    },
 }
 
 /// The message bus for broadcasting events across Core subsystems and plugins.

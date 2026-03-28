@@ -156,6 +156,8 @@ pub struct PluginLoader {
     schema_registry: Option<Arc<SchemaRegistry>>,
     /// Optional credential store for providing scoped credential access to plugins.
     credential_store: Option<Arc<dyn CredentialStore>>,
+    /// Optional message bus for publishing audit events.
+    message_bus: Option<Arc<crate::message_bus::MessageBus>>,
 }
 
 impl PluginLoader {
@@ -166,6 +168,7 @@ impl PluginLoader {
             statuses: HashMap::new(),
             schema_registry: None,
             credential_store: None,
+            message_bus: None,
         }
     }
 
@@ -179,6 +182,7 @@ impl PluginLoader {
             statuses: HashMap::new(),
             schema_registry: Some(schema_registry),
             credential_store: None,
+            message_bus: None,
         }
     }
 
@@ -188,6 +192,11 @@ impl PluginLoader {
     /// `CredentialAccess` bridge scoped to its own plugin ID.
     pub fn set_credential_store(&mut self, store: Arc<dyn CredentialStore>) {
         self.credential_store = Some(store);
+    }
+
+    /// Set the message bus for publishing audit events on plugin lifecycle changes.
+    pub fn set_message_bus(&mut self, bus: Arc<crate::message_bus::MessageBus>) {
+        self.message_bus = Some(bus);
     }
 
     /// Discover plugins by scanning configured directories for `plugin.json` files.
@@ -300,6 +309,11 @@ impl PluginLoader {
         match load_result {
             Ok(()) => {
                 info!(plugin_id = %id, "plugin loaded");
+                if let Some(ref bus) = self.message_bus {
+                    bus.publish(crate::message_bus::BusEvent::PluginLoaded {
+                        plugin_id: id.to_string(),
+                    });
+                }
                 if let Some(info) = self.statuses.get_mut(id) {
                     info.status = PluginStatus::Loaded;
                 }
@@ -327,6 +341,12 @@ impl PluginLoader {
             Err(e) => {
                 let msg = format!("{e}");
                 error!(plugin_id = %id, error = %msg, "plugin failed to load");
+                if let Some(ref bus) = self.message_bus {
+                    bus.publish(crate::message_bus::BusEvent::PluginError {
+                        plugin_id: id.to_string(),
+                        error: msg.clone(),
+                    });
+                }
                 if let Some(info) = self.statuses.get_mut(id) {
                     info.status = PluginStatus::Failed(msg.clone());
                 }
@@ -359,6 +379,11 @@ impl PluginLoader {
             match unload_result {
                 Ok(()) => {
                     info!(plugin_id = %id, "plugin unloaded");
+                    if let Some(ref bus) = self.message_bus {
+                        bus.publish(crate::message_bus::BusEvent::PluginUnloaded {
+                            plugin_id: id.to_string(),
+                        });
+                    }
                     if let Some(info) = self.statuses.get_mut(id) {
                         info.status = PluginStatus::Unloaded;
                     }

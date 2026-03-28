@@ -98,7 +98,7 @@ impl WebhookTransport {
 
 #[async_trait]
 impl Transport for WebhookTransport {
-    async fn start(&self) -> Result<(), Box<dyn EngineError>> {
+    async fn start(&self, _config: toml::Value) -> Result<(), Box<dyn EngineError>> {
         let addr = self.bind_address();
         let state = self.create_state();
         let router = self.build_router(state);

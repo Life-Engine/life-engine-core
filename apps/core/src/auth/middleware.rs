@@ -158,21 +158,45 @@ pub async fn auth_middleware(
     match state.auth_provider.validate_token(&token).await {
         Ok(identity) => {
             tracing::debug!(token_id = %identity.token_id, "auth success");
+            if let Some(ref bus) = state.message_bus {
+                bus.publish(crate::message_bus::BusEvent::AuthSuccess {
+                    identity_subject: identity.token_id.clone(),
+                    method: "bearer_token".to_string(),
+                });
+            }
             request.extensions_mut().insert(identity);
             next.run(request).await
         }
         Err(AuthError::TokenExpired) => {
             state.rate_limiter.record_failure(client_ip).await;
             tracing::debug!("expired token presented");
+            if let Some(ref bus) = state.message_bus {
+                bus.publish(crate::message_bus::BusEvent::AuthFailure {
+                    client_ip: client_ip.to_string(),
+                    reason: "token_expired".to_string(),
+                });
+            }
             auth_error_response(StatusCode::UNAUTHORIZED, "AUTH_TOKEN_EXPIRED")
         }
         Err(AuthError::TokenNotFound) | Err(AuthError::InvalidCredentials) => {
             state.rate_limiter.record_failure(client_ip).await;
             tracing::debug!("invalid token presented");
+            if let Some(ref bus) = state.message_bus {
+                bus.publish(crate::message_bus::BusEvent::AuthFailure {
+                    client_ip: client_ip.to_string(),
+                    reason: "invalid_token".to_string(),
+                });
+            }
             auth_error_response(StatusCode::UNAUTHORIZED, "AUTH_INVALID_TOKEN")
         }
         Err(e) => {
             tracing::error!(error = %e, "auth validation error");
+            if let Some(ref bus) = state.message_bus {
+                bus.publish(crate::message_bus::BusEvent::AuthFailure {
+                    client_ip: client_ip.to_string(),
+                    reason: format!("internal_error: {e}"),
+                });
+            }
             auth_error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "AUTH_INTERNAL_ERROR",
@@ -188,6 +212,8 @@ pub struct AuthMiddlewareState {
     pub auth_provider: Arc<dyn AuthProvider>,
     /// The rate limiter for failed auth attempts.
     pub rate_limiter: RateLimiter,
+    /// Optional message bus for publishing audit events.
+    pub message_bus: Option<Arc<crate::message_bus::MessageBus>>,
 }
 
 /// Extract the bearer token from the Authorization header.

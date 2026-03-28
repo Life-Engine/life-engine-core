@@ -35,6 +35,7 @@ pub fn create_auth_state() -> (AuthMiddlewareState, Arc<LocalTokenProvider>) {
     let auth_state = AuthMiddlewareState {
         auth_provider: provider.clone(),
         rate_limiter,
+        message_bus: None,
     };
     (auth_state, provider)
 }

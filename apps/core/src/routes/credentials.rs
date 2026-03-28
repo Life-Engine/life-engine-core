@@ -76,15 +76,22 @@ pub async fn store_credential(
     }
 
     match store.store(&body.plugin_id, &body.key, &body.value).await {
-        Ok(()) => (
-            StatusCode::CREATED,
-            Json(json!({
-                "plugin_id": body.plugin_id,
-                "key": body.key,
-                "message": "credential stored"
-            })),
-        )
-            .into_response(),
+        Ok(()) => {
+            state.message_bus.publish(crate::message_bus::BusEvent::CredentialEvent {
+                action: "modify".to_string(),
+                plugin_id: body.plugin_id.clone(),
+                key: body.key.clone(),
+            });
+            (
+                StatusCode::CREATED,
+                Json(json!({
+                    "plugin_id": body.plugin_id,
+                    "key": body.key,
+                    "message": "credential stored"
+                })),
+            )
+                .into_response()
+        }
         Err(e) => {
             tracing::error!(error = %e, "failed to store credential");
             (
@@ -181,6 +188,11 @@ pub async fn get_credential(
     match store.retrieve(&plugin_id, &key).await {
         Ok(Some(value)) => {
             tracing::info!(plugin_id = %plugin_id, key = %key, "credential retrieved");
+            state.message_bus.publish(crate::message_bus::BusEvent::CredentialEvent {
+                action: "access".to_string(),
+                plugin_id: plugin_id.clone(),
+                key: key.clone(),
+            });
             (
                 StatusCode::OK,
                 [("cache-control", "no-store")],
@@ -240,7 +252,14 @@ pub async fn delete_credential(
     };
 
     match store.delete(&plugin_id, &key).await {
-        Ok(true) => StatusCode::NO_CONTENT.into_response(),
+        Ok(true) => {
+            state.message_bus.publish(crate::message_bus::BusEvent::CredentialEvent {
+                action: "delete".to_string(),
+                plugin_id: plugin_id.clone(),
+                key: key.clone(),
+            });
+            StatusCode::NO_CONTENT.into_response()
+        }
         Ok(false) => (
             StatusCode::NOT_FOUND,
             Json(json!({
@@ -289,14 +308,21 @@ pub async fn delete_plugin_credentials(
     };
 
     match store.delete_all_for_plugin(&plugin_id).await {
-        Ok(count) => (
-            StatusCode::OK,
-            Json(json!({
-                "deleted": count,
-                "plugin_id": plugin_id
-            })),
-        )
-            .into_response(),
+        Ok(count) => {
+            state.message_bus.publish(crate::message_bus::BusEvent::CredentialEvent {
+                action: "delete".to_string(),
+                plugin_id: plugin_id.clone(),
+                key: "*".to_string(),
+            });
+            (
+                StatusCode::OK,
+                Json(json!({
+                    "deleted": count,
+                    "plugin_id": plugin_id
+                })),
+            )
+                .into_response()
+        }
         Err(e) => {
             tracing::error!(error = %e, "failed to delete plugin credentials");
             (

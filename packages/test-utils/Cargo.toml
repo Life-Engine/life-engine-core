@@ -7,6 +7,7 @@ description = "Shared test utilities for Life Engine"
 
 [dependencies]
 life-engine-types = { path = "../types" }
+life-engine-traits = { path = "../traits" }
 life-engine-plugin-sdk = { path = "../plugin-sdk-rs" }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -15,5 +16,8 @@ chrono = { workspace = true }
 jsonschema = { workspace = true }
 base64 = "0.22"
 async-trait = { workspace = true }
+hex = "0.4"
+mime_guess = "2"
+sha2 = "0.10"
 tokio = { workspace = true }
 reqwest = { workspace = true }

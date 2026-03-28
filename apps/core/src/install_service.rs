@@ -205,18 +205,18 @@ fn install_launchd() {
 /// Find a service file relative to the binary location or the current directory.
 fn find_service_file(relative_path: &str) -> std::path::PathBuf {
     // Try relative to the executable first.
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(exe_dir) = exe.parent() {
-            let candidate = exe_dir.join(relative_path);
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(exe_dir) = exe.parent()
+    {
+        let candidate = exe_dir.join(relative_path);
+        if candidate.exists() {
+            return candidate;
+        }
+        // Also try one level up (common in cargo builds).
+        if let Some(parent) = exe_dir.parent() {
+            let candidate = parent.join(relative_path);
             if candidate.exists() {
                 return candidate;
-            }
-            // Also try one level up (common in cargo builds).
-            if let Some(parent) = exe_dir.parent() {
-                let candidate = parent.join(relative_path);
-                if candidate.exists() {
-                    return candidate;
-                }
             }
         }
     }

@@ -6,7 +6,10 @@
 
 pub mod capability;
 pub mod error;
+pub mod index_hints;
 pub mod plugin;
+pub mod schema;
+pub mod schema_versioning;
 pub mod storage;
 pub mod transport;
 pub mod types;

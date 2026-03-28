@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://life-engine.io/schemas/plugin-manifest.schema.json",
+  "title": "Plugin Manifest",
+  "description": "Schema for Life Engine plugin manifest (plugin.json).",
+  "type": "object",
+  "required": [
+    "id",
+    "name",
+    "version",
+    "entry",
+    "capabilities"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+$",
+      "description": "Reverse-domain plugin identifier."
+    },
+    "name": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "description": {
+      "type": "string"
+    },
+    "entry": {
+      "type": "string"
+    },
+    "element": {
+      "type": "string"
+    },
+    "minShellVersion": {
+      "type": "string"
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "actions": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "description": { "type": "string" },
+          "input_schema": {},
+          "output_schema": {}
+        }
+      }
+    },
+    "collections": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "config": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": false
+}

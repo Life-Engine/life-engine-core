@@ -10,6 +10,9 @@ pub struct WorkflowDef {
     pub id: String,
     /// Human-readable workflow name.
     pub name: String,
+    /// Optional description of what this workflow does.
+    #[serde(default)]
+    pub description: Option<String>,
     /// Execution mode (sync or async).
     #[serde(default)]
     pub mode: ExecutionMode,
@@ -134,13 +137,30 @@ pub enum TriggerContext {
     },
 }
 
+/// Operator for conditional branching evaluation.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ConditionOperator {
+    /// Take the `then` branch if the field value matches exactly.
+    Equals,
+    /// Take the `then` branch if the field value does not match.
+    NotEquals,
+    /// Take the `then` branch if the field is present (including null).
+    Exists,
+    /// Take the `then` branch if the field is absent, null, empty string, or empty array.
+    IsEmpty,
+}
+
 /// Conditional branching definition.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConditionDef {
     /// Dot-notation path to the field to evaluate (e.g., "payload.category").
     pub field: String,
-    /// Value to compare against.
-    pub equals: serde_json::Value,
+    /// The comparison operator.
+    pub operator: ConditionOperator,
+    /// Value to compare against (used by Equals and NotEquals; ignored by Exists and IsEmpty).
+    #[serde(default)]
+    pub value: serde_json::Value,
     /// Steps to execute if the condition matches.
     pub then_steps: Vec<StepDef>,
     /// Steps to execute if the condition does not match.

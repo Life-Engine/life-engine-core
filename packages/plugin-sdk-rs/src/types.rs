@@ -16,10 +16,18 @@ use std::sync::Arc;
 /// own storage partition, not the entire data store.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Capability {
-    /// Read access to the plugin's storage partition.
+    /// Read access to the plugin's document storage partition.
     StorageRead,
-    /// Write access to the plugin's storage partition.
+    /// Write access to the plugin's document storage partition.
     StorageWrite,
+    /// Delete access to the plugin's document storage partition.
+    StorageDelete,
+    /// Read access to the plugin's blob storage.
+    StorageBlobRead,
+    /// Write access to the plugin's blob storage.
+    StorageBlobWrite,
+    /// Delete access to the plugin's blob storage.
+    StorageBlobDelete,
     /// Permission to make outbound HTTP requests.
     HttpOutbound,
     /// Read access to the plugin's credential store.
@@ -247,6 +255,10 @@ mod tests {
         let caps = vec![
             Capability::StorageRead,
             Capability::StorageWrite,
+            Capability::StorageDelete,
+            Capability::StorageBlobRead,
+            Capability::StorageBlobWrite,
+            Capability::StorageBlobDelete,
             Capability::HttpOutbound,
             Capability::CredentialsRead,
             Capability::CredentialsWrite,
@@ -256,7 +268,7 @@ mod tests {
             Capability::Logging,
         ];
         let set: HashSet<_> = caps.iter().collect();
-        assert_eq!(set.len(), 9);
+        assert_eq!(set.len(), 13);
     }
 
     #[test]

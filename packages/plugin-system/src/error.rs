@@ -43,6 +43,10 @@ pub enum PluginError {
     #[error("plugin execution failed: {0}")]
     ExecutionFailed(String),
 
+    /// WASM plugin crashed (trap, out-of-bounds, unreachable, etc.).
+    #[error("plugin crashed: {0}")]
+    Crash(String),
+
     /// Lifecycle state transition error.
     #[error("lifecycle error: {0}")]
     LifecycleError(String),
@@ -63,6 +67,7 @@ impl EngineError for PluginError {
             PluginError::CapabilityViolation(_) => "CAP_001",
             PluginError::RuntimeCapabilityViolation(_) => "CAP_002",
             PluginError::ExecutionFailed(_) => "PLUGIN_007",
+            PluginError::Crash(_) => "PLUGIN_010",
             PluginError::LifecycleError(_) => "PLUGIN_008",
             PluginError::Io(_) => "PLUGIN_009",
         }
@@ -78,6 +83,7 @@ impl EngineError for PluginError {
             PluginError::CapabilityViolation(_) => Severity::Fatal,
             PluginError::RuntimeCapabilityViolation(_) => Severity::Fatal,
             PluginError::ExecutionFailed(_) => Severity::Retryable,
+            PluginError::Crash(_) => Severity::Fatal,
             PluginError::LifecycleError(_) => Severity::Fatal,
             PluginError::Io(_) => Severity::Retryable,
         }

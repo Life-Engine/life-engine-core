@@ -3,6 +3,7 @@
 //! In Phase 1, plugins are native Rust types implementing `CorePlugin`.
 //! They are registered programmatically via `register()` and discovered
 //! from configured directory paths by scanning for `plugin.json` manifests.
+#![allow(dead_code)]
 //! WASM-based plugin loading is deferred to Phase 4.
 
 use crate::credential_bridge::PluginCredentialBridge;

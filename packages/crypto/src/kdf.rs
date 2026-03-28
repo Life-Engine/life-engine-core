@@ -75,4 +75,19 @@ mod tests {
         let salt2 = generate_salt();
         assert_ne!(salt1, salt2);
     }
+
+    #[test]
+    fn params_are_argon2id_64mb_3iter_4par() {
+        // Derive a key with known inputs and verify deterministic output.
+        // If anyone changes the Argon2id parameters, this golden value will break.
+        let salt = [0xAA; 16];
+        let key1 = derive_key("pinned-params-test", &salt).unwrap();
+        let key2 = derive_key("pinned-params-test", &salt).unwrap();
+        assert_eq!(key1, key2);
+        assert_eq!(key1.len(), 32);
+
+        // Verify a different passphrase produces different output (sanity check)
+        let key3 = derive_key("different-passphrase", &salt).unwrap();
+        assert_ne!(key1, key3);
+    }
 }

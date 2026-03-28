@@ -3,7 +3,7 @@
 //! Coordinates discovery, manifest parsing, capability approval, host function
 //! construction, and WASM loading to produce ready-to-use plugin handles.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -66,6 +66,7 @@ pub fn load_plugins(
     }
 
     let mut handles = Vec::new();
+    let mut seen_ids: HashSet<String> = HashSet::new();
 
     for plugin in &discovered {
         match load_single_plugin(
@@ -77,10 +78,21 @@ pub fn load_plugins(
             &log_rate_limiter,
         ) {
             Ok(handle) => {
+                let plugin_id = &handle.manifest.plugin.id;
+
+                if !seen_ids.insert(plugin_id.clone()) {
+                    warn!(
+                        plugin_id = %plugin_id,
+                        directory = %plugin.path.display(),
+                        "skipping plugin: duplicate plugin ID"
+                    );
+                    continue;
+                }
+
                 let cap_names: Vec<String> =
                     handle.capabilities.iter().map(|c| c.to_string()).collect();
                 info!(
-                    plugin_id = %handle.manifest.plugin.id,
+                    plugin_id = %plugin_id,
                     version = %handle.manifest.plugin.version,
                     capabilities = %cap_names.join(", "),
                     "loaded plugin"
@@ -298,6 +310,9 @@ id = "{id}"
 name = "Test Plugin {id}"
 version = "1.0.0"
 
+[actions.greet]
+description = "Greet action"
+
 [capabilities]
 required = [{caps_str}]
 "#
@@ -395,7 +410,7 @@ required = [{caps_str}]
         create_plugin_dir(
             &third_party_dir,
             "ext-plugin",
-            &manifest_with_capabilities("ext-plugin", &["storage:read", "storage:write"]),
+            &manifest_with_capabilities("ext-plugin", &["storage:doc:read", "storage:doc:write"]),
             &wasm,
         );
 
@@ -495,7 +510,7 @@ required = [{caps_str}]
             "first-party",
             &manifest_with_capabilities(
                 "first-party",
-                &["storage:read", "storage:write", "http:outbound"],
+                &["storage:doc:read", "storage:doc:write", "http:outbound"],
             ),
             &wasm,
         );
@@ -585,5 +600,52 @@ required = [{caps_str}]
         assert!(ids.contains(&"good-plugin"));
         assert!(ids.contains(&"other-plugin"));
         assert!(!ids.contains(&"bad-plugin"));
+    }
+
+    #[test]
+    fn duplicate_plugin_ids_rejected() {
+        let tmp = TempDir::new().unwrap();
+        let plugins_dir = tmp.path().join("plugins");
+        std::fs::create_dir_all(&plugins_dir).unwrap();
+
+        let wasm = minimal_wasm_module();
+
+        // Two different directories but same plugin ID in their manifests
+        create_plugin_dir(
+            &plugins_dir,
+            "dir-alpha",
+            &valid_manifest("same-id"),
+            &wasm,
+        );
+        create_plugin_dir(
+            &plugins_dir,
+            "dir-beta",
+            &valid_manifest("same-id"),
+            &wasm,
+        );
+        // A plugin with a different ID should still load
+        create_plugin_dir(
+            &plugins_dir,
+            "dir-gamma",
+            &valid_manifest("different-id"),
+            &wasm,
+        );
+
+        let config = make_config(HashMap::new());
+        let result = load_plugins(
+            &plugins_dir,
+            &plugins_dir,
+            &config,
+            mock_storage(),
+            mock_event_bus(),
+            log_limiter(),
+        );
+
+        let handles = result.unwrap();
+        // Only one "same-id" should be loaded (first wins), plus "different-id"
+        assert_eq!(handles.len(), 2);
+        let ids: Vec<&str> = handles.iter().map(|h| h.manifest.plugin.id.as_str()).collect();
+        assert_eq!(ids.iter().filter(|&&id| id == "same-id").count(), 1);
+        assert!(ids.contains(&"different-id"));
     }
 }

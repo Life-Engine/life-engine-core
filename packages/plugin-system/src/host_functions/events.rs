@@ -25,6 +25,11 @@ pub struct EventsHostContext {
     pub capabilities: ApprovedCapabilities,
     /// Shared reference to the workflow event emitter.
     pub event_bus: Arc<dyn WorkflowEventEmitter>,
+    /// Event names this plugin declared in its manifest `[events.emit]` section.
+    /// If `None`, no manifest validation is performed (backwards compatibility).
+    pub declared_emit_events: Option<Vec<String>>,
+    /// Current execution depth for cascading event tracking.
+    pub execution_depth: u32,
 }
 
 /// Request payload for emitting an event from a plugin.
@@ -71,15 +76,38 @@ pub async fn host_events_emit(
         ))
     })?;
 
+    // Validate against manifest-declared emit events
+    if let Some(ref declared) = ctx.declared_emit_events
+        && !declared.contains(&request.event_name)
+    {
+        warn!(
+            plugin_id = %ctx.plugin_id,
+            event_name = %request.event_name,
+            "event not declared in manifest"
+        );
+        return Err(PluginError::RuntimeCapabilityViolation(format!(
+            "plugin '{}' attempted to emit undeclared event '{}'",
+            ctx.plugin_id, request.event_name
+        )));
+    }
+
     debug!(
         plugin_id = %ctx.plugin_id,
         event_name = %request.event_name,
+        depth = ctx.execution_depth,
         "emitting event"
     );
 
+    // Build the event payload with source and depth set by the host
+    let enriched_payload = serde_json::json!({
+        "source": ctx.plugin_id,
+        "depth": ctx.execution_depth,
+        "payload": request.payload,
+    });
+
     // Delegate to the event bus
     ctx.event_bus
-        .emit(&request.event_name, request.payload)
+        .emit(&request.event_name, enriched_payload)
         .await;
 
     // Return empty JSON object as success acknowledgement
@@ -188,6 +216,23 @@ mod tests {
             plugin_id: plugin_id.to_string(),
             capabilities: make_capabilities(caps),
             event_bus,
+            declared_emit_events: None,
+            execution_depth: 0,
+        }
+    }
+
+    fn make_context_with_declared_events(
+        plugin_id: &str,
+        caps: &[Capability],
+        event_bus: Arc<dyn WorkflowEventEmitter>,
+        declared_events: Vec<String>,
+    ) -> EventsHostContext {
+        EventsHostContext {
+            plugin_id: plugin_id.to_string(),
+            capabilities: make_capabilities(caps),
+            event_bus,
+            declared_emit_events: Some(declared_events),
+            execution_depth: 0,
         }
     }
 
@@ -220,11 +265,13 @@ mod tests {
         assert!(result.is_ok(), "emit should succeed: {result:?}");
         assert_eq!(result.unwrap(), b"{}");
 
-        // Verify the event bus was called correctly
+        // Verify the event bus was called correctly (payload is enriched with source/depth)
         let calls = bus.emit_calls.lock().unwrap();
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].0, "contact.created");
-        assert_eq!(calls[0].1, payload);
+        assert_eq!(calls[0].1["source"], "test-plugin");
+        assert_eq!(calls[0].1["depth"], 0);
+        assert_eq!(calls[0].1["payload"], payload);
     }
 
     #[tokio::test]
@@ -300,8 +347,10 @@ mod tests {
         let calls = bus.emit_calls.lock().unwrap();
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].0, "contact.updated");
-        assert_eq!(calls[0].1["contact_id"], "c-123");
-        assert_eq!(calls[0].1["name"], "Alice");
+        assert_eq!(calls[0].1["source"], "my-plugin");
+        assert_eq!(calls[0].1["depth"], 0);
+        assert_eq!(calls[0].1["payload"]["contact_id"], "c-123");
+        assert_eq!(calls[0].1["payload"]["name"], "Alice");
     }
 
     #[tokio::test]
@@ -326,5 +375,63 @@ mod tests {
         let err = result.unwrap_err();
         assert!(matches!(err, PluginError::ExecutionFailed(_)));
         assert!(err.to_string().contains("deserialize"));
+    }
+
+    #[tokio::test]
+    async fn emit_undeclared_event_returns_capability_error() {
+        let bus = Arc::new(MockEventBus::new());
+        let ctx = make_context_with_declared_events(
+            "test-plugin",
+            &[Capability::EventsEmit],
+            bus.clone(),
+            vec!["contact.created".to_string(), "contact.updated".to_string()],
+        );
+
+        // Try to emit an event not in the declared list
+        let input = make_emit_bytes("task.deleted", serde_json::json!({}));
+        let result = host_events_emit(&ctx, &input).await;
+
+        let err = result.unwrap_err();
+        assert!(matches!(err, PluginError::RuntimeCapabilityViolation(_)));
+        assert!(err.to_string().contains("undeclared event"));
+        assert!(err.to_string().contains("task.deleted"));
+
+        // Verify no events were emitted
+        let calls = bus.emit_calls.lock().unwrap();
+        assert!(calls.is_empty());
+    }
+
+    #[tokio::test]
+    async fn emit_declared_event_succeeds() {
+        let bus = Arc::new(MockEventBus::new());
+        let ctx = make_context_with_declared_events(
+            "test-plugin",
+            &[Capability::EventsEmit],
+            bus.clone(),
+            vec!["contact.created".to_string()],
+        );
+
+        let input = make_emit_bytes("contact.created", serde_json::json!({"id": "c-1"}));
+        let result = host_events_emit(&ctx, &input).await;
+
+        assert!(result.is_ok(), "declared event should succeed: {result:?}");
+    }
+
+    #[tokio::test]
+    async fn emitted_event_includes_source_and_depth() {
+        let bus = Arc::new(MockEventBus::new());
+        let mut ctx = make_context("my-plugin", &[Capability::EventsEmit], bus.clone());
+        ctx.execution_depth = 2;
+
+        let payload = serde_json::json!({"contact_id": "c-123"});
+        let input = make_emit_bytes("contact.updated", payload);
+        let _ = host_events_emit(&ctx, &input).await;
+
+        let calls = bus.emit_calls.lock().unwrap();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].0, "contact.updated");
+        assert_eq!(calls[0].1["source"], "my-plugin");
+        assert_eq!(calls[0].1["depth"], 2);
+        assert_eq!(calls[0].1["payload"]["contact_id"], "c-123");
     }
 }

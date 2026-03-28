@@ -11,10 +11,18 @@ use crate::error::{EngineError, Severity};
 /// A host function access grant that plugins must declare and have approved.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Capability {
-    /// Read from the storage layer.
+    /// Read from the document storage layer.
     StorageRead,
-    /// Write to the storage layer.
+    /// Write to the document storage layer.
     StorageWrite,
+    /// Delete from the document storage layer.
+    StorageDelete,
+    /// Read from blob storage.
+    StorageBlobRead,
+    /// Write to blob storage.
+    StorageBlobWrite,
+    /// Delete from blob storage.
+    StorageBlobDelete,
     /// Make outbound HTTP requests.
     HttpOutbound,
     /// Emit events to the event bus.
@@ -28,8 +36,12 @@ pub enum Capability {
 impl fmt::Display for Capability {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Capability::StorageRead => write!(f, "storage:read"),
-            Capability::StorageWrite => write!(f, "storage:write"),
+            Capability::StorageRead => write!(f, "storage:doc:read"),
+            Capability::StorageWrite => write!(f, "storage:doc:write"),
+            Capability::StorageDelete => write!(f, "storage:doc:delete"),
+            Capability::StorageBlobRead => write!(f, "storage:blob:read"),
+            Capability::StorageBlobWrite => write!(f, "storage:blob:write"),
+            Capability::StorageBlobDelete => write!(f, "storage:blob:delete"),
             Capability::HttpOutbound => write!(f, "http:outbound"),
             Capability::EventsEmit => write!(f, "events:emit"),
             Capability::EventsSubscribe => write!(f, "events:subscribe"),
@@ -57,8 +69,12 @@ impl FromStr for Capability {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "storage:read" => Ok(Capability::StorageRead),
-            "storage:write" => Ok(Capability::StorageWrite),
+            "storage:doc:read" => Ok(Capability::StorageRead),
+            "storage:doc:write" => Ok(Capability::StorageWrite),
+            "storage:doc:delete" => Ok(Capability::StorageDelete),
+            "storage:blob:read" => Ok(Capability::StorageBlobRead),
+            "storage:blob:write" => Ok(Capability::StorageBlobWrite),
+            "storage:blob:delete" => Ok(Capability::StorageBlobDelete),
             "http:outbound" => Ok(Capability::HttpOutbound),
             "events:emit" => Ok(Capability::EventsEmit),
             "events:subscribe" => Ok(Capability::EventsSubscribe),
@@ -122,6 +138,10 @@ mod tests {
         let capabilities = [
             Capability::StorageRead,
             Capability::StorageWrite,
+            Capability::StorageDelete,
+            Capability::StorageBlobRead,
+            Capability::StorageBlobWrite,
+            Capability::StorageBlobDelete,
             Capability::HttpOutbound,
             Capability::EventsEmit,
             Capability::EventsSubscribe,
@@ -137,8 +157,12 @@ mod tests {
 
     #[test]
     fn display_formats() {
-        assert_eq!(Capability::StorageRead.to_string(), "storage:read");
-        assert_eq!(Capability::StorageWrite.to_string(), "storage:write");
+        assert_eq!(Capability::StorageRead.to_string(), "storage:doc:read");
+        assert_eq!(Capability::StorageWrite.to_string(), "storage:doc:write");
+        assert_eq!(Capability::StorageDelete.to_string(), "storage:doc:delete");
+        assert_eq!(Capability::StorageBlobRead.to_string(), "storage:blob:read");
+        assert_eq!(Capability::StorageBlobWrite.to_string(), "storage:blob:write");
+        assert_eq!(Capability::StorageBlobDelete.to_string(), "storage:blob:delete");
         assert_eq!(Capability::HttpOutbound.to_string(), "http:outbound");
         assert_eq!(Capability::EventsEmit.to_string(), "events:emit");
         assert_eq!(Capability::EventsSubscribe.to_string(), "events:subscribe");
@@ -147,7 +171,7 @@ mod tests {
 
     #[test]
     fn fromstr_rejects_unknown() {
-        assert!("storage:delete".parse::<Capability>().is_err());
+        assert!("storage:magic".parse::<Capability>().is_err());
         assert!("unknown".parse::<Capability>().is_err());
         assert!("".parse::<Capability>().is_err());
     }
@@ -188,7 +212,7 @@ mod tests {
         };
         let msg = v.to_string();
         assert!(msg.contains("my-plugin"));
-        assert!(msg.contains("storage:write"));
+        assert!(msg.contains("storage:doc:write"));
         assert!(msg.contains("tried to write data"));
     }
 }

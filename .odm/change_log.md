@@ -1,5 +1,9 @@
 # Change Log
 
+## 2026-03-28
+
+- Architecture implementation across all packages: expand plugin manifest parsing with collections, events, trust levels, and resource limits. Extend audit logging with storage write events and security events. Add new trait modules (index_hints, schema, schema_versioning, blob, storage_context, storage_router). Restructure transport-rest with config, middleware, and router modules. Expand workflow engine with concurrency limits, job registry, condition operators, and trigger system. Add blob storage, health checks, and migration executor to storage-sqlite. Add identity and workflow types. Add schema documentation and QA reports. Update Cargo dependencies across workspace.
+
 ## 2026-03-27
 
 - Remove sidecar/bundled architecture — Core is now standalone-only. Delete `apps/app/` Tauri desktop client directory. Remove bundled-mode code from Core (`is_bundled_mode()`, `apply_bundled_defaults()`, `bundled_data_dir()` in config.rs, `"bundled"` branch in `detect_deployment_mode()` in main.rs). Update deployment-modes spec from 4 to 3 modes (standalone, Docker, home server). Supersede ADR-002 (Tauri v2 for App), create ADR-015 (Remove Sidecar Architecture). Update ADR-001 and ADR-007 to remove sidecar references. Update design docs (Core Overview, Client Interface, Principles, Life Engine), planning docs (Phase 10, risk register, overview, Phase 1), and monorepo spec. Remove Tauri CI job from ci.yml.disabled, Tauri test from build_verification_test.rs, Tauri entries from .gitignore, and `apps/app/src-tauri` exclude from Cargo.toml. Update README.md, pnpm-workspace.yaml.

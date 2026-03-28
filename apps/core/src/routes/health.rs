@@ -40,6 +40,7 @@ pub struct AppState {
     /// The encrypted credential store.
     pub credential_store: Option<Arc<SqliteCredentialStore>>,
     /// The household store for multi-user support.
+    #[allow(dead_code)]
     pub household_store: Option<Arc<HouseholdStore>>,
     /// The federation store for hub-to-hub sync.
     pub federation_store: Option<Arc<FederationStore>>,

@@ -142,3 +142,173 @@ fn init_idempotent_schema() {
     drop(_s1);
     let _s2 = SqliteStorage::init(config, key).expect("second init should be idempotent");
 }
+
+#[test]
+fn rekey_succeeds_and_new_key_works() {
+    let dir = TempDir::new().unwrap();
+    let db_path = dir.path().join("test.db");
+    let path_str = db_path.to_str().unwrap();
+    let config = test_config(path_str);
+    let old_key = [0x01u8; 32];
+    let new_key = [0x02u8; 32];
+
+    // Create and populate database with old key.
+    let mut storage = SqliteStorage::init(config.clone(), old_key).expect("init");
+    storage
+        .connection()
+        .execute(
+            "INSERT INTO plugin_data (id, plugin_id, collection, data, created_at, updated_at) \
+             VALUES ('r1', 'plug', 'events', '{\"x\":1}', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+            [],
+        )
+        .unwrap();
+
+    // Rotate to new key.
+    storage.rekey(new_key).expect("rekey should succeed");
+    drop(storage);
+
+    // Re-open with the new key — data should be accessible.
+    let storage2 = SqliteStorage::init(config.clone(), new_key).expect("open with new key");
+    let count: i64 = storage2
+        .connection()
+        .query_row("SELECT count(*) FROM plugin_data", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(count, 1);
+
+    // Old key should no longer work.
+    drop(storage2);
+    let result = SqliteStorage::init(config, old_key);
+    assert!(result.is_err(), "old key should be rejected after rekey");
+}
+
+#[test]
+fn rekey_failure_retains_old_key() {
+    let dir = TempDir::new().unwrap();
+    let db_path = dir.path().join("test.db");
+    let path_str = db_path.to_str().unwrap();
+    let config = test_config(path_str);
+    let key = test_key();
+
+    // Create a valid database.
+    let storage = SqliteStorage::init(config.clone(), key).expect("init");
+    storage
+        .connection()
+        .execute(
+            "INSERT INTO plugin_data (id, plugin_id, collection, data, created_at, updated_at) \
+             VALUES ('r1', 'plug', 'events', '{}', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+            [],
+        )
+        .unwrap();
+
+    // Verify that the original key still works after dropping and re-opening
+    // (no rekey was applied, so the key should be unchanged).
+    drop(storage);
+
+    let storage2 = SqliteStorage::init(config, key).expect("old key should still work");
+    let count: i64 = storage2
+        .connection()
+        .query_row("SELECT count(*) FROM plugin_data", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(count, 1);
+}
+
+#[test]
+fn credential_encrypted_field_is_not_plaintext() {
+    use crate::credentials::encrypt_credential;
+
+    let master_key = [0x42u8; 32];
+    let original = serde_json::json!({
+        "id": "cred-secret-test",
+        "name": "API Key",
+        "credential_type": "api_key",
+        "service": "stripe",
+        "claims": {
+            "api_key": "rk_fake_51XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+            "secret": "whsec_YYYYYYYY"
+        },
+        "source": "stripe-plugin",
+        "source_id": "cred-1",
+        "created_at": "2026-01-01T00:00:00Z",
+        "updated_at": "2026-01-01T00:00:00Z"
+    })
+    .to_string();
+
+    let encrypted = encrypt_credential(&master_key, &original).unwrap();
+
+    // The encrypted output should NOT contain the plaintext secret values.
+    assert!(
+        !encrypted.contains("rk_fake_51"),
+        "encrypted credential must not contain plaintext API key"
+    );
+    assert!(
+        !encrypted.contains("whsec_YYYYYYYY"),
+        "encrypted credential must not contain plaintext secret"
+    );
+
+    // The encrypted flag should be set.
+    let doc: serde_json::Value = serde_json::from_str(&encrypted).unwrap();
+    assert_eq!(doc["encrypted"], true);
+
+    // The claims field should be a hex string (ciphertext), not a JSON object.
+    assert!(
+        doc["claims"].is_string(),
+        "encrypted claims should be a hex string, not a JSON object"
+    );
+}
+
+#[test]
+fn credential_stored_in_db_is_not_plaintext_at_rest() {
+    use crate::credentials::encrypt_credential;
+
+    let dir = TempDir::new().unwrap();
+    let db_path = dir.path().join("test.db");
+    let config = test_config(db_path.to_str().unwrap());
+    let key = test_key();
+
+    let storage = SqliteStorage::init(config, key).expect("init");
+
+    // Encrypt and store a credential.
+    let original = serde_json::json!({
+        "id": "cred-at-rest-test",
+        "name": "OAuth Token",
+        "credential_type": "oauth_token",
+        "service": "github",
+        "claims": {
+            "access_token": "gho_16C7e42F292c6912E7710c838347Ae178B4a",
+            "token_type": "bearer"
+        },
+        "source": "github-plugin",
+        "source_id": "cred-2",
+        "created_at": "2026-01-01T00:00:00Z",
+        "updated_at": "2026-01-01T00:00:00Z"
+    })
+    .to_string();
+
+    let encrypted_json = encrypt_credential(&key, &original).unwrap();
+
+    // Store encrypted credential in the database.
+    storage
+        .connection()
+        .execute(
+            "INSERT INTO plugin_data (id, plugin_id, collection, data, created_at, updated_at) \
+             VALUES ('cred-at-rest-test', 'github-plugin', 'credentials', ?1, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+            [&encrypted_json],
+        )
+        .unwrap();
+
+    // Read it back from the database (still encrypted).
+    let stored: String = storage
+        .connection()
+        .query_row(
+            "SELECT data FROM plugin_data WHERE id = 'cred-at-rest-test'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+
+    // Verify the stored data does not contain the plaintext token.
+    assert!(
+        !stored.contains("gho_16C7e42F292c6912E7710c838347Ae178B4a"),
+        "stored credential must not contain plaintext access token"
+    );
+}

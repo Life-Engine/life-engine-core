@@ -3,6 +3,7 @@
 //! Provides capability-scoped host functions, resource limits (memory,
 //! timeout, rate limiting), and a bridge between WASM plugins and Core
 //! subsystems (storage, events, config, logging, HTTP).
+#![allow(dead_code)]
 
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -488,12 +489,12 @@ impl WasmHostBridge {
         };
 
         // Apply headers from the plugin request.
-        if let Some(hdrs) = headers {
-            if let Some(obj) = hdrs.as_object() {
-                for (key, value) in obj {
-                    if let Some(val_str) = value.as_str() {
-                        req = req.header(key.as_str(), val_str);
-                    }
+        if let Some(hdrs) = headers
+            && let Some(obj) = hdrs.as_object()
+        {
+            for (key, value) in obj {
+                if let Some(val_str) = value.as_str() {
+                    req = req.header(key.as_str(), val_str);
                 }
             }
         }

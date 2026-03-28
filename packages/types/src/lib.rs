@@ -11,11 +11,13 @@ pub mod events;
 pub mod extensions;
 pub mod file_helpers;
 pub mod files;
+pub mod identity;
 pub mod migrations;
 pub mod notes;
 pub mod pipeline;
 pub mod storage;
 pub mod tasks;
+pub mod workflow;
 
 // Re-export all canonical types at crate root for convenience.
 pub use contacts::{

@@ -61,6 +61,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 async-trait = "0.1"
 clap = { version = "4", features = ["derive"] }
 serde_yaml = "0.9"
+tower = "0.5"
 tower-http = { version = "0.6", features = ["cors", "trace"] }
 rusqlite = { version = "0.32", features = ["bundled-sqlcipher", "backup"] }
 rpassword = "7"
@@ -107,3 +108,4 @@ flate2 = "1"
 tempfile = "3"
 wiremock = "0.6"
 libc = "0.2"
+zeroize = "1"

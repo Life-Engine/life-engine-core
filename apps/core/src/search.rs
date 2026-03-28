@@ -114,6 +114,7 @@ impl SearchEngine {
     ///
     /// This is significantly faster than calling `index_record` in a loop
     /// because it avoids per-document commit overhead.
+    #[allow(dead_code)]
     pub async fn index_records_bulk(&self, records: &[Record]) -> anyhow::Result<usize> {
         let mut writer = self.writer.lock().await;
         let mut count = 0usize;

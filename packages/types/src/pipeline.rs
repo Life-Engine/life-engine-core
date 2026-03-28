@@ -35,6 +35,13 @@ pub struct MessageMetadata {
     /// Authenticated identity from the auth module, if available.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub auth_context: Option<serde_json::Value>,
+    /// Soft warnings appended by pipeline steps.
+    ///
+    /// When an action succeeds but wants to signal non-fatal issues,
+    /// it appends entries here. The pipeline executor surfaces these
+    /// to the caller without failing the step.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
 }
 
 /// The data carried by a `PipelineMessage`.
@@ -130,6 +137,7 @@ mod tests {
                 source: "endpoint:POST /tasks".into(),
                 timestamp: Utc::now(),
                 auth_context: None,
+                warnings: vec![],
             },
             payload: TypedPayload::Cdm(Box::new(CdmType::Task(Task {
                 id: Uuid::new_v4(),

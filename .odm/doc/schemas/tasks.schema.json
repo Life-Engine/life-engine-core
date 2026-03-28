@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://life-engine.io/schemas/cdm/tasks.schema.json",
+  "title": "Task",
+  "description": "A task in the Life Engine canonical data model.",
+  "type": "object",
+  "required": [
+    "id",
+    "title",
+    "source",
+    "source_id",
+    "created_at",
+    "updated_at"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "title": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/TaskStatus"
+    },
+    "priority": {
+      "$ref": "#/$defs/TaskPriority"
+    },
+    "due_date": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}"
+    },
+    "completed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "assignee": {
+      "type": "string"
+    },
+    "parent_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "source": {
+      "type": "string"
+    },
+    "source_id": {
+      "type": "string"
+    },
+    "extensions": {},
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "TaskStatus": {
+      "type": "string",
+      "enum": ["pending", "in_progress", "completed", "cancelled"]
+    },
+    "TaskPriority": {
+      "type": "string",
+      "enum": ["low", "medium", "high", "urgent"]
+    }
+  }
+}

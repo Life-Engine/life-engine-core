@@ -3,6 +3,7 @@
 //! Provides secure storage and selective disclosure of identity credentials
 //! (passport, licence, certificates). Credentials are encrypted with a
 //! separate key from the main data store. Supports W3C Verifiable
+#![allow(dead_code)]
 //! Credentials 2.0 format and DID alignment.
 //!
 //! # Security

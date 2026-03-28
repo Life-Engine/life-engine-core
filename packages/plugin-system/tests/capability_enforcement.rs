@@ -190,8 +190,8 @@ fn first_party_plugin_auto_granted_all_declared_capabilities() {
         &manifest_with_capabilities(
             "first-party-plugin",
             &[
-                "storage:read",
-                "storage:write",
+                "storage:doc:read",
+                "storage:doc:write",
                 "http:outbound",
                 "events:emit",
                 "events:subscribe",
@@ -251,7 +251,7 @@ fn third_party_approved_capabilities_load_successfully() {
     create_plugin_dir(
         &third_party_dir,
         "community-plugin",
-        &manifest_with_capabilities("community-plugin", &["storage:read"]),
+        &manifest_with_capabilities("community-plugin", &["storage:doc:read"]),
         &wasm,
     );
 
@@ -301,7 +301,7 @@ fn third_party_plugin_lacks_unapproved_capabilities() {
     create_plugin_dir(
         &third_party_dir,
         "limited-plugin",
-        &manifest_with_capabilities("limited-plugin", &["storage:read"]),
+        &manifest_with_capabilities("limited-plugin", &["storage:doc:read"]),
         &wasm,
     );
 
@@ -366,7 +366,7 @@ fn third_party_unapproved_manifest_capability_refuses_to_load_with_cap_001() {
     create_plugin_dir(
         &third_party_dir,
         "greedy-plugin",
-        &manifest_with_capabilities("greedy-plugin", &["storage:read", "storage:write"]),
+        &manifest_with_capabilities("greedy-plugin", &["storage:doc:read", "storage:doc:write"]),
         &wasm,
     );
 
@@ -397,7 +397,7 @@ fn third_party_unapproved_manifest_capability_refuses_to_load_with_cap_001() {
 
     // Verify that the rejection is specifically CAP_001 by testing directly
     use life_engine_plugin_system::capability::check_capability_approval;
-    use life_engine_plugin_system::manifest::{CapabilitySet, PluginManifest, PluginMeta};
+    use life_engine_plugin_system::manifest::{CapabilitySet, EventsDef, PluginManifest, PluginMeta, TrustLevel};
 
     let manifest = PluginManifest {
         plugin: PluginMeta {
@@ -406,11 +406,15 @@ fn third_party_unapproved_manifest_capability_refuses_to_load_with_cap_001() {
             version: "1.0.0".to_string(),
             description: None,
             author: None,
+            license: None,
+            trust: TrustLevel::ThirdParty,
         },
         actions: HashMap::new(),
         capabilities: CapabilitySet {
             required: vec![Capability::StorageRead, Capability::StorageWrite],
         },
+        collections: HashMap::new(),
+        events: EventsDef::default(),
         config: None,
     };
 
@@ -426,7 +430,7 @@ fn third_party_unapproved_manifest_capability_refuses_to_load_with_cap_001() {
     assert_eq!(err.code(), "CAP_001", "rejection must use CAP_001 error code");
     assert_eq!(err.severity(), Severity::Fatal, "CAP_001 must be Fatal");
     assert!(
-        err.to_string().contains("storage:write"),
+        err.to_string().contains("storage:doc:write"),
         "error should name the unapproved capability: {}",
         err
     );
@@ -453,7 +457,7 @@ fn approving_capability_in_config_allows_plugin_to_load() {
     create_plugin_dir(
         &third_party_dir,
         "pending-plugin",
-        &manifest_with_capabilities("pending-plugin", &["storage:read", "storage:write"]),
+        &manifest_with_capabilities("pending-plugin", &["storage:doc:read", "storage:doc:write"]),
         &wasm,
     );
 

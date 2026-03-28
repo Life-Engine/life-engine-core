@@ -89,6 +89,7 @@ fn sample_pipeline_message() -> PipelineMessage {
             source: "test".into(),
             timestamp: Utc::now(),
             auth_context: None,
+            warnings: vec![],
         },
         payload: TypedPayload::Cdm(Box::new(CdmType::Task(Task {
             id: Uuid::new_v4(),
@@ -211,6 +212,8 @@ async fn events_emit_succeeds_with_approved_capability() {
         plugin_id: "test-plugin".into(),
         capabilities: make_capabilities(&[Capability::EventsEmit]),
         event_bus: bus,
+        declared_emit_events: None,
+        execution_depth: 0,
     };
 
     let input = serde_json::to_vec(&EmitRequest {
@@ -231,6 +234,8 @@ async fn events_subscribe_succeeds_with_approved_capability() {
         plugin_id: "test-plugin".into(),
         capabilities: make_capabilities(&[Capability::EventsSubscribe]),
         event_bus: bus,
+        declared_emit_events: None,
+        execution_depth: 0,
     };
 
     let input = serde_json::to_vec(&SubscribeRequest {
@@ -250,6 +255,7 @@ async fn http_request_returns_cap002_without_http_outbound() {
         plugin_id: "blocked-plugin".into(),
         capabilities: make_capabilities(&[]),
         client: reqwest::Client::new(),
+        allowed_domains: None,
     };
 
     let input = serde_json::to_vec(&serde_json::json!({
@@ -289,7 +295,7 @@ async fn storage_read_returns_cap002_without_storage_read() {
     let result =
         life_engine_plugin_system::host_functions::storage::host_storage_read(&ctx, &input).await;
     let err = result.unwrap_err();
-    assert_runtime_violation(&err, "storage:read", "blocked-plugin");
+    assert_runtime_violation(&err, "storage:doc:read", "blocked-plugin");
 }
 
 #[tokio::test]
@@ -305,7 +311,7 @@ async fn storage_write_returns_cap002_without_storage_write() {
     let result =
         life_engine_plugin_system::host_functions::storage::host_storage_write(&ctx, &input).await;
     let err = result.unwrap_err();
-    assert_runtime_violation(&err, "storage:write", "blocked-plugin");
+    assert_runtime_violation(&err, "storage:doc:write", "blocked-plugin");
 }
 
 #[test]
@@ -328,6 +334,8 @@ async fn events_emit_returns_cap002_without_events_emit() {
         plugin_id: "blocked-plugin".into(),
         capabilities: make_capabilities(&[Capability::EventsSubscribe]),
         event_bus: bus,
+        declared_emit_events: None,
+        execution_depth: 0,
     };
 
     let input = serde_json::to_vec(&EmitRequest {
@@ -349,6 +357,8 @@ async fn events_subscribe_returns_cap002_without_events_subscribe() {
         plugin_id: "blocked-plugin".into(),
         capabilities: make_capabilities(&[Capability::EventsEmit]),
         event_bus: bus,
+        declared_emit_events: None,
+        execution_depth: 0,
     };
 
     let input = serde_json::to_vec(&SubscribeRequest {
@@ -411,7 +421,7 @@ async fn error_message_includes_capability_and_plugin_id() {
 
     let msg = err.to_string();
     assert!(
-        msg.contains("storage:read"),
+        msg.contains("storage:doc:read"),
         "error must name the capability: {msg}"
     );
     assert!(

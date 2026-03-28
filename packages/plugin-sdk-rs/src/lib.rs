@@ -42,7 +42,10 @@
 //! can copy it into their own project to avoid passing `--target` on every
 //! build.
 
+pub mod context;
 pub mod credential_store;
+pub mod error;
+pub mod lifecycle;
 pub mod macros;
 pub mod retry;
 pub mod storage;
@@ -53,7 +56,10 @@ pub mod types;
 pub mod wasm_guest;
 
 // Re-export core SDK types at crate root.
+pub use context::{ActionContext, ConfigClient, EventClient, HttpClient, HttpResponse, StorageClient};
 pub use credential_store::{CredentialStore, StoredCredential};
+pub use error::PluginError;
+pub use lifecycle::LifecycleHooks;
 pub use macros::{PluginInvocation, PluginOutput};
 pub use storage::StorageContext;
 pub use traits::CorePlugin;
@@ -114,6 +120,13 @@ pub mod prelude {
     };
     pub use anyhow::Result;
     pub use async_trait::async_trait;
+
+    // Plugin action context and client traits
+    pub use crate::context::{
+        ActionContext, ConfigClient, EventClient, HttpClient, HttpResponse, StorageClient,
+    };
+    pub use crate::error::PluginError;
+    pub use crate::lifecycle::LifecycleHooks;
 
     // CDM and pipeline types
     pub use life_engine_types::{

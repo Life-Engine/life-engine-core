@@ -1,0 +1,160 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://life-engine.io/schemas/cdm/events.schema.json",
+  "title": "CalendarEvent",
+  "description": "A calendar event in the Life Engine canonical data model.",
+  "type": "object",
+  "required": [
+    "id",
+    "title",
+    "start",
+    "source",
+    "source_id",
+    "created_at",
+    "updated_at"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "title": {
+      "type": "string"
+    },
+    "start": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}"
+    },
+    "end": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "description": {
+      "type": "string"
+    },
+    "location": {
+      "type": "string"
+    },
+    "all_day": {
+      "type": "boolean"
+    },
+    "recurrence": {
+      "$ref": "#/$defs/Recurrence"
+    },
+    "attendees": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Attendee"
+      },
+      "default": []
+    },
+    "reminders": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Reminder"
+      },
+      "default": []
+    },
+    "timezone": {
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/EventStatus"
+    },
+    "source": {
+      "type": "string"
+    },
+    "source_id": {
+      "type": "string"
+    },
+    "extensions": {},
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "RecurrenceFrequency": {
+      "type": "string",
+      "enum": ["daily", "weekly", "monthly", "yearly"]
+    },
+    "Recurrence": {
+      "type": "object",
+      "required": ["frequency"],
+      "properties": {
+        "frequency": {
+          "$ref": "#/$defs/RecurrenceFrequency"
+        },
+        "interval": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 1
+        },
+        "until": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "by_day": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "AttendeeStatus": {
+      "type": "string",
+      "enum": ["accepted", "declined", "tentative", "needs-action"]
+    },
+    "Attendee": {
+      "type": "object",
+      "required": ["email"],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "email": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/AttendeeStatus"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ReminderMethod": {
+      "type": "string",
+      "enum": ["notification", "email"]
+    },
+    "Reminder": {
+      "type": "object",
+      "required": ["minutes_before", "method"],
+      "properties": {
+        "minutes_before": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "method": {
+          "$ref": "#/$defs/ReminderMethod"
+        }
+      },
+      "additionalProperties": false
+    },
+    "EventStatus": {
+      "type": "string",
+      "enum": ["confirmed", "tentative", "cancelled"]
+    }
+  }
+}

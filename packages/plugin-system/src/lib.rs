@@ -15,12 +15,20 @@ pub mod loader;
 pub mod manifest;
 pub mod runtime;
 
-pub use capability::{check_capability_approval, ApprovedCapabilities};
+pub use capability::{
+    check_capability, check_capability_approval, check_collection_access, ApprovedCapabilities,
+};
 pub use discovery::{scan_plugins_directory, DiscoveredPlugin};
 pub use error::PluginError;
-pub use manifest::{parse_manifest, ActionDef, CapabilitySet, ConfigSchema, PluginManifest, PluginMeta};
+pub use manifest::{
+    parse_manifest, parse_manifest_toml, ActionDef, CapabilitySet, CollectionAccess, CollectionDef,
+    ConfigSchema, EventsDef, PluginManifest, PluginMeta, TrustLevel, DEFAULT_TIMEOUT_MS,
+};
 pub use host_functions::storage::{host_storage_read, host_storage_write, StorageHostContext};
 pub use lifecycle::{LifecycleManager, LifecycleState};
 pub use execute::PluginSystemExecutor;
 pub use loader::{load_plugins, LoaderConfig, PluginHandle};
-pub use runtime::{load_plugin, load_plugin_from_bytes, PluginInstance};
+pub use runtime::{
+    load_plugin, load_plugin_from_bytes, load_plugin_from_bytes_with_limits,
+    load_plugin_with_limits, PluginInstance, ResourceLimits,
+};

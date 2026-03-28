@@ -30,23 +30,30 @@ CREATE INDEX IF NOT EXISTS idx_collection
 /// DDL for the `audit_log` table — append-only security event log.
 ///
 /// Records security-relevant events such as authentication attempts,
-/// credential access, plugin lifecycle events, and data exports.
+/// credential access, plugin lifecycle events, storage writes, and data exports.
 /// Entries are retained for 90 days before cleanup.
 ///
-/// Index:
+/// Indexes:
 /// - `idx_audit_timestamp` — for time-range queries and retention cleanup.
+/// - `idx_audit_event_type` — for filtering by event type.
 pub const AUDIT_LOG_DDL: &str = "\
 CREATE TABLE IF NOT EXISTS audit_log (
-    id          TEXT PRIMARY KEY,
-    timestamp   TEXT NOT NULL,
-    event_type  TEXT NOT NULL,
-    plugin_id   TEXT,
-    details     TEXT NOT NULL,
-    created_at  TEXT NOT NULL
+    id               TEXT PRIMARY KEY,
+    timestamp        TEXT NOT NULL,
+    event_type       TEXT NOT NULL,
+    collection       TEXT,
+    document_id      TEXT,
+    identity_subject TEXT,
+    plugin_id        TEXT,
+    details          TEXT NOT NULL,
+    created_at       TEXT NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_audit_timestamp
     ON audit_log(timestamp);
+
+CREATE INDEX IF NOT EXISTS idx_audit_event_type
+    ON audit_log(event_type);
 ";
 
 /// Retention period for audit log entries, in days.
@@ -186,10 +193,13 @@ mod tests {
 
         assert_eq!(
             columns,
-            vec!["id", "timestamp", "event_type", "plugin_id", "details", "created_at"]
+            vec![
+                "id", "timestamp", "event_type", "collection", "document_id",
+                "identity_subject", "plugin_id", "details", "created_at",
+            ]
         );
 
-        // Verify timestamp index exists.
+        // Verify indexes exist.
         let indexes: Vec<String> = conn
             .prepare("PRAGMA index_list(audit_log)")
             .unwrap()
@@ -199,6 +209,7 @@ mod tests {
             .unwrap();
 
         assert!(indexes.contains(&"idx_audit_timestamp".to_string()));
+        assert!(indexes.contains(&"idx_audit_event_type".to_string()));
     }
 
     #[test]
@@ -334,24 +345,35 @@ mod tests {
     }
 
     #[test]
-    fn audit_log_plugin_id_is_nullable() {
+    fn audit_log_nullable_columns() {
         let conn = Connection::open_in_memory().expect("open in-memory db");
         conn.execute_batch(AUDIT_LOG_DDL).unwrap();
 
-        // Insert with NULL plugin_id (e.g., auth events).
+        // Insert with NULL optional columns (e.g., auth events with no collection/document).
         conn.execute(
-            "INSERT INTO audit_log (id, timestamp, event_type, plugin_id, details, created_at) \
-             VALUES ('audit-1', '2026-01-01T00:00:00Z', 'auth_success', NULL, '{}', '2026-01-01T00:00:00Z')",
+            "INSERT INTO audit_log (id, timestamp, event_type, collection, document_id, \
+             identity_subject, plugin_id, details, created_at) \
+             VALUES ('audit-1', '2026-01-01T00:00:00Z', 'auth_success', NULL, NULL, NULL, NULL, '{}', '2026-01-01T00:00:00Z')",
             [],
         )
         .unwrap();
 
-        let plugin_id: Option<String> = conn
-            .query_row("SELECT plugin_id FROM audit_log WHERE id = 'audit-1'", [], |row| {
-                row.get(0)
-            })
+        let (plugin_id, collection, document_id, identity_subject): (
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+        ) = conn
+            .query_row(
+                "SELECT plugin_id, collection, document_id, identity_subject FROM audit_log WHERE id = 'audit-1'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
             .unwrap();
 
         assert!(plugin_id.is_none());
+        assert!(collection.is_none());
+        assert!(document_id.is_none());
+        assert!(identity_subject.is_none());
     }
 }

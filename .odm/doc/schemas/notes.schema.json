@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://life-engine.io/schemas/cdm/notes.schema.json",
+  "title": "Note",
+  "description": "A note in the Life Engine canonical data model.",
+  "type": "object",
+  "required": [
+    "id",
+    "title",
+    "body",
+    "source",
+    "source_id",
+    "created_at",
+    "updated_at"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "title": {
+      "type": "string"
+    },
+    "body": {
+      "type": "string"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "format": {
+      "$ref": "#/$defs/NoteFormat"
+    },
+    "pinned": {
+      "type": "boolean"
+    },
+    "source": {
+      "type": "string"
+    },
+    "source_id": {
+      "type": "string"
+    },
+    "extensions": {},
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "NoteFormat": {
+      "type": "string",
+      "enum": ["plain", "markdown", "html"]
+    }
+  }
+}

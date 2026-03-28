@@ -47,19 +47,18 @@ pub async fn event_stream(
         };
 
         // Apply collection filter.
-        if let Some(ref col) = params.collection {
-            if let BusEvent::NewRecords { collection, .. } = &event {
-                if collection != col {
-                    return None;
-                }
-            }
+        if let Some(ref col) = params.collection
+            && let BusEvent::NewRecords { collection, .. } = &event
+            && collection != col
+        {
+            return None;
         }
 
         // Apply event_type filter.
-        if let Some(ref et) = params.event_type {
-            if event_type != et.as_str() {
-                return None;
-            }
+        if let Some(ref et) = params.event_type
+            && event_type != et.as_str()
+        {
+            return None;
         }
 
         let payload = match serde_json::to_string(&event) {

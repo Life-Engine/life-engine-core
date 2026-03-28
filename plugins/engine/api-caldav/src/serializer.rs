@@ -108,7 +108,7 @@ pub fn ical_to_event(ical_data: &str) -> anyhow::Result<CalendarEvent> {
         let calendar = calendar_result
             .map_err(|e| anyhow::anyhow!("failed to parse iCalendar data: {}", e))?;
 
-        for vevent in &calendar.events {
+        if let Some(vevent) = calendar.events.first() {
             return parse_vevent(vevent);
         }
     }

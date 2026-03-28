@@ -138,21 +138,82 @@ fn validate_workflow(workflow: &WorkflowDef, filename: &str) -> Result<(), Workf
         });
     }
 
+    // Validate event name format if present.
+    if let Some(ref event) = workflow.trigger.event {
+        validate_event_name(event, &workflow.id)?;
+    }
+
     for (i, step) in workflow.steps.iter().enumerate() {
+        validate_step(step, &workflow.id, i, false)?;
+    }
+
+    Ok(())
+}
+
+/// Validate a single step definition.
+///
+/// If `inside_branch` is true, this step is inside a condition's then/else
+/// branch and must not contain another condition (nesting depth limit).
+fn validate_step(
+    step: &crate::types::StepDef,
+    workflow_id: &str,
+    index: usize,
+    inside_branch: bool,
+) -> Result<(), WorkflowError> {
+    if let Some(ref condition) = step.condition {
+        if inside_branch {
+            return Err(WorkflowError::InvalidDefinition {
+                workflow_id: workflow_id.to_string(),
+                reason: format!(
+                    "step {} contains a nested condition inside a branch; only flat plugin steps are allowed in then/else branches",
+                    index
+                ),
+            });
+        }
+        // Validate branch steps are flat (no nested conditions).
+        for (j, branch_step) in condition.then_steps.iter().enumerate() {
+            validate_step(branch_step, workflow_id, j, true)?;
+        }
+        for (j, branch_step) in condition.else_steps.iter().enumerate() {
+            validate_step(branch_step, workflow_id, j, true)?;
+        }
+    } else {
+        // Plugin step: must have plugin and action.
         if step.plugin.is_empty() {
             return Err(WorkflowError::InvalidDefinition {
-                workflow_id: workflow.id.clone(),
-                reason: format!("step {} is missing a 'plugin' field", i),
+                workflow_id: workflow_id.to_string(),
+                reason: format!("step {} is missing a 'plugin' field", index),
             });
         }
         if step.action.is_empty() {
             return Err(WorkflowError::InvalidDefinition {
-                workflow_id: workflow.id.clone(),
-                reason: format!("step {} is missing an 'action' field", i),
+                workflow_id: workflow_id.to_string(),
+                reason: format!("step {} is missing an 'action' field", index),
             });
         }
     }
+    Ok(())
+}
 
+/// Validate that an event name is non-empty and consists of dot-separated segments.
+fn validate_event_name(event: &str, workflow_id: &str) -> Result<(), WorkflowError> {
+    if event.is_empty() {
+        return Err(WorkflowError::InvalidDefinition {
+            workflow_id: workflow_id.to_string(),
+            reason: "event name must not be empty".into(),
+        });
+    }
+    for segment in event.split('.') {
+        if segment.is_empty() {
+            return Err(WorkflowError::InvalidDefinition {
+                workflow_id: workflow_id.to_string(),
+                reason: format!(
+                    "event name '{}' contains an empty segment; use dot-separated names like 'domain.action'",
+                    event
+                ),
+            });
+        }
+    }
     Ok(())
 }
 
@@ -790,5 +851,245 @@ workflows:
             matches!(err, WorkflowError::InvalidDefinition { .. }),
             "expected InvalidDefinition, got: {err}"
         );
+    }
+
+    // --- Definition types verification tests ---
+
+    #[test]
+    fn definition_types_are_complete() {
+        use crate::types::{ErrorStrategyType, ExecutionMode};
+
+        // ExecutionMode defaults to Sync.
+        assert_eq!(ExecutionMode::default(), ExecutionMode::Sync);
+
+        // ErrorStrategyType defaults to Halt.
+        assert_eq!(ErrorStrategyType::default(), ErrorStrategyType::Halt);
+
+        // WorkflowDef includes description field.
+        let dir = TempDir::new().unwrap();
+        write_yaml(
+            dir.path(),
+            "typed.yaml",
+            r#"
+workflows:
+  typed-wf:
+    id: typed-wf
+    name: Typed Workflow
+    description: "A workflow with all definition fields"
+    mode: async
+    trigger:
+      endpoint: "POST /typed"
+    steps:
+      - plugin: validator
+        action: check
+        on_error:
+          strategy: retry
+          max_retries: 5
+"#,
+        );
+
+        let config = WorkflowConfig {
+            path: dir.path().to_str().unwrap().into(),
+        };
+        let workflows = load_workflows(&config).unwrap();
+        assert_eq!(workflows.len(), 1);
+
+        let wf = &workflows[0];
+        assert_eq!(wf.id, "typed-wf");
+        assert_eq!(wf.description.as_deref(), Some("A workflow with all definition fields"));
+        assert_eq!(wf.mode, ExecutionMode::Async);
+        assert!(wf.steps[0].on_error.is_some());
+
+        let err_strategy = wf.steps[0].on_error.as_ref().unwrap();
+        assert_eq!(err_strategy.strategy, ErrorStrategyType::Retry);
+        assert_eq!(err_strategy.max_retries, Some(5));
+    }
+
+    #[test]
+    fn description_field_is_optional() {
+        let dir = TempDir::new().unwrap();
+        write_yaml(dir.path(), "no-desc.yaml", valid_workflow_yaml());
+
+        let config = WorkflowConfig {
+            path: dir.path().to_str().unwrap().into(),
+        };
+        let workflows = load_workflows(&config).unwrap();
+        assert!(workflows[0].description.is_none());
+    }
+
+    // --- Condition step validation tests ---
+
+    #[test]
+    fn loader_accepts_condition_steps() {
+        let dir = TempDir::new().unwrap();
+        write_yaml(
+            dir.path(),
+            "cond.yaml",
+            r#"
+workflows:
+  cond-wf:
+    id: cond-wf
+    name: Conditional Workflow
+    trigger:
+      endpoint: "POST /conditional"
+    steps:
+      - plugin: ""
+        action: ""
+        condition:
+          field: "payload.category"
+          operator: equals
+          value: "spam"
+          then_steps:
+            - plugin: spam-handler
+              action: quarantine
+          else_steps:
+            - plugin: inbox
+              action: deliver
+"#,
+        );
+
+        let config = WorkflowConfig {
+            path: dir.path().to_str().unwrap().into(),
+        };
+        let workflows = load_workflows(&config).unwrap();
+        assert_eq!(workflows.len(), 1);
+        assert!(workflows[0].steps[0].condition.is_some());
+    }
+
+    #[test]
+    fn loader_rejects_nested_conditions() {
+        let dir = TempDir::new().unwrap();
+        write_yaml(
+            dir.path(),
+            "nested.yaml",
+            r#"
+workflows:
+  nested-wf:
+    id: nested-wf
+    name: Nested Conditions
+    trigger:
+      event: "some.event"
+    steps:
+      - plugin: ""
+        action: ""
+        condition:
+          field: "payload.type"
+          operator: equals
+          value: "a"
+          then_steps:
+            - plugin: ""
+              action: ""
+              condition:
+                field: "payload.sub"
+                operator: equals
+                value: "b"
+                then_steps:
+                  - plugin: handler
+                    action: run
+                else_steps:
+                  - plugin: fallback
+                    action: run
+          else_steps:
+            - plugin: default
+              action: run
+"#,
+        );
+
+        let config = WorkflowConfig {
+            path: dir.path().to_str().unwrap().into(),
+        };
+        let err = load_workflows(&config).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("nested condition"),
+            "expected nested condition error, got: {msg}"
+        );
+    }
+
+    // --- Event name validation tests ---
+
+    #[test]
+    fn loader_rejects_empty_event_name() {
+        let dir = TempDir::new().unwrap();
+        write_yaml(
+            dir.path(),
+            "empty-event.yaml",
+            r#"
+workflows:
+  empty-ev:
+    id: empty-ev
+    name: Empty Event
+    trigger:
+      event: ""
+    steps:
+      - plugin: p1
+        action: a1
+"#,
+        );
+
+        let config = WorkflowConfig {
+            path: dir.path().to_str().unwrap().into(),
+        };
+        let err = load_workflows(&config).unwrap_err();
+        assert!(
+            matches!(err, WorkflowError::InvalidDefinition { .. }),
+            "expected InvalidDefinition, got: {err}"
+        );
+    }
+
+    #[test]
+    fn loader_rejects_malformed_event_name() {
+        let dir = TempDir::new().unwrap();
+        write_yaml(
+            dir.path(),
+            "bad-event.yaml",
+            r#"
+workflows:
+  bad-ev:
+    id: bad-ev
+    name: Bad Event
+    trigger:
+      event: "webhook..received"
+    steps:
+      - plugin: p1
+        action: a1
+"#,
+        );
+
+        let config = WorkflowConfig {
+            path: dir.path().to_str().unwrap().into(),
+        };
+        let err = load_workflows(&config).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("empty segment"),
+            "expected empty segment error, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn loader_accepts_valid_event_name() {
+        let dir = TempDir::new().unwrap();
+        write_yaml(
+            dir.path(),
+            "good-event.yaml",
+            r#"
+workflows:
+  good-ev:
+    id: good-ev
+    name: Good Event
+    trigger:
+      event: "webhook.email.received"
+    steps:
+      - plugin: p1
+        action: a1
+"#,
+        );
+
+        let config = WorkflowConfig {
+            path: dir.path().to_str().unwrap().into(),
+        };
+        let workflows = load_workflows(&config).unwrap();
+        assert_eq!(workflows.len(), 1);
     }
 }

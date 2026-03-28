@@ -2,6 +2,7 @@
 //!
 //! Connectors bridge Life Engine with external services (email, calendar,
 //! contacts, etc.) by implementing a standard sync/disconnect lifecycle.
+#![allow(dead_code)]
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};

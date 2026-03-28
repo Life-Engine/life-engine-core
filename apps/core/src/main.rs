@@ -4,6 +4,7 @@
 //! subsystems in dependency order, starts transports, and coordinates
 //! graceful shutdown.
 
+mod audit;
 mod auth;
 mod config;
 mod conflict;
@@ -231,7 +232,7 @@ async fn main() -> anyhow::Result<()> {
                 salt
             } else {
                 let salt = life_engine_crypto::generate_salt();
-                std::fs::write(&salt_path, &salt).unwrap_or_else(|e| {
+                std::fs::write(&salt_path, salt).unwrap_or_else(|e| {
                     fail_step!(3, TOTAL_STEPS, "Derive database key", e);
                 });
                 tracing::info!(path = %salt_path.display(), "generated and saved new salt");
@@ -464,7 +465,7 @@ async fn main() -> anyhow::Result<()> {
                 &migration.entries,
                 CANONICAL_PLUGIN_ID,
                 &db_path,
-                &data_dir_path,
+                data_dir_path,
             )
             .await
             {

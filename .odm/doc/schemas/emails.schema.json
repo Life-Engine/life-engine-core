@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://life-engine.io/schemas/cdm/emails.schema.json",
+  "title": "Email",
+  "description": "An email message in the Life Engine canonical data model.",
+  "type": "object",
+  "required": [
+    "id",
+    "subject",
+    "from",
+    "to",
+    "date",
+    "source",
+    "source_id",
+    "created_at",
+    "updated_at"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "subject": {
+      "type": "string"
+    },
+    "from": {
+      "$ref": "#/$defs/EmailAddress"
+    },
+    "to": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/EmailAddress"
+      }
+    },
+    "cc": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/EmailAddress"
+      },
+      "default": []
+    },
+    "bcc": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/EmailAddress"
+      },
+      "default": []
+    },
+    "body_text": {
+      "type": "string"
+    },
+    "body_html": {
+      "type": "string"
+    },
+    "thread_id": {
+      "type": "string"
+    },
+    "date": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "message_id": {
+      "type": "string"
+    },
+    "in_reply_to": {
+      "type": "string"
+    },
+    "attachments": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/EmailAttachment"
+      },
+      "default": []
+    },
+    "read": {
+      "type": "boolean"
+    },
+    "starred": {
+      "type": "boolean"
+    },
+    "labels": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "source": {
+      "type": "string"
+    },
+    "source_id": {
+      "type": "string"
+    },
+    "extensions": {},
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "EmailAddress": {
+      "type": "object",
+      "required": ["address"],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "address": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "EmailAttachment": {
+      "type": "object",
+      "required": ["filename", "mime_type", "size_bytes"],
+      "properties": {
+        "filename": {
+          "type": "string"
+        },
+        "mime_type": {
+          "type": "string"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "content_id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

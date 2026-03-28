@@ -3,6 +3,7 @@
 //! Uses `deadpool-postgres` for connection pooling and `tokio-postgres`
 //! for async queries. Document data is stored as JSONB for efficient
 //! querying. Full-text search uses PostgreSQL `tsvector` / `tsquery`.
+#![allow(dead_code)]
 //!
 //! Change events are published on a broadcast channel, identical to
 //! the SQLite implementation.
@@ -26,7 +27,7 @@ use crate::storage::{
 const CHANGE_CHANNEL_CAPACITY: usize = 256;
 
 /// TLS mode for the PostgreSQL connection.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum PgSslMode {
     /// No TLS — connections are unencrypted.
@@ -34,13 +35,8 @@ pub enum PgSslMode {
     /// Use TLS if the server supports it, fall back to plaintext otherwise.
     Prefer,
     /// Require TLS; fail if the server does not support it.
+    #[default]
     Require,
-}
-
-impl Default for PgSslMode {
-    fn default() -> Self {
-        Self::Require
-    }
 }
 
 impl std::fmt::Display for PgSslMode {
@@ -202,16 +198,22 @@ impl PgStorage {
                     ON plugin_data(plugin_id, collection);
 
                 CREATE TABLE IF NOT EXISTS audit_log (
-                    id          TEXT PRIMARY KEY,
-                    timestamp   TIMESTAMPTZ NOT NULL,
-                    event_type  TEXT NOT NULL,
-                    plugin_id   TEXT,
-                    details     JSONB,
-                    created_at  TIMESTAMPTZ NOT NULL
+                    id               TEXT PRIMARY KEY,
+                    timestamp        TIMESTAMPTZ NOT NULL,
+                    event_type       TEXT NOT NULL,
+                    collection       TEXT,
+                    document_id      TEXT,
+                    identity_subject TEXT,
+                    plugin_id        TEXT,
+                    details          JSONB,
+                    created_at       TIMESTAMPTZ NOT NULL
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_audit_timestamp
                     ON audit_log(timestamp);
+
+                CREATE INDEX IF NOT EXISTS idx_audit_event_type
+                    ON audit_log(event_type);
 
                 -- Full-text search support via tsvector.
                 DO $$
@@ -300,15 +302,29 @@ impl PgStorage {
         plugin_id: Option<&str>,
         details: Option<&Value>,
     ) -> anyhow::Result<()> {
+        self.log_audit_full(event_type, None, None, None, plugin_id, details).await
+    }
+
+    /// Log an audit event with collection, document_id, and identity_subject.
+    async fn log_audit_full(
+        &self,
+        event_type: &str,
+        collection: Option<&str>,
+        document_id: Option<&str>,
+        identity_subject: Option<&str>,
+        plugin_id: Option<&str>,
+        details: Option<&Value>,
+    ) -> anyhow::Result<()> {
         let client = self.pool.get().await?;
         let id = uuid::Uuid::new_v4().to_string();
         let now = Utc::now();
 
         client
             .execute(
-                "INSERT INTO audit_log (id, timestamp, event_type, plugin_id, details, created_at)
-                 VALUES ($1, $2, $3, $4, $5, $6)",
-                &[&id, &now, &event_type, &plugin_id, &details, &now],
+                "INSERT INTO audit_log (id, timestamp, event_type, collection, document_id, \
+                 identity_subject, plugin_id, details, created_at) \
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+                &[&id, &now, &event_type, &collection, &document_id, &identity_subject, &plugin_id, &details, &now],
             )
             .await?;
 
@@ -448,13 +464,13 @@ impl StorageAdapter for PgStorage {
             )
             .await?;
 
-        self.log_audit(
-            "data.create",
+        self.log_audit_full(
+            "system.storage.created",
+            Some(collection),
+            Some(id),
+            None,
             Some(plugin_id),
-            Some(&serde_json::json!({
-                "collection": collection,
-                "record_id": id,
-            })),
+            None,
         )
         .await?;
 
@@ -529,17 +545,18 @@ impl StorageAdapter for PgStorage {
             .map_err(|e| StorageError::Other(e.into()))?;
         let created_at: chrono::DateTime<Utc> = row.get(0);
 
-        self.log_audit(
-            "data.update",
+        self.log_audit_full(
+            "system.storage.updated",
+            Some(collection),
+            Some(id),
+            None,
             Some(plugin_id),
             Some(&serde_json::json!({
-                "collection": collection,
-                "record_id": id,
                 "new_version": new_version,
             })),
         )
         .await
-        .map_err(|e| StorageError::Other(e.into()))?;
+        .map_err(StorageError::Other)?;
 
         self.publish(ChangeEvent {
             collection: collection.into(),
@@ -661,13 +678,13 @@ impl StorageAdapter for PgStorage {
             .await?;
 
         if rows > 0 {
-            self.log_audit(
-                "data.delete",
+            self.log_audit_full(
+                "system.storage.deleted",
+                Some(collection),
+                Some(id),
+                None,
                 Some(plugin_id),
-                Some(&serde_json::json!({
-                    "collection": collection,
-                    "record_id": id,
-                })),
+                None,
             )
             .await?;
 

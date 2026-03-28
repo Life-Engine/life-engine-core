@@ -11,14 +11,21 @@ use life_engine_types::{MessageMetadata, PipelineMessage, SchemaValidated, Typed
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, Semaphore};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use crate::error::WorkflowError;
 use crate::types::{
-    ErrorStrategyType, ExecutionMode, StepDef, TriggerContext, ValidationLevel, WorkflowDef,
+    ConditionOperator, ErrorStrategyType, ExecutionMode, StepDef, TriggerContext, ValidationLevel,
+    WorkflowDef,
 };
+
+/// Default concurrency limit for simultaneous workflow executions.
+const DEFAULT_CONCURRENCY_LIMIT: usize = 32;
+
+/// Default TTL for job entries (1 hour).
+const DEFAULT_JOB_TTL: std::time::Duration = std::time::Duration::from_secs(3600);
 
 /// Overall execution status of a workflow run.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -118,11 +125,22 @@ pub trait PluginExecutor: Send + Sync {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum JobStatus {
     /// Job is currently running.
-    Running,
+    InProgress,
     /// Job completed successfully.
     Completed,
     /// Job failed with an error message.
     Failed(String),
+}
+
+/// An entry in the job registry tracking an async workflow execution.
+#[derive(Debug, Clone)]
+pub struct JobEntry {
+    /// Current status of the job.
+    pub status: JobStatus,
+    /// The workflow response, available once the job completes.
+    pub response: Option<PipelineMessage>,
+    /// When this job was created.
+    pub created_at: chrono::DateTime<Utc>,
 }
 
 /// Trait for emitting workflow events (completion, failure).
@@ -190,6 +208,7 @@ pub fn build_initial_message(
             source,
             timestamp,
             auth_context,
+            warnings: vec![],
         },
         payload: TypedPayload::Custom(validated),
     })
@@ -256,8 +275,10 @@ fn validate_message(
 /// as input to the next step. Supports sync and async execution modes.
 pub struct PipelineExecutor {
     plugin_executor: Arc<dyn PluginExecutor>,
-    jobs: Arc<RwLock<HashMap<Uuid, JobStatus>>>,
+    jobs: Arc<RwLock<HashMap<Uuid, JobEntry>>>,
     event_emitter: Arc<dyn WorkflowEventEmitter>,
+    semaphore: Arc<Semaphore>,
+    job_ttl: std::time::Duration,
 }
 
 impl PipelineExecutor {
@@ -267,6 +288,8 @@ impl PipelineExecutor {
             plugin_executor,
             jobs: Arc::new(RwLock::new(HashMap::new())),
             event_emitter: Arc::new(NoOpEventEmitter),
+            semaphore: Arc::new(Semaphore::new(DEFAULT_CONCURRENCY_LIMIT)),
+            job_ttl: DEFAULT_JOB_TTL,
         }
     }
 
@@ -279,12 +302,179 @@ impl PipelineExecutor {
             plugin_executor,
             jobs: Arc::new(RwLock::new(HashMap::new())),
             event_emitter,
+            semaphore: Arc::new(Semaphore::new(DEFAULT_CONCURRENCY_LIMIT)),
+            job_ttl: DEFAULT_JOB_TTL,
+        }
+    }
+
+    /// Create a new pipeline executor with a custom concurrency limit.
+    pub fn with_concurrency_limit(
+        plugin_executor: Arc<dyn PluginExecutor>,
+        concurrency_limit: usize,
+    ) -> Self {
+        Self {
+            plugin_executor,
+            jobs: Arc::new(RwLock::new(HashMap::new())),
+            event_emitter: Arc::new(NoOpEventEmitter),
+            semaphore: Arc::new(Semaphore::new(concurrency_limit)),
+            job_ttl: DEFAULT_JOB_TTL,
         }
     }
 
     /// Query the status of an async job by its ID.
     pub async fn job_status(&self, job_id: &Uuid) -> Option<JobStatus> {
+        self.jobs.read().await.get(job_id).map(|e| e.status.clone())
+    }
+
+    /// Query the full job entry for an async job by its ID.
+    pub async fn job_entry(&self, job_id: &Uuid) -> Option<JobEntry> {
         self.jobs.read().await.get(job_id).cloned()
+    }
+
+    /// Remove job entries whose `created_at` exceeds the configured TTL.
+    pub async fn cleanup_expired_jobs(&self) -> usize {
+        let now = Utc::now();
+        let ttl = chrono::Duration::from_std(self.job_ttl).unwrap_or(chrono::Duration::hours(1));
+        let mut jobs = self.jobs.write().await;
+        let before = jobs.len();
+        jobs.retain(|_, entry| (now - entry.created_at) < ttl);
+        before - jobs.len()
+    }
+
+    /// Spawn an async workflow execution, returning its `JobId` immediately.
+    ///
+    /// The workflow runs on a background Tokio task. The caller can poll
+    /// `job_status()` or `job_entry()` to check progress.
+    pub fn spawn(&self, trigger: TriggerContext, workflow: &WorkflowDef) -> Uuid {
+        let job_id = Uuid::new_v4();
+        let created_at = Utc::now();
+        let workflow = workflow.clone();
+        let jobs = Arc::clone(&self.jobs);
+        let event_emitter = Arc::clone(&self.event_emitter);
+        let plugin_executor = Arc::clone(&self.plugin_executor);
+        let semaphore = Arc::clone(&self.semaphore);
+        let job_ttl = self.job_ttl;
+
+        // Register job as InProgress via a quick spawned task
+        let jobs_insert = Arc::clone(&jobs);
+        tokio::spawn(async move {
+            jobs_insert.write().await.insert(
+                job_id,
+                JobEntry {
+                    status: JobStatus::InProgress,
+                    response: None,
+                    created_at,
+                },
+            );
+        });
+
+        // Spawn the actual workflow execution
+        tokio::spawn(async move {
+            let _permit = match semaphore.acquire().await {
+                Ok(p) => p,
+                Err(_) => {
+                    jobs.write().await.insert(
+                        job_id,
+                        JobEntry {
+                            status: JobStatus::Failed("concurrency semaphore closed".into()),
+                            response: None,
+                            created_at,
+                        },
+                    );
+                    return;
+                }
+            };
+
+            let initial_message = match build_initial_message(trigger) {
+                Ok(msg) => msg,
+                Err(err) => {
+                    let err_msg = err.to_string();
+                    jobs.write().await.insert(
+                        job_id,
+                        JobEntry {
+                            status: JobStatus::Failed(err_msg.clone()),
+                            response: None,
+                            created_at,
+                        },
+                    );
+                    event_emitter
+                        .emit(
+                            "workflow.failed",
+                            serde_json::json!({
+                                "job_id": job_id.to_string(),
+                                "workflow_id": workflow.id,
+                                "error": err_msg,
+                            }),
+                        )
+                        .await;
+                    return;
+                }
+            };
+
+            let bg_executor = PipelineExecutor {
+                plugin_executor,
+                jobs: Arc::clone(&jobs),
+                event_emitter: Arc::clone(&event_emitter),
+                semaphore: Arc::new(Semaphore::new(1)),
+                job_ttl,
+            };
+
+            match bg_executor.run_steps(&workflow, initial_message).await {
+                Ok(result) => {
+                    jobs.write().await.insert(
+                        job_id,
+                        JobEntry {
+                            status: JobStatus::Completed,
+                            response: Some(result),
+                            created_at,
+                        },
+                    );
+                    event_emitter
+                        .emit(
+                            "workflow.completed",
+                            serde_json::json!({
+                                "job_id": job_id.to_string(),
+                                "workflow_id": workflow.id,
+                            }),
+                        )
+                        .await;
+                    info!(
+                        workflow_id = %workflow.id,
+                        job_id = %job_id,
+                        "async workflow completed via spawn()"
+                    );
+                }
+                Err(err) => {
+                    let err_msg = err.to_string();
+                    jobs.write().await.insert(
+                        job_id,
+                        JobEntry {
+                            status: JobStatus::Failed(err_msg.clone()),
+                            response: None,
+                            created_at,
+                        },
+                    );
+                    event_emitter
+                        .emit(
+                            "workflow.failed",
+                            serde_json::json!({
+                                "job_id": job_id.to_string(),
+                                "workflow_id": workflow.id,
+                                "error": err_msg,
+                            }),
+                        )
+                        .await;
+                    error!(
+                        workflow_id = %workflow.id,
+                        job_id = %job_id,
+                        error = %err,
+                        "async workflow failed via spawn()"
+                    );
+                }
+            }
+        });
+
+        job_id
     }
 
     /// Execute a workflow respecting its execution mode.
@@ -304,12 +494,18 @@ impl PipelineExecutor {
     }
 
     /// Execute a workflow synchronously — all steps run sequentially and the
-    /// final result is returned directly.
+    /// final result is returned directly. Acquires a concurrency permit.
     async fn execute_sync(
         &self,
         workflow: &WorkflowDef,
         initial_message: PipelineMessage,
     ) -> Result<PipelineMessage, WorkflowError> {
+        let _permit = self.semaphore.acquire().await.map_err(|_| {
+            WorkflowError::PluginExecutionError {
+                plugin: "workflow-engine".into(),
+                cause: "concurrency semaphore closed".into(),
+            }
+        })?;
         self.run_steps(workflow, initial_message).await
     }
 
@@ -329,27 +525,53 @@ impl PipelineExecutor {
             "starting async workflow execution"
         );
 
-        // Mark the job as running
-        self.jobs.write().await.insert(job_id, JobStatus::Running);
+        let created_at = Utc::now();
+
+        // Mark the job as in-progress
+        self.jobs.write().await.insert(job_id, JobEntry {
+            status: JobStatus::InProgress,
+            response: None,
+            created_at,
+        });
 
         // Clone what the background task needs
         let jobs = Arc::clone(&self.jobs);
         let event_emitter = Arc::clone(&self.event_emitter);
         let plugin_executor = Arc::clone(&self.plugin_executor);
+        let semaphore = Arc::clone(&self.semaphore);
+        let job_ttl = self.job_ttl;
         let workflow = workflow.clone();
         let correlation_id = initial_message.metadata.correlation_id;
         let auth_context = initial_message.metadata.auth_context.clone();
 
         tokio::spawn(async move {
+            let _permit = match semaphore.acquire().await {
+                Ok(p) => p,
+                Err(_) => {
+                    jobs.write().await.insert(job_id, JobEntry {
+                        status: JobStatus::Failed("concurrency semaphore closed".into()),
+                        response: None,
+                        created_at,
+                    });
+                    return;
+                }
+            };
+
             let bg_executor = PipelineExecutor {
                 plugin_executor,
                 jobs: Arc::clone(&jobs),
                 event_emitter: Arc::clone(&event_emitter),
+                semaphore: Arc::new(Semaphore::new(1)),
+                job_ttl,
             };
 
             match bg_executor.run_steps(&workflow, initial_message).await {
-                Ok(_result) => {
-                    jobs.write().await.insert(job_id, JobStatus::Completed);
+                Ok(result) => {
+                    jobs.write().await.insert(job_id, JobEntry {
+                        status: JobStatus::Completed,
+                        response: Some(result),
+                        created_at,
+                    });
                     event_emitter
                         .emit(
                             "workflow.completed",
@@ -367,9 +589,11 @@ impl PipelineExecutor {
                 }
                 Err(err) => {
                     let err_msg = err.to_string();
-                    jobs.write()
-                        .await
-                        .insert(job_id, JobStatus::Failed(err_msg.clone()));
+                    jobs.write().await.insert(job_id, JobEntry {
+                        status: JobStatus::Failed(err_msg.clone()),
+                        response: None,
+                        created_at,
+                    });
                     event_emitter
                         .emit(
                             "workflow.failed",
@@ -403,6 +627,7 @@ impl PipelineExecutor {
                 source: format!("workflow-engine:async:{workflow_id}"),
                 timestamp: Utc::now(),
                 auth_context,
+                warnings: vec![],
             },
             payload: TypedPayload::Custom(
                 SchemaValidated::new(payload, &schema)
@@ -510,14 +735,14 @@ impl PipelineExecutor {
         }
 
         // Validate exit message on success
-        if let Ok(ref msg) = result {
-            if matches!(
+        if let Ok(ref msg) = result
+            && matches!(
                 workflow.validate,
                 ValidationLevel::Strict | ValidationLevel::Edges
-            ) {
-                let last_index = workflow.steps.len().saturating_sub(1);
-                validate_message(msg, last_index, "exit validation")?;
-            }
+            )
+        {
+            let last_index = workflow.steps.len().saturating_sub(1);
+            validate_message(msg, last_index, "exit validation")?;
         }
 
         result
@@ -552,6 +777,41 @@ impl PipelineExecutor {
         Some(current.clone())
     }
 
+    /// Evaluate a condition operator against a resolved field value.
+    ///
+    /// - `Equals`: true if field exists and matches `comparison_value` exactly.
+    /// - `NotEquals`: true if field exists and does not match `comparison_value`.
+    /// - `Exists`: true if field is present (including null).
+    /// - `IsEmpty`: true if field is absent, null, empty string, or empty array.
+    ///
+    /// Missing fields (resolved == None) take the else branch for Equals/NotEquals/Exists,
+    /// and the then branch for IsEmpty.
+    fn evaluate_condition(
+        operator: &ConditionOperator,
+        resolved: &Option<serde_json::Value>,
+        comparison_value: &serde_json::Value,
+    ) -> bool {
+        match operator {
+            ConditionOperator::Equals => resolved
+                .as_ref()
+                .map(|v| v == comparison_value)
+                .unwrap_or(false),
+            ConditionOperator::NotEquals => resolved
+                .as_ref()
+                .map(|v| v != comparison_value)
+                .unwrap_or(false),
+            ConditionOperator::Exists => resolved.is_some(),
+            ConditionOperator::IsEmpty => match resolved {
+                None => true,
+                Some(v) => {
+                    v.is_null()
+                        || v.as_str().map(|s| s.is_empty()).unwrap_or(false)
+                        || v.as_array().map(|a| a.is_empty()).unwrap_or(false)
+                }
+            },
+        }
+    }
+
     /// Execute a list of steps sequentially, returning the final message.
     ///
     /// This is used both for top-level workflow steps and for conditional
@@ -575,15 +835,13 @@ impl PipelineExecutor {
             // Check for conditional branching
             if let Some(condition) = &step.condition {
                 let resolved = Self::resolve_field(&current_message, &condition.field);
-                let matches = resolved
-                    .as_ref()
-                    .map(|v| v == &condition.equals)
-                    .unwrap_or(false);
+                let matches = Self::evaluate_condition(&condition.operator, &resolved, &condition.value);
 
                 info!(
                     workflow_id = %workflow_id,
                     step_index = index,
                     field = %condition.field,
+                    operator = ?condition.operator,
                     matches = matches,
                     "evaluating conditional branch"
                 );
@@ -739,8 +997,12 @@ impl PipelineExecutor {
                                 error = %plugin_error,
                                 "step failed with skip strategy — skipping and continuing"
                             );
-                            // Pass the previous step's output (current_message) to the next step.
-                            // current_message is unchanged — the failed step's output is discarded.
+                            // Append error to warnings so callers can detect degradation (Req 8.2).
+                            current_message.metadata.warnings.push(format!(
+                                "step {} ({}.{}) skipped: {}",
+                                index, step.plugin, step.action, plugin_error
+                            ));
+                            // current_message is otherwise unchanged — the failed step's output is discarded.
                         }
                         ErrorStrategyType::Retry => {
                             let max_retries = step
@@ -755,7 +1017,8 @@ impl PipelineExecutor {
 
                             for attempt in 1..=max_retries {
                                 retry_count = attempt;
-                                let backoff = std::time::Duration::from_secs(1 << (attempt - 1));
+                                let backoff_secs = std::cmp::min(1u64 << (attempt - 1), 30);
+                                let backoff = std::time::Duration::from_secs(backoff_secs);
                                 warn!(
                                     workflow_id = %workflow_id,
                                     step_index = index,
@@ -1084,6 +1347,7 @@ mod tests {
                 source: "test:unit".into(),
                 timestamp: Utc::now(),
                 auth_context: None,
+                warnings: vec![],
             },
             payload: TypedPayload::Custom(
                 SchemaValidated::new(serde_json::json!({"input": true}), &schema).unwrap(),
@@ -1104,6 +1368,7 @@ mod tests {
         WorkflowDef {
             id: "test-workflow".into(),
             name: "Test Workflow".into(),
+            description: None,
             mode: ExecutionMode::Sync,
             validate: crate::types::ValidationLevel::None,
             trigger: TriggerDef {
@@ -1119,6 +1384,7 @@ mod tests {
         WorkflowDef {
             id: "async-test-workflow".into(),
             name: "Async Test Workflow".into(),
+            description: None,
             mode: ExecutionMode::Async,
             validate: crate::types::ValidationLevel::None,
             trigger: TriggerDef {
@@ -1273,10 +1539,10 @@ mod tests {
         assert_eq!(data["workflow_id"], "async-test-workflow");
         assert_eq!(result.metadata.correlation_id, correlation_id);
 
-        // The plugin hasn't been released yet — job should be Running
+        // The plugin hasn't been released yet — job should be InProgress
         let job_id: Uuid = data["job_id"].as_str().unwrap().parse().unwrap();
         let status = executor.job_status(&job_id).await;
-        assert_eq!(status, Some(JobStatus::Running));
+        assert_eq!(status, Some(JobStatus::InProgress));
 
         // Release the slow plugin
         notify.notify_one();
@@ -2282,6 +2548,28 @@ mod tests {
         then_steps: Vec<StepDef>,
         else_steps: Vec<StepDef>,
     ) -> StepDef {
+        use crate::types::{ConditionDef, ConditionOperator};
+        StepDef {
+            plugin: String::new(),
+            action: String::new(),
+            on_error: None,
+            condition: Some(ConditionDef {
+                field: field.into(),
+                operator: ConditionOperator::Equals,
+                value: equals,
+                then_steps,
+                else_steps,
+            }),
+        }
+    }
+
+    fn make_condition_step_with_operator(
+        field: &str,
+        operator: crate::types::ConditionOperator,
+        value: serde_json::Value,
+        then_steps: Vec<StepDef>,
+        else_steps: Vec<StepDef>,
+    ) -> StepDef {
         use crate::types::ConditionDef;
         StepDef {
             plugin: String::new(),
@@ -2289,7 +2577,8 @@ mod tests {
             on_error: None,
             condition: Some(ConditionDef {
                 field: field.into(),
-                equals,
+                operator,
+                value,
                 then_steps,
                 else_steps,
             }),
@@ -2309,6 +2598,7 @@ mod tests {
                 source: "test:unit".into(),
                 timestamp: Utc::now(),
                 auth_context: None,
+                warnings: vec![],
             },
             payload: TypedPayload::Custom(
                 SchemaValidated::new(serde_json::json!({"category": "spam"}), &schema).unwrap(),
@@ -2345,6 +2635,7 @@ mod tests {
                 source: "test:unit".into(),
                 timestamp: Utc::now(),
                 auth_context: None,
+                warnings: vec![],
             },
             payload: TypedPayload::Custom(
                 SchemaValidated::new(serde_json::json!({"category": "legit"}), &schema).unwrap(),
@@ -2380,6 +2671,7 @@ mod tests {
                 source: "test:unit".into(),
                 timestamp: Utc::now(),
                 auth_context: None,
+                warnings: vec![],
             },
             payload: TypedPayload::Custom(
                 SchemaValidated::new(
@@ -2443,6 +2735,7 @@ mod tests {
         WorkflowDef {
             id: "validation-test".into(),
             name: "Validation Test Workflow".into(),
+            description: None,
             mode: ExecutionMode::Sync,
             validate,
             trigger: TriggerDef {
@@ -2607,5 +2900,511 @@ mod tests {
 
         assert!(result.is_ok());
         assert_eq!(mock.call_count.load(Ordering::SeqCst), 3);
+    }
+
+    // --- Control Flow: condition operators and error handling tests ---
+
+    fn make_msg_with_payload(payload: serde_json::Value) -> PipelineMessage {
+        let schema = serde_json::json!({"type": "object"});
+        PipelineMessage {
+            metadata: MessageMetadata {
+                correlation_id: Uuid::new_v4(),
+                source: "test:control-flow".into(),
+                timestamp: Utc::now(),
+                auth_context: None,
+                warnings: vec![],
+            },
+            payload: TypedPayload::Custom(
+                SchemaValidated::new(payload, &schema).unwrap(),
+            ),
+        }
+    }
+
+    #[tokio::test]
+    async fn condition_not_equals_takes_then_when_value_differs() {
+        let mock = Arc::new(MockPluginExecutor::new());
+        let executor = PipelineExecutor::new(mock.clone());
+
+        let msg = make_msg_with_payload(serde_json::json!({"status": "draft"}));
+
+        let workflow = make_workflow(vec![make_condition_step_with_operator(
+            "status",
+            crate::types::ConditionOperator::NotEquals,
+            serde_json::json!("published"),
+            vec![make_step("draft-handler", "process")],
+            vec![make_step("published-handler", "process")],
+        )]);
+
+        let result = executor.execute_workflow(&workflow, msg).await.unwrap();
+
+        assert_eq!(mock.call_count.load(Ordering::SeqCst), 1);
+        let payload_json = serde_json::to_value(&result.payload).unwrap();
+        assert_eq!(
+            payload_json.pointer("/data/executed_by").and_then(|v| v.as_str()),
+            Some("draft-handler.process")
+        );
+    }
+
+    #[tokio::test]
+    async fn condition_not_equals_takes_else_when_value_matches() {
+        let mock = Arc::new(MockPluginExecutor::new());
+        let executor = PipelineExecutor::new(mock.clone());
+
+        let msg = make_msg_with_payload(serde_json::json!({"status": "published"}));
+
+        let workflow = make_workflow(vec![make_condition_step_with_operator(
+            "status",
+            crate::types::ConditionOperator::NotEquals,
+            serde_json::json!("published"),
+            vec![make_step("draft-handler", "process")],
+            vec![make_step("published-handler", "process")],
+        )]);
+
+        let result = executor.execute_workflow(&workflow, msg).await.unwrap();
+
+        assert_eq!(mock.call_count.load(Ordering::SeqCst), 1);
+        let payload_json = serde_json::to_value(&result.payload).unwrap();
+        assert_eq!(
+            payload_json.pointer("/data/executed_by").and_then(|v| v.as_str()),
+            Some("published-handler.process")
+        );
+    }
+
+    #[tokio::test]
+    async fn condition_exists_takes_then_when_field_present_including_null() {
+        let mock = Arc::new(MockPluginExecutor::new());
+        let executor = PipelineExecutor::new(mock.clone());
+
+        // Field exists with null value — should take then branch
+        let msg = make_msg_with_payload(serde_json::json!({"tag": null}));
+
+        let workflow = make_workflow(vec![make_condition_step_with_operator(
+            "tag",
+            crate::types::ConditionOperator::Exists,
+            serde_json::Value::Null,
+            vec![make_step("has-tag", "process")],
+            vec![make_step("no-tag", "process")],
+        )]);
+
+        let result = executor.execute_workflow(&workflow, msg).await.unwrap();
+
+        let payload_json = serde_json::to_value(&result.payload).unwrap();
+        assert_eq!(
+            payload_json.pointer("/data/executed_by").and_then(|v| v.as_str()),
+            Some("has-tag.process")
+        );
+    }
+
+    #[tokio::test]
+    async fn condition_exists_takes_else_when_field_missing() {
+        let mock = Arc::new(MockPluginExecutor::new());
+        let executor = PipelineExecutor::new(mock.clone());
+
+        let msg = make_msg_with_payload(serde_json::json!({"other": "data"}));
+
+        let workflow = make_workflow(vec![make_condition_step_with_operator(
+            "tag",
+            crate::types::ConditionOperator::Exists,
+            serde_json::Value::Null,
+            vec![make_step("has-tag", "process")],
+            vec![make_step("no-tag", "process")],
+        )]);
+
+        let result = executor.execute_workflow(&workflow, msg).await.unwrap();
+
+        let payload_json = serde_json::to_value(&result.payload).unwrap();
+        assert_eq!(
+            payload_json.pointer("/data/executed_by").and_then(|v| v.as_str()),
+            Some("no-tag.process")
+        );
+    }
+
+    #[tokio::test]
+    async fn condition_is_empty_takes_then_for_null_empty_string_empty_array_and_absent() {
+        // null → then
+        let mock = Arc::new(MockPluginExecutor::new());
+        let executor = PipelineExecutor::new(mock);
+        let msg = make_msg_with_payload(serde_json::json!({"val": null}));
+        let workflow = make_workflow(vec![make_condition_step_with_operator(
+            "val",
+            crate::types::ConditionOperator::IsEmpty,
+            serde_json::Value::Null,
+            vec![make_step("empty-handler", "process")],
+            vec![make_step("non-empty-handler", "process")],
+        )]);
+        let result = executor.execute_workflow(&workflow, msg).await.unwrap();
+        let pj = serde_json::to_value(&result.payload).unwrap();
+        assert_eq!(pj.pointer("/data/executed_by").and_then(|v| v.as_str()), Some("empty-handler.process"));
+
+        // empty string → then
+        let mock2 = Arc::new(MockPluginExecutor::new());
+        let executor2 = PipelineExecutor::new(mock2);
+        let msg2 = make_msg_with_payload(serde_json::json!({"val": ""}));
+        let workflow2 = make_workflow(vec![make_condition_step_with_operator(
+            "val",
+            crate::types::ConditionOperator::IsEmpty,
+            serde_json::Value::Null,
+            vec![make_step("empty-handler", "process")],
+            vec![make_step("non-empty-handler", "process")],
+        )]);
+        let result2 = executor2.execute_workflow(&workflow2, msg2).await.unwrap();
+        let pj2 = serde_json::to_value(&result2.payload).unwrap();
+        assert_eq!(pj2.pointer("/data/executed_by").and_then(|v| v.as_str()), Some("empty-handler.process"));
+
+        // empty array → then
+        let mock3 = Arc::new(MockPluginExecutor::new());
+        let executor3 = PipelineExecutor::new(mock3);
+        let msg3 = make_msg_with_payload(serde_json::json!({"val": []}));
+        let workflow3 = make_workflow(vec![make_condition_step_with_operator(
+            "val",
+            crate::types::ConditionOperator::IsEmpty,
+            serde_json::Value::Null,
+            vec![make_step("empty-handler", "process")],
+            vec![make_step("non-empty-handler", "process")],
+        )]);
+        let result3 = executor3.execute_workflow(&workflow3, msg3).await.unwrap();
+        let pj3 = serde_json::to_value(&result3.payload).unwrap();
+        assert_eq!(pj3.pointer("/data/executed_by").and_then(|v| v.as_str()), Some("empty-handler.process"));
+
+        // absent field → then
+        let mock4 = Arc::new(MockPluginExecutor::new());
+        let executor4 = PipelineExecutor::new(mock4);
+        let msg4 = make_msg_with_payload(serde_json::json!({"other": "x"}));
+        let workflow4 = make_workflow(vec![make_condition_step_with_operator(
+            "val",
+            crate::types::ConditionOperator::IsEmpty,
+            serde_json::Value::Null,
+            vec![make_step("empty-handler", "process")],
+            vec![make_step("non-empty-handler", "process")],
+        )]);
+        let result4 = executor4.execute_workflow(&workflow4, msg4).await.unwrap();
+        let pj4 = serde_json::to_value(&result4.payload).unwrap();
+        assert_eq!(pj4.pointer("/data/executed_by").and_then(|v| v.as_str()), Some("empty-handler.process"));
+    }
+
+    #[tokio::test]
+    async fn condition_is_empty_takes_else_for_non_empty_values() {
+        let mock = Arc::new(MockPluginExecutor::new());
+        let executor = PipelineExecutor::new(mock.clone());
+
+        let msg = make_msg_with_payload(serde_json::json!({"val": "hello"}));
+
+        let workflow = make_workflow(vec![make_condition_step_with_operator(
+            "val",
+            crate::types::ConditionOperator::IsEmpty,
+            serde_json::Value::Null,
+            vec![make_step("empty-handler", "process")],
+            vec![make_step("non-empty-handler", "process")],
+        )]);
+
+        let result = executor.execute_workflow(&workflow, msg).await.unwrap();
+
+        let payload_json = serde_json::to_value(&result.payload).unwrap();
+        assert_eq!(
+            payload_json.pointer("/data/executed_by").and_then(|v| v.as_str()),
+            Some("non-empty-handler.process")
+        );
+    }
+
+    #[tokio::test]
+    async fn skip_strategy_appends_warning_to_message_metadata() {
+        let mock = Arc::new(FailingPluginExecutor::new(0)); // fail immediately
+        let executor = PipelineExecutor::new(mock.clone());
+        let workflow = make_workflow(vec![
+            make_step_with_strategy("failing-plugin", "crash", ErrorStrategyType::Skip),
+            make_step("next-plugin", "act"),
+        ]);
+
+        let result = executor
+            .execute_workflow(&workflow, make_test_message())
+            .await
+            .unwrap();
+
+        // The skipped step's error should be appended as a warning
+        assert!(!result.metadata.warnings.is_empty());
+        assert!(result.metadata.warnings[0].contains("failing-plugin.crash"));
+        assert!(result.metadata.warnings[0].contains("skipped"));
+    }
+
+    #[tokio::test]
+    async fn branch_output_feeds_next_step_after_condition_block() {
+        // Condition block output (from whichever branch) feeds the next step (Req 5.1-5.2).
+        let mock = Arc::new(MockPluginExecutor::new());
+        let executor = PipelineExecutor::new(mock.clone());
+
+        let msg = make_msg_with_payload(serde_json::json!({"route": "a"}));
+
+        let workflow = make_workflow(vec![
+            make_conditional_step(
+                "route",
+                serde_json::json!("a"),
+                vec![make_step("branch-a", "transform")],
+                vec![make_step("branch-b", "transform")],
+            ),
+            make_step("post-branch", "finalize"),
+        ]);
+
+        let result = executor.execute_workflow(&workflow, msg).await.unwrap();
+
+        // branch-a runs, then post-branch receives branch-a's output
+        assert_eq!(mock.call_count.load(Ordering::SeqCst), 2);
+        let payload_json = serde_json::to_value(&result.payload).unwrap();
+        assert_eq!(
+            payload_json.pointer("/data/executed_by").and_then(|v| v.as_str()),
+            Some("post-branch.finalize")
+        );
+        // post-branch received branch-a's output as "previous"
+        assert!(payload_json.pointer("/data/previous").is_some());
+    }
+
+    #[tokio::test]
+    async fn missing_field_takes_else_for_not_equals_operator() {
+        // Missing field should take else branch for NotEquals (Req 3.6)
+        let mock = Arc::new(MockPluginExecutor::new());
+        let executor = PipelineExecutor::new(mock.clone());
+
+        let msg = make_msg_with_payload(serde_json::json!({"other": "x"}));
+
+        let workflow = make_workflow(vec![make_condition_step_with_operator(
+            "missing_field",
+            crate::types::ConditionOperator::NotEquals,
+            serde_json::json!("anything"),
+            vec![make_step("then-handler", "act")],
+            vec![make_step("else-handler", "act")],
+        )]);
+
+        let result = executor.execute_workflow(&workflow, msg).await.unwrap();
+
+        let payload_json = serde_json::to_value(&result.payload).unwrap();
+        assert_eq!(
+            payload_json.pointer("/data/executed_by").and_then(|v| v.as_str()),
+            Some("else-handler.act")
+        );
+    }
+
+    // --- Pipeline Executor Phase 8 Tests ---
+
+    #[tokio::test]
+    async fn spawn_returns_job_id_and_sets_status_to_in_progress() {
+        // Req 1.2, 7.1: spawn() returns a JobId immediately and registers InProgress.
+        let notify = Arc::new(Notify::new());
+        let mock = Arc::new(SlowPluginExecutor::new(Arc::clone(&notify)));
+        let executor = Arc::new(PipelineExecutor::new(mock));
+        let workflow = make_async_workflow(vec![make_step("slow-plugin", "process")]);
+        let trigger = TriggerContext::Event {
+            name: "test.event".into(),
+            payload: serde_json::json!({"key": "value"}),
+        };
+
+        let job_id = executor.spawn(trigger, &workflow);
+
+        // Give the background task a moment to register the job
+        tokio::time::sleep(tokio::time::Duration::from_millis(20)).await;
+
+        let status = executor.job_status(&job_id).await;
+        assert_eq!(status, Some(JobStatus::InProgress));
+
+        // Clean up: release the slow plugin
+        notify.notify_one();
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+        let status = executor.job_status(&job_id).await;
+        assert_eq!(status, Some(JobStatus::Completed));
+    }
+
+    #[tokio::test]
+    async fn spawn_sets_failed_status_on_workflow_error() {
+        // Req 7.3: When an async workflow fails, job status becomes Failed.
+        let mock = Arc::new(FailingPluginExecutor::new(0));
+        let executor = Arc::new(PipelineExecutor::new(mock));
+        let workflow = make_async_workflow(vec![make_step_with_strategy(
+            "bad-plugin",
+            "crash",
+            ErrorStrategyType::Halt,
+        )]);
+        let trigger = TriggerContext::Event {
+            name: "test.fail".into(),
+            payload: serde_json::json!({}),
+        };
+
+        let job_id = executor.spawn(trigger, &workflow);
+
+        // Wait for background task
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+        let status = executor.job_status(&job_id).await;
+        assert!(matches!(status, Some(JobStatus::Failed(_))));
+    }
+
+    #[tokio::test]
+    async fn job_entry_contains_response_on_completion() {
+        // Req 8.2: JobEntry has status, response, and created_at.
+        // Req 7.2: Completed job stores the WorkflowResponse.
+        let mock = Arc::new(MockPluginExecutor::new());
+        let executor = Arc::new(PipelineExecutor::new(mock));
+        let workflow = make_async_workflow(vec![make_step("fast-plugin", "act")]);
+        let trigger = TriggerContext::Event {
+            name: "test.complete".into(),
+            payload: serde_json::json!({"data": "test"}),
+        };
+
+        let job_id = executor.spawn(trigger, &workflow);
+
+        // Wait for background task
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+        let entry = executor.job_entry(&job_id).await;
+        assert!(entry.is_some());
+        let entry = entry.unwrap();
+        assert_eq!(entry.status, JobStatus::Completed);
+        assert!(entry.response.is_some());
+        assert!(entry.created_at <= Utc::now());
+    }
+
+    #[tokio::test]
+    async fn cleanup_expired_jobs_removes_old_entries() {
+        // Req 7.5: Jobs exceeding TTL are evicted.
+        let mock = Arc::new(MockPluginExecutor::new());
+        let executor = PipelineExecutor {
+            plugin_executor: mock as Arc<dyn PluginExecutor>,
+            jobs: Arc::new(RwLock::new(HashMap::new())),
+            event_emitter: Arc::new(NoOpEventEmitter),
+            semaphore: Arc::new(Semaphore::new(DEFAULT_CONCURRENCY_LIMIT)),
+            job_ttl: std::time::Duration::from_millis(1), // very short TTL
+        };
+
+        // Manually insert an old job entry
+        let job_id = Uuid::new_v4();
+        executor.jobs.write().await.insert(
+            job_id,
+            JobEntry {
+                status: JobStatus::Completed,
+                response: None,
+                created_at: Utc::now() - chrono::Duration::hours(2),
+            },
+        );
+
+        // Insert a fresh job entry
+        let fresh_id = Uuid::new_v4();
+        executor.jobs.write().await.insert(
+            fresh_id,
+            JobEntry {
+                status: JobStatus::Completed,
+                response: None,
+                created_at: Utc::now(),
+            },
+        );
+
+        let removed = executor.cleanup_expired_jobs().await;
+
+        // The old entry should be removed, the fresh one kept
+        assert_eq!(removed, 1);
+        assert!(executor.job_entry(&job_id).await.is_none());
+        assert!(executor.job_entry(&fresh_id).await.is_some());
+    }
+
+    #[tokio::test]
+    async fn concurrency_limit_queues_excess_executions() {
+        // Req 9.1, 9.2: Concurrency limit queues additional executions.
+        let notify = Arc::new(Notify::new());
+        let mock = Arc::new(SlowPluginExecutor::new(Arc::clone(&notify)));
+        // Limit to 1 concurrent execution
+        let executor = Arc::new(PipelineExecutor::with_concurrency_limit(mock.clone(), 1));
+        let workflow = make_workflow(vec![make_step("slow-plugin", "process")]);
+
+        // Start first execution (takes the only permit)
+        let exec1 = {
+            let ex = Arc::clone(&executor);
+            let wf = workflow.clone();
+            tokio::spawn(async move {
+                ex.execute_workflow(&wf, make_test_message()).await
+            })
+        };
+
+        // Give first task time to acquire the permit and enter the plugin
+        tokio::time::sleep(tokio::time::Duration::from_millis(20)).await;
+
+        // First execution entered the plugin (call_count = 1), waiting on notify
+        assert_eq!(mock.call_count.load(Ordering::SeqCst), 1);
+
+        // Start second execution (should queue on the semaphore)
+        let exec2 = {
+            let ex = Arc::clone(&executor);
+            let wf = workflow.clone();
+            tokio::spawn(async move {
+                ex.execute_workflow(&wf, make_test_message()).await
+            })
+        };
+
+        // Wait a bit — second execution should still be queued (semaphore blocked)
+        tokio::time::sleep(tokio::time::Duration::from_millis(20)).await;
+
+        // Still only 1 call — second execution is queued waiting for the permit
+        assert_eq!(mock.call_count.load(Ordering::SeqCst), 1);
+
+        // Release first execution
+        notify.notify_one();
+        let _ = exec1.await;
+
+        // Give second execution time to acquire the permit and enter the plugin
+        tokio::time::sleep(tokio::time::Duration::from_millis(20)).await;
+
+        // Second execution should now be inside the plugin
+        assert_eq!(mock.call_count.load(Ordering::SeqCst), 2);
+
+        // Release second execution
+        notify.notify_one();
+        let _ = exec2.await;
+    }
+
+    #[tokio::test]
+    async fn custom_concurrency_limit_is_respected() {
+        // Req 9.3: Configurable concurrency limit.
+        let mock = Arc::new(MockPluginExecutor::new());
+        let executor = PipelineExecutor::with_concurrency_limit(mock, 4);
+
+        // Verify the executor was created with the custom limit (4 permits)
+        assert_eq!(executor.semaphore.available_permits(), 4);
+    }
+
+    #[tokio::test]
+    async fn pipeline_message_constructed_from_endpoint_trigger_with_metadata() {
+        // Req 2.1: Endpoint trigger populates payload and auth metadata.
+        let ctx = TriggerContext::Endpoint {
+            method: "POST".into(),
+            path: "/api/v1/emails".into(),
+            body: serde_json::json!({"subject": "Test", "to": "alice@example.com"}),
+            auth: Some(serde_json::json!({"user_id": "u-42"})),
+        };
+
+        let msg = build_initial_message(ctx).unwrap();
+
+        assert_eq!(msg.metadata.source, "endpoint:POST /api/v1/emails");
+        assert!(msg.metadata.auth_context.is_some());
+        let auth = msg.metadata.auth_context.unwrap();
+        assert_eq!(auth["user_id"], "u-42");
+
+        let payload_json = serde_json::to_value(&msg.payload).unwrap();
+        assert_eq!(payload_json["data"]["subject"], "Test");
+    }
+
+    #[tokio::test]
+    async fn pipeline_message_constructed_from_schedule_trigger_empty_payload() {
+        // Req 2.3: Schedule trigger maps to empty payload with workflow_id in source.
+        let fired_at = Utc::now();
+        let ctx = TriggerContext::Schedule {
+            workflow_id: "daily-sync".into(),
+            fired_at,
+        };
+
+        let msg = build_initial_message(ctx).unwrap();
+
+        assert_eq!(msg.metadata.source, "schedule:daily-sync");
+        assert!(msg.metadata.auth_context.is_none());
+
+        let payload_json = serde_json::to_value(&msg.payload).unwrap();
+        let data = &payload_json["data"];
+        assert!(data.is_object());
+        assert_eq!(data.as_object().unwrap().len(), 0);
     }
 }

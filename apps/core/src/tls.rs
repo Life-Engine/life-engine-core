@@ -2,6 +2,7 @@
 //!
 //! Loads PEM certificate chains and private keys from disk, builds a
 //! `rustls::ServerConfig` suitable for use with `tokio-rustls`.
+#![allow(dead_code)]
 
 use crate::config::TlsSettings;
 use crate::error::CoreError;

@@ -1308,10 +1308,10 @@ impl SubscriptionRoot {
         Ok(stream.filter_map(move |result| {
             match result {
                 Ok(BusEvent::RecordChanged { record }) => {
-                    if let Some(ref col) = collection {
-                        if &record.collection != col {
-                            return None;
-                        }
+                    if let Some(ref col) = collection
+                        && &record.collection != col
+                    {
+                        return None;
                     }
                     Some(RecordChangeEvent {
                         change_type: "changed".into(),
@@ -1321,10 +1321,10 @@ impl SubscriptionRoot {
                     })
                 }
                 Ok(BusEvent::RecordDeleted { record_id, collection: del_collection }) => {
-                    if let Some(ref col) = collection {
-                        if &del_collection != col {
-                            return None;
-                        }
+                    if let Some(ref col) = collection
+                        && &del_collection != col
+                    {
+                        return None;
                     }
                     Some(RecordChangeEvent {
                         change_type: "deleted".into(),
@@ -1334,10 +1334,10 @@ impl SubscriptionRoot {
                     })
                 }
                 Ok(BusEvent::NewRecords { collection: col, count: _ }) => {
-                    if let Some(ref filter_col) = collection {
-                        if &col != filter_col {
-                            return None;
-                        }
+                    if let Some(ref filter_col) = collection
+                        && &col != filter_col
+                    {
+                        return None;
                     }
                     Some(RecordChangeEvent {
                         change_type: "new_records".into(),

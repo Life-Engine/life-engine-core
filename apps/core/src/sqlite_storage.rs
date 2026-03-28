@@ -223,16 +223,22 @@ impl SqliteStorage {
                 ON plugin_data(plugin_id, collection);
 
             CREATE TABLE IF NOT EXISTS audit_log (
-                id          TEXT PRIMARY KEY,
-                timestamp   TEXT NOT NULL,
-                event_type  TEXT NOT NULL,
-                plugin_id   TEXT,
-                details     TEXT,
-                created_at  TEXT NOT NULL
+                id               TEXT PRIMARY KEY,
+                timestamp        TEXT NOT NULL,
+                event_type       TEXT NOT NULL,
+                collection       TEXT,
+                document_id      TEXT,
+                identity_subject TEXT,
+                plugin_id        TEXT,
+                details          TEXT,
+                created_at       TEXT NOT NULL
             );
 
             CREATE INDEX IF NOT EXISTS idx_audit_timestamp
                 ON audit_log(timestamp);
+
+            CREATE INDEX IF NOT EXISTS idx_audit_event_type
+                ON audit_log(event_type);
 
             CREATE TABLE IF NOT EXISTS schema_versions (
                 plugin_id   TEXT NOT NULL,
@@ -310,14 +316,14 @@ impl StorageAdapter for SqliteStorage {
             params![id, plugin_id, collection, data_str, now_str, now_str],
         )?;
 
-        AuditLogger::log_event(
+        AuditLogger::log_event_full(
             &conn,
-            "data.create",
+            "system.storage.created",
+            Some(collection),
+            Some(id),
+            None,
             Some(plugin_id),
-            Some(&serde_json::json!({
-                "collection": collection,
-                "record_id": id,
-            })),
+            None,
         )?;
 
         // Release the lock before publishing to avoid holding it while
@@ -391,16 +397,17 @@ impl StorageAdapter for SqliteStorage {
             |row| row.get(0),
         ).map_err(|e| StorageError::Other(e.into()))?;
 
-        AuditLogger::log_event(
+        AuditLogger::log_event_full(
             &conn,
-            "data.update",
+            "system.storage.updated",
+            Some(collection),
+            Some(id),
+            None,
             Some(plugin_id),
             Some(&serde_json::json!({
-                "collection": collection,
-                "record_id": id,
                 "new_version": new_version,
             })),
-        ).map_err(|e| StorageError::Other(e.into()))?;
+        ).map_err(StorageError::Other)?;
 
         drop(conn);
 
@@ -504,14 +511,14 @@ impl StorageAdapter for SqliteStorage {
         )?;
 
         if rows > 0 {
-            AuditLogger::log_event(
+            AuditLogger::log_event_full(
                 &conn,
-                "data.delete",
+                "system.storage.deleted",
+                Some(collection),
+                Some(id),
+                None,
                 Some(plugin_id),
-                Some(&serde_json::json!({
-                    "collection": collection,
-                    "record_id": id,
-                })),
+                None,
             )?;
 
             drop(conn);
@@ -697,16 +704,31 @@ fn json_value_to_sql(v: &Value) -> Box<dyn rusqlite::types::ToSql> {
 // ──────────────────────────────────────────────────────────────
 
 /// Records security-relevant events in the `audit_log` table.
+#[allow(dead_code)]
 pub struct AuditLogger;
 
 /// Number of days to retain audit entries.
 const AUDIT_RETENTION_DAYS: i64 = 90;
 
+#[allow(dead_code)]
 impl AuditLogger {
-    /// Insert an audit event.
+    /// Insert an audit event with full field support.
     pub fn log_event(
         conn: &Connection,
         event_type: &str,
+        plugin_id: Option<&str>,
+        details: Option<&Value>,
+    ) -> anyhow::Result<()> {
+        Self::log_event_full(conn, event_type, None, None, None, plugin_id, details)
+    }
+
+    /// Insert an audit event with collection, document_id, and identity_subject.
+    pub fn log_event_full(
+        conn: &Connection,
+        event_type: &str,
+        collection: Option<&str>,
+        document_id: Option<&str>,
+        identity_subject: Option<&str>,
         plugin_id: Option<&str>,
         details: Option<&Value>,
     ) -> anyhow::Result<()> {
@@ -715,9 +737,10 @@ impl AuditLogger {
         let details_str = details.map(serde_json::to_string).transpose()?;
 
         conn.execute(
-            "INSERT INTO audit_log (id, timestamp, event_type, plugin_id, details, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![id, now, event_type, plugin_id, details_str, now],
+            "INSERT INTO audit_log (id, timestamp, event_type, collection, document_id, \
+             identity_subject, plugin_id, details, created_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            params![id, now, event_type, collection, document_id, identity_subject, plugin_id, details_str, now],
         )?;
         Ok(())
     }
@@ -1164,7 +1187,7 @@ mod tests {
             .unwrap()
             .map(|r| r.unwrap())
             .collect();
-        assert_eq!(types, vec!["data.create", "data.update", "data.delete"]);
+        assert_eq!(types, vec!["system.storage.created", "system.storage.updated", "system.storage.deleted"]);
     }
 
     #[tokio::test]
@@ -1175,8 +1198,9 @@ mod tests {
         // Insert an old audit entry (100 days ago).
         let old_time = (Utc::now() - chrono::Duration::days(100)).to_rfc3339();
         conn.execute(
-            "INSERT INTO audit_log (id, timestamp, event_type, plugin_id, details, created_at)
-             VALUES ('old', ?1, 'test', 'p1', NULL, ?1)",
+            "INSERT INTO audit_log (id, timestamp, event_type, collection, document_id, \
+             identity_subject, plugin_id, details, created_at) \
+             VALUES ('old', ?1, 'test', NULL, NULL, NULL, 'p1', NULL, ?1)",
             params![old_time],
         )
         .unwrap();
@@ -1184,8 +1208,9 @@ mod tests {
         // Insert a recent audit entry.
         let recent_time = Utc::now().to_rfc3339();
         conn.execute(
-            "INSERT INTO audit_log (id, timestamp, event_type, plugin_id, details, created_at)
-             VALUES ('recent', ?1, 'test', 'p1', NULL, ?1)",
+            "INSERT INTO audit_log (id, timestamp, event_type, collection, document_id, \
+             identity_subject, plugin_id, details, created_at) \
+             VALUES ('recent', ?1, 'test', NULL, NULL, NULL, 'p1', NULL, ?1)",
             params![recent_time],
         )
         .unwrap();

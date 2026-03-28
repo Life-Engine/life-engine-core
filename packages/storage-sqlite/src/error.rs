@@ -56,6 +56,10 @@ pub enum StorageError {
     #[error("unknown collection: {0}")]
     UnknownCollection(String),
 
+    /// Key rotation (PRAGMA rekey) failed.
+    #[error("key rotation failed: {0}")]
+    RekeyFailed(String),
+
     /// Per-credential encryption or decryption failed.
     #[error("credential encryption error for credential '{credential_id}': {message}")]
     CredentialEncryption {
@@ -83,8 +87,9 @@ impl EngineError for StorageError {
             StorageError::ConcurrencyConflict { .. } => "STORAGE_008",
             StorageError::ValidationFailed { .. } => "STORAGE_009",
             StorageError::UnknownCollection(_) => "STORAGE_010",
-            StorageError::CredentialEncryption { .. } => "STORAGE_011",
-            StorageError::Io(_) => "STORAGE_012",
+            StorageError::RekeyFailed(_) => "STORAGE_011",
+            StorageError::CredentialEncryption { .. } => "STORAGE_012",
+            StorageError::Io(_) => "STORAGE_013",
         }
     }
 

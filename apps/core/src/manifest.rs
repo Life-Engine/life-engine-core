@@ -3,6 +3,7 @@
 //! Reads `plugin.json` manifest files from plugin directories, deserializes
 //! them into `PluginManifest` structs, and validates their contents against
 //! the Life Engine plugin manifest specification.
+#![allow(dead_code)]
 //!
 //! Deserialization is lenient (unknown fields are tolerated via
 //! `serde_json::Value` for complex nested types), but validation is strict:

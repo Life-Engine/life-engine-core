@@ -3,6 +3,7 @@
 //! Implements the `CredentialStore` trait from the plugin SDK, storing
 //! encrypted credential values in a dedicated SQLite table. Each
 //! credential is scoped to a plugin ID and identified by a key.
+#![allow(dead_code)]
 //!
 //! # Encryption
 //!

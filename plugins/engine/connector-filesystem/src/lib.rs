@@ -330,6 +330,7 @@ mod tests {
                 source: "test".into(),
                 timestamp: Utc::now(),
                 auth_context: None,
+                warnings: vec![],
             },
             payload: TypedPayload::Cdm(Box::new(CdmType::Task(life_engine_plugin_sdk::Task {
                     id: uuid::Uuid::new_v4(),
@@ -365,6 +366,7 @@ mod tests {
                 source: "test".into(),
                 timestamp: Utc::now(),
                 auth_context: None,
+                warnings: vec![],
             },
             payload: TypedPayload::Cdm(Box::new(CdmType::Task(life_engine_plugin_sdk::Task {
                     id: uuid::Uuid::new_v4(),

@@ -343,6 +343,7 @@ mod tests {
                 source: "test".to_string(),
                 timestamp: Utc::now(),
                 auth_context: None,
+                warnings: vec![],
             },
             payload: TypedPayload::Cdm(Box::new(CdmType::Note(Note {
                 id: Uuid::new_v4(),

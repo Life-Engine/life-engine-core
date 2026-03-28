@@ -17,6 +17,7 @@ pub mod types;
 pub mod validation;
 
 use rusqlite::Connection;
+use zeroize::Zeroize;
 
 pub use error::StorageError;
 pub use validation::PrivateSchemaRegistry;
@@ -132,6 +133,38 @@ impl SqliteStorage {
     /// Returns the master encryption key for per-credential encryption.
     pub(crate) fn master_key(&self) -> &[u8; 32] {
         &self.master_key
+    }
+
+    /// Re-encrypts the database with a new key (key rotation).
+    ///
+    /// Uses SQLCipher's `PRAGMA rekey` to atomically re-encrypt the entire
+    /// database. On success the internal `master_key` is updated to `new_key`.
+    /// On failure the old key remains active and the database is unchanged.
+    pub fn rekey(&mut self, new_key: [u8; 32]) -> Result<(), StorageError> {
+        let hex_key = hex::encode(new_key);
+
+        self.conn
+            .execute_batch(&format!("PRAGMA rekey = 'x\"{hex_key}\"';"))
+            .map_err(|e| StorageError::RekeyFailed(format!("PRAGMA rekey failed: {e}")))?;
+
+        // Verify the new key works by querying the database.
+        self.conn
+            .execute_batch("SELECT count(*) FROM sqlite_master;")
+            .map_err(|e| {
+                StorageError::RekeyFailed(format!("verification after rekey failed: {e}"))
+            })?;
+
+        // Only update the in-memory key after successful rekey.
+        self.master_key.zeroize();
+        self.master_key = new_key;
+
+        Ok(())
+    }
+}
+
+impl Drop for SqliteStorage {
+    fn drop(&mut self) {
+        self.master_key.zeroize();
     }
 }
 

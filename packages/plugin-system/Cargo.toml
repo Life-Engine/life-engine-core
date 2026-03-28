@@ -19,6 +19,7 @@ semver = { workspace = true }
 extism = { workspace = true }
 life-engine-workflow-engine = { path = "../workflow-engine" }
 reqwest = { workspace = true }
+base64 = { workspace = true }
 
 [dev-dependencies]
 async-trait = { workspace = true }

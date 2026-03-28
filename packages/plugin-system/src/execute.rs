@@ -132,7 +132,7 @@ mod tests {
     use uuid::Uuid;
 
     use crate::capability::ApprovedCapabilities;
-    use crate::manifest::{ActionDef, CapabilitySet, PluginManifest, PluginMeta};
+    use crate::manifest::{ActionDef, CapabilitySet, EventsDef, PluginManifest, PluginMeta, TrustLevel, DEFAULT_TIMEOUT_MS};
     use crate::runtime::load_plugin_from_bytes;
 
     /// Minimal WASM module that echoes input back as output.
@@ -185,6 +185,7 @@ mod tests {
                 action.to_string(),
                 ActionDef {
                     description: format!("{action} action"),
+                    timeout_ms: DEFAULT_TIMEOUT_MS,
                     input_schema: None,
                     output_schema: None,
                 },
@@ -197,9 +198,13 @@ mod tests {
                 version: "1.0.0".to_string(),
                 description: None,
                 author: None,
+                license: None,
+                trust: TrustLevel::ThirdParty,
             },
             actions: action_map,
             capabilities: CapabilitySet::default(),
+            collections: HashMap::new(),
+            events: EventsDef::default(),
             config: None,
         }
     }
@@ -221,6 +226,7 @@ mod tests {
                 source: "test:execute".to_string(),
                 timestamp: chrono::Utc::now(),
                 auth_context: None,
+                warnings: vec![],
             },
             payload: TypedPayload::Cdm(Box::new(CdmType::TaskBatch(vec![]))),
         }
@@ -313,6 +319,7 @@ mod tests {
             "missing_export".to_string(),
             ActionDef {
                 description: "An action with no WASM export".to_string(),
+                timeout_ms: DEFAULT_TIMEOUT_MS,
                 input_schema: None,
                 output_schema: None,
             },
@@ -328,9 +335,13 @@ mod tests {
                     version: "1.0.0".to_string(),
                     description: None,
                     author: None,
+                    license: None,
+                    trust: TrustLevel::ThirdParty,
                 },
                 actions,
                 capabilities: CapabilitySet::default(),
+                collections: HashMap::new(),
+                events: EventsDef::default(),
                 config: None,
             },
             capabilities: ApprovedCapabilities::new(HashSet::new()),

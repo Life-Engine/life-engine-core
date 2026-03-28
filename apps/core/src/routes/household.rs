@@ -2,6 +2,7 @@
 //!
 //! Provides endpoints for creating and managing households, inviting
 //! members, managing roles, and configuring shared collections.
+#![allow(dead_code)]
 
 use crate::auth::types::{AuthIdentity, HouseholdRole};
 use crate::household::HouseholdStore;

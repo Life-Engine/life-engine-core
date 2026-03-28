@@ -20,6 +20,7 @@ fn make_message(auth_context: Option<serde_json::Value>) -> PipelineMessage {
             source: "endpoint:POST /tasks".into(),
             timestamp: Utc::now(),
             auth_context,
+            warnings: vec![],
         },
         payload: TypedPayload::Cdm(Box::new(CdmType::Task(Task {
             id: Uuid::new_v4(),

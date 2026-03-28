@@ -72,6 +72,15 @@ pub fn build_host_functions(
         debug!(plugin_id = %plugin_id, "injected host_storage_write");
     }
 
+    if capabilities.has(Capability::StorageDelete) {
+        functions.push(build_storage_delete_function(
+            plugin_id,
+            capabilities,
+            &deps.storage,
+        ));
+        debug!(plugin_id = %plugin_id, "injected host_storage_delete");
+    }
+
     if capabilities.has(Capability::HttpOutbound) {
         functions.push(build_http_request_function(plugin_id, capabilities));
         debug!(plugin_id = %plugin_id, "injected host_http_request");
@@ -123,6 +132,18 @@ pub fn injected_function_names(capabilities: &ApprovedCapabilities) -> Vec<&'sta
     }
     if capabilities.has(Capability::StorageWrite) {
         names.push("host_storage_write");
+    }
+    if capabilities.has(Capability::StorageDelete) {
+        names.push("host_storage_delete");
+    }
+    if capabilities.has(Capability::StorageBlobRead) {
+        names.push("host_blob_retrieve");
+    }
+    if capabilities.has(Capability::StorageBlobWrite) {
+        names.push("host_blob_store");
+    }
+    if capabilities.has(Capability::StorageBlobDelete) {
+        names.push("host_blob_delete");
     }
     if capabilities.has(Capability::HttpOutbound) {
         names.push("host_http_request");
@@ -252,6 +273,46 @@ fn build_storage_write_function(
     .with_namespace("life_engine")
 }
 
+fn build_storage_delete_function(
+    plugin_id: &str,
+    capabilities: &ApprovedCapabilities,
+    storage: &Arc<dyn StorageBackend>,
+) -> Function {
+    let ctx = StorageHostContext {
+        plugin_id: plugin_id.to_string(),
+        capabilities: capabilities.clone(),
+        storage: Arc::clone(storage),
+    };
+
+    Function::new(
+        "host_storage_delete",
+        [PTR],
+        [PTR],
+        UserData::new(ctx),
+        |plugin, inputs, outputs, user_data| {
+            let data = user_data.get()?;
+            let ctx = data.lock().unwrap();
+            let input: Vec<u8> = plugin.memory_get_val(&inputs[0])?;
+
+            let rt = tokio::runtime::Handle::try_current()
+                .map(|h| h.block_on(crate::host_functions::storage::host_storage_delete(&ctx, &input)))
+                .unwrap_or_else(|_| {
+                    let rt = tokio::runtime::Runtime::new().unwrap();
+                    rt.block_on(crate::host_functions::storage::host_storage_delete(&ctx, &input))
+                });
+
+            match rt {
+                Ok(output) => {
+                    plugin.memory_set_val(&mut outputs[0], output)?;
+                    Ok(())
+                }
+                Err(e) => Err(extism::Error::msg(e.to_string())),
+            }
+        },
+    )
+    .with_namespace("life_engine")
+}
+
 fn build_http_request_function(
     plugin_id: &str,
     capabilities: &ApprovedCapabilities,
@@ -260,6 +321,7 @@ fn build_http_request_function(
         plugin_id: plugin_id.to_string(),
         capabilities: capabilities.clone(),
         client: reqwest::Client::new(),
+        allowed_domains: None,
     };
 
     Function::new(
@@ -300,6 +362,8 @@ fn build_events_emit_function(
         plugin_id: plugin_id.to_string(),
         capabilities: capabilities.clone(),
         event_bus: Arc::clone(event_bus),
+        declared_emit_events: None,
+        execution_depth: 0,
     };
 
     Function::new(
@@ -340,6 +404,8 @@ fn build_events_subscribe_function(
         plugin_id: plugin_id.to_string(),
         capabilities: capabilities.clone(),
         event_bus: Arc::clone(event_bus),
+        declared_emit_events: None,
+        execution_depth: 0,
     };
 
     Function::new(
@@ -449,16 +515,24 @@ mod tests {
         let caps = make_capabilities(&[
             Capability::StorageRead,
             Capability::StorageWrite,
+            Capability::StorageDelete,
+            Capability::StorageBlobRead,
+            Capability::StorageBlobWrite,
+            Capability::StorageBlobDelete,
             Capability::HttpOutbound,
             Capability::EventsEmit,
             Capability::EventsSubscribe,
             Capability::ConfigRead,
         ]);
         let names = injected_function_names(&caps);
-        assert_eq!(names.len(), 7); // 6 capabilities + host_log
+        assert_eq!(names.len(), 11); // 10 capabilities + host_log
         assert!(names.contains(&"host_log"));
         assert!(names.contains(&"host_storage_read"));
         assert!(names.contains(&"host_storage_write"));
+        assert!(names.contains(&"host_storage_delete"));
+        assert!(names.contains(&"host_blob_retrieve"));
+        assert!(names.contains(&"host_blob_store"));
+        assert!(names.contains(&"host_blob_delete"));
         assert!(names.contains(&"host_http_request"));
         assert!(names.contains(&"host_events_emit"));
         assert!(names.contains(&"host_events_subscribe"));

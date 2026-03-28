@@ -3,6 +3,7 @@
 //! Uses the `governor` crate with a keyed (per-IP) GCRA rate limiter
 //! backed by `DashMap` for lock-free concurrent access. Requests
 //! exceeding the configured limit receive a `429 Too Many Requests`
+#![allow(dead_code)]
 //! response with a `Retry-After` header.
 //!
 //! The `/api/system/health` endpoint is exempt from rate limiting.

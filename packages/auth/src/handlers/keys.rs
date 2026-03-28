@@ -184,11 +184,11 @@ pub async fn validate_key(
         }
 
         // Check expiration.
-        if let Some(expires_at) = record.expires_at {
-            if Utc::now() > expires_at {
-                warn!(key_id = %record.id, "attempt to use expired API key");
-                return Err(AuthError::KeyRevoked);
-            }
+        if let Some(expires_at) = record.expires_at
+            && Utc::now() > expires_at
+        {
+            warn!(key_id = %record.id, "attempt to use expired API key");
+            return Err(AuthError::KeyRevoked);
         }
 
         // Update last_used timestamp (best-effort, don't fail auth).
@@ -273,6 +273,7 @@ fn record_to_pipeline_message(record: &ApiKeyRecord) -> Result<PipelineMessage, 
             source: "core.auth.keys".to_string(),
             timestamp: Utc::now(),
             auth_context: None,
+            warnings: vec![],
         },
         payload: TypedPayload::Custom(validated),
     })

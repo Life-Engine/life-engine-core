@@ -67,12 +67,15 @@ pub fn hmac_sha256(key: &[u8], data: &[u8]) -> String {
 }
 
 /// Domain separator for the plugin credential store.
+#[allow(dead_code)]
 pub const DOMAIN_CREDENTIAL_STORE: &str = "life-engine-credential-store-v1";
 
 /// Domain separator for identity credential encryption.
+#[allow(dead_code)]
 pub const DOMAIN_IDENTITY_ENCRYPT: &str = "life-engine-identity-encrypt";
 
 /// Domain separator for identity token signing.
+#[allow(dead_code)]
 pub const DOMAIN_IDENTITY_SIGN: &str = "life-engine-identity-sign";
 
 #[cfg(test)]

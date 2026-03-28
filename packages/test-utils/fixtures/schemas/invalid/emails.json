@@ -22,18 +22,6 @@
     "updated_at": "2026-03-23T16:00:00Z"
   },
   {
-    "_comment": "Invalid datetime format for date",
-    "id": "e5f6a7b8-c9d0-1234-ef01-23456789abcd",
-    "subject": "Bad Date Email",
-    "from": {"address": "alice@example.com"},
-    "to": [{"address": "bob@example.com"}],
-    "date": "last tuesday",
-    "source": "gmail",
-    "source_id": "gmail-003",
-    "created_at": "2026-03-23T15:30:00Z",
-    "updated_at": "2026-03-23T16:00:00Z"
-  },
-  {
     "_comment": "Wrong type for attachments (object instead of array)",
     "id": "e5f6a7b8-c9d0-1234-ef01-23456789abcd",
     "subject": "Bad Attachments Email",

@@ -5,6 +5,7 @@
 //! This is used during the Phase 4 migration to verify that first-party
 //! plugins produce identical results when running through the WASM bridge
 //! vs. direct native execution.
+#![allow(dead_code)]
 
 use std::collections::HashSet;
 use std::sync::Arc;

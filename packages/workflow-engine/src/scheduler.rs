@@ -3,32 +3,72 @@
 //! Manages scheduled workflow execution by spawning a tokio task for each
 //! cron-triggered workflow. Each task calculates the next fire time from
 //! the cron expression, sleeps until that time, then triggers the workflow.
+//!
+//! Overlap prevention: if a workflow is still executing when its next tick
+//! arrives, the tick is silently skipped with a debug-level log.
 
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use chrono::Utc;
 use cron::Schedule;
+use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
 use crate::executor::{build_initial_message, PipelineExecutor, WorkflowEventEmitter};
 use crate::loader::TriggerRegistry;
 use crate::types::{TriggerContext, WorkflowDef};
+
+/// Tracks which scheduled workflows are currently executing.
+///
+/// Used for overlap prevention — if a workflow ID is present in the set,
+/// the scheduler skips the tick rather than spawning a concurrent execution.
+#[derive(Debug, Default, Clone)]
+pub struct ScheduleJobTracker {
+    in_progress: Arc<Mutex<HashSet<String>>>,
+}
+
+impl ScheduleJobTracker {
+    /// Create a new empty tracker.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Mark a workflow as in-progress. Returns `true` if it was not already
+    /// in-progress (i.e. execution should proceed). Returns `false` if the
+    /// workflow is already running (overlap detected — skip this tick).
+    pub async fn try_start(&self, workflow_id: &str) -> bool {
+        self.in_progress.lock().await.insert(workflow_id.to_string())
+    }
+
+    /// Mark a workflow as no longer in-progress.
+    pub async fn finish(&self, workflow_id: &str) {
+        self.in_progress.lock().await.remove(workflow_id);
+    }
+
+    /// Check if a workflow is currently in-progress.
+    pub async fn is_in_progress(&self, workflow_id: &str) -> bool {
+        self.in_progress.lock().await.contains(workflow_id)
+    }
+}
 
 /// Cron scheduler that manages time-based workflow execution.
 ///
 /// Holds handles to all spawned schedule tasks for graceful shutdown.
 pub struct Scheduler {
     handles: Vec<JoinHandle<()>>,
+    tracker: ScheduleJobTracker,
 }
 
 impl Scheduler {
     /// Start the scheduler, spawning a task for each schedule entry in the registry.
     ///
     /// Each task loops indefinitely: it calculates the next fire time from the
-    /// cron expression, sleeps until that time, then triggers the workflow.
-    /// If a scheduled workflow execution fails, a `workflow.schedule.failed`
-    /// event is emitted via the event bus but the scheduler continues.
+    /// cron expression, sleeps until that time, checks for overlap, then triggers
+    /// the workflow. If a scheduled workflow execution fails, a
+    /// `workflow.schedule.failed` event is emitted via the event bus but the
+    /// scheduler continues.
     pub async fn start(
         registry: &TriggerRegistry,
         executor: Arc<PipelineExecutor>,
@@ -36,12 +76,14 @@ impl Scheduler {
     ) -> Self {
         let schedules = registry.get_schedules();
         let mut handles = Vec::with_capacity(schedules.len());
+        let tracker = ScheduleJobTracker::new();
 
         for (schedule, workflow) in schedules {
             let schedule = schedule.clone();
             let workflow = workflow.clone();
             let executor = Arc::clone(&executor);
             let event_emitter = Arc::clone(&event_emitter);
+            let tracker = tracker.clone();
 
             info!(
                 workflow_id = %workflow.id,
@@ -49,7 +91,7 @@ impl Scheduler {
             );
 
             let handle = tokio::spawn(async move {
-                Self::run_schedule_loop(schedule, workflow, executor, event_emitter).await;
+                Self::run_schedule_loop(schedule, workflow, executor, event_emitter, tracker).await;
             });
 
             handles.push(handle);
@@ -60,7 +102,7 @@ impl Scheduler {
             "Cron scheduler started"
         );
 
-        Self { handles }
+        Self { handles, tracker }
     }
 
     /// Stop all scheduled tasks by aborting their handles.
@@ -81,12 +123,18 @@ impl Scheduler {
         self.handles.len()
     }
 
+    /// Get a reference to the job tracker for testing overlap state.
+    pub fn tracker(&self) -> &ScheduleJobTracker {
+        &self.tracker
+    }
+
     /// Internal loop for a single scheduled workflow.
     async fn run_schedule_loop(
         schedule: Schedule,
         workflow: WorkflowDef,
         executor: Arc<PipelineExecutor>,
         event_emitter: Arc<dyn WorkflowEventEmitter>,
+        tracker: ScheduleJobTracker,
     ) {
         loop {
             let now = Utc::now();
@@ -112,6 +160,15 @@ impl Scheduler {
 
             tokio::time::sleep(duration).await;
 
+            // Overlap prevention: skip if this workflow is still executing.
+            if !tracker.try_start(&workflow.id).await {
+                debug!(
+                    workflow_id = %workflow.id,
+                    "Skipping scheduled tick — workflow is still in progress"
+                );
+                continue;
+            }
+
             let fired_at = Utc::now();
             let trigger_context = TriggerContext::Schedule {
                 workflow_id: workflow.id.clone(),
@@ -136,6 +193,7 @@ impl Scheduler {
                             }),
                         )
                         .await;
+                    tracker.finish(&workflow.id).await;
                     continue;
                 }
             };
@@ -163,6 +221,8 @@ impl Scheduler {
                     )
                     .await;
             }
+
+            tracker.finish(&workflow.id).await;
         }
     }
 }
@@ -178,7 +238,7 @@ mod tests {
     use life_engine_types::PipelineMessage;
     use std::path::Path;
     use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::Mutex;
+    use std::sync::Mutex as StdMutex;
     use tempfile::TempDir;
 
     /// A mock plugin executor that counts invocations.
@@ -213,13 +273,13 @@ mod tests {
 
     /// A mock event emitter that records emitted events.
     struct RecordingEmitter {
-        events: Mutex<Vec<(String, serde_json::Value)>>,
+        events: StdMutex<Vec<(String, serde_json::Value)>>,
     }
 
     impl RecordingEmitter {
         fn new() -> Self {
             Self {
-                events: Mutex::new(Vec::new()),
+                events: StdMutex::new(Vec::new()),
             }
         }
 
@@ -292,7 +352,6 @@ mod tests {
             dir.path(),
             &[(
                 "scheduled.yaml",
-                // Every second (cron crate uses 6-field format: sec min hour day month weekday)
                 r#"
 workflows:
   every-second:
@@ -445,5 +504,123 @@ workflows:
         let scheduler = Scheduler::start(&registry, pipeline, emitter).await;
         assert_eq!(scheduler.task_count(), 0);
         scheduler.stop().await;
+    }
+
+    // --- Overlap prevention tests ---
+
+    #[tokio::test]
+    async fn tracker_try_start_returns_true_when_not_in_progress() {
+        let tracker = ScheduleJobTracker::new();
+        assert!(tracker.try_start("wf-1").await);
+        assert!(tracker.is_in_progress("wf-1").await);
+    }
+
+    #[tokio::test]
+    async fn tracker_try_start_returns_false_when_already_in_progress() {
+        let tracker = ScheduleJobTracker::new();
+        assert!(tracker.try_start("wf-1").await);
+        assert!(!tracker.try_start("wf-1").await);
+    }
+
+    #[tokio::test]
+    async fn tracker_finish_clears_in_progress() {
+        let tracker = ScheduleJobTracker::new();
+        tracker.try_start("wf-1").await;
+        tracker.finish("wf-1").await;
+        assert!(!tracker.is_in_progress("wf-1").await);
+        // Should be able to start again.
+        assert!(tracker.try_start("wf-1").await);
+    }
+
+    #[tokio::test]
+    async fn scheduler_clears_tracker_after_execution() {
+        let dir = TempDir::new().unwrap();
+        let mock = Arc::new(CountingExecutor::new());
+        let (registry, pipeline) = build_test_components(
+            dir.path(),
+            &[(
+                "tracked.yaml",
+                r#"
+workflows:
+  tracked-wf:
+    id: tracked-wf
+    name: Tracked Workflow
+    trigger:
+      schedule: "* * * * * *"
+    steps:
+      - plugin: test-plugin
+        action: run
+"#,
+            )],
+            mock.clone() as Arc<dyn PluginExecutor>,
+        );
+
+        let emitter: Arc<dyn WorkflowEventEmitter> = Arc::new(RecordingEmitter::new());
+        let scheduler = Scheduler::start(&registry, pipeline, emitter).await;
+
+        // Wait for at least one complete execution cycle.
+        tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+
+        assert!(
+            mock.count() >= 1,
+            "expected at least 1 execution, got {}",
+            mock.count()
+        );
+
+        // After a fast-completing workflow, the tracker should not show it as in-progress
+        // (it gets cleared after each execution).
+        let in_progress = scheduler.tracker().is_in_progress("tracked-wf").await;
+        assert!(
+            !in_progress,
+            "expected tracker to clear after workflow completes"
+        );
+
+        scheduler.stop().await;
+    }
+
+    #[tokio::test]
+    async fn scheduler_clears_tracker_after_failure() {
+        let dir = TempDir::new().unwrap();
+        let failing = Arc::new(FailingExecutor) as Arc<dyn PluginExecutor>;
+        let (registry, pipeline) = build_test_components(
+            dir.path(),
+            &[(
+                "fail-tracked.yaml",
+                r#"
+workflows:
+  fail-tracked:
+    id: fail-tracked
+    name: Fail Tracked
+    trigger:
+      schedule: "* * * * * *"
+    steps:
+      - plugin: test-plugin
+        action: fail
+"#,
+            )],
+            failing,
+        );
+
+        let emitter = Arc::new(RecordingEmitter::new());
+        let emitter_ref: Arc<dyn WorkflowEventEmitter> = emitter.clone();
+        let scheduler = Scheduler::start(&registry, pipeline, emitter_ref).await;
+
+        // Wait for at least two executions to confirm the tracker clears on failure
+        // (if it didn't clear, the second tick would be skipped).
+        tokio::time::sleep(std::time::Duration::from_millis(2500)).await;
+
+        scheduler.stop().await;
+
+        let failure_count = emitter
+            .event_names()
+            .iter()
+            .filter(|n| *n == "workflow.schedule.failed")
+            .count();
+
+        assert!(
+            failure_count >= 2,
+            "expected at least 2 failure events (proving tracker clears after failure), got {}",
+            failure_count
+        );
     }
 }

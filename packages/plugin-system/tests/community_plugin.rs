@@ -250,7 +250,7 @@ fn community_plugin_rejected_without_explicit_approval() {
     create_plugin_dir(
         &community_dir,
         "unapproved-plugin",
-        &manifest_with_capabilities("unapproved-plugin", &["storage:read"]),
+        &manifest_with_capabilities("unapproved-plugin", &["storage:doc:read"]),
         &wasm,
     );
 
@@ -287,7 +287,7 @@ fn approved_community_plugin_gets_same_host_functions_as_first_party() {
     std::fs::create_dir_all(&community_dir).unwrap();
 
     let wasm = echo_wasm_module();
-    let declared_caps = &["storage:read", "storage:write", "http:outbound"];
+    let declared_caps = &["storage:doc:read", "storage:doc:write", "http:outbound"];
 
     // --- First-party plugin with the same capabilities ---
     create_plugin_dir(
@@ -376,7 +376,7 @@ fn community_and_first_party_plugins_coexist() {
     create_plugin_dir(
         &shared_dir,
         "builtin-plugin",
-        &manifest_with_capabilities("builtin-plugin", &["storage:read", "storage:write"]),
+        &manifest_with_capabilities("builtin-plugin", &["storage:doc:read", "storage:doc:write"]),
         &wasm,
     );
 
@@ -440,7 +440,7 @@ fn community_plugin_partial_approval_rejects_entirely() {
         "partial-plugin",
         &manifest_with_capabilities(
             "partial-plugin",
-            &["storage:read", "storage:write", "http:outbound"],
+            &["storage:doc:read", "storage:doc:write", "http:outbound"],
         ),
         &wasm,
     );
@@ -490,7 +490,7 @@ fn community_plugin_approval_enables_full_loading() {
         "approved-comm",
         &manifest_with_capabilities(
             "approved-comm",
-            &["storage:read", "events:emit", "config:read"],
+            &["storage:doc:read", "events:emit", "config:read"],
         ),
         &wasm,
     );

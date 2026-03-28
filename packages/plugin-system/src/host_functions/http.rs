@@ -31,6 +31,10 @@ pub struct HttpHostContext {
     pub capabilities: ApprovedCapabilities,
     /// Shared HTTP client (connection pooling).
     pub client: Client,
+    /// Domains this plugin is allowed to contact, declared in the manifest's
+    /// `http_outbound` list. If `None`, all domains are allowed (backwards compat).
+    /// If `Some(vec)`, only the listed domains are permitted.
+    pub allowed_domains: Option<Vec<String>>,
 }
 
 /// Request payload for an outbound HTTP request from a plugin.
@@ -99,6 +103,29 @@ pub async fn host_http_request(
             "plugin '{}': only http:// and https:// schemes are allowed, got '{scheme}://'",
             ctx.plugin_id
         )));
+    }
+
+    // Validate domain against the declared http_outbound list
+    if let Some(ref allowed) = ctx.allowed_domains {
+        let domain = request
+            .url
+            .split("://")
+            .nth(1)
+            .and_then(|rest| rest.split('/').next())
+            .and_then(|host_port| host_port.split(':').next())
+            .unwrap_or("");
+
+        if !allowed.iter().any(|d| d == domain) {
+            warn!(
+                plugin_id = %ctx.plugin_id,
+                domain = %domain,
+                "HTTP request to undeclared domain"
+            );
+            return Err(PluginError::RuntimeCapabilityViolation(format!(
+                "plugin '{}' attempted HTTP request to undeclared domain '{domain}'",
+                ctx.plugin_id
+            )));
+        }
     }
 
     // Parse the HTTP method
@@ -212,6 +239,20 @@ mod tests {
             plugin_id: plugin_id.to_string(),
             capabilities: make_capabilities(caps),
             client: Client::new(),
+            allowed_domains: None,
+        }
+    }
+
+    fn make_context_with_domains(
+        plugin_id: &str,
+        caps: &[Capability],
+        domains: Vec<String>,
+    ) -> HttpHostContext {
+        HttpHostContext {
+            plugin_id: plugin_id.to_string(),
+            capabilities: make_capabilities(caps),
+            client: Client::new(),
+            allowed_domains: Some(domains),
         }
     }
 
@@ -354,6 +395,56 @@ mod tests {
         let input = make_request_bytes("GET", "http://192.0.2.1:1/test");
         let result = host_http_request(&ctx, &input).await;
 
+        let err = result.unwrap_err();
+        assert!(matches!(err, PluginError::ExecutionFailed(_)));
+    }
+
+    #[tokio::test]
+    async fn undeclared_domain_is_rejected() {
+        let ctx = make_context_with_domains(
+            "test-plugin",
+            &[Capability::HttpOutbound],
+            vec!["api.example.com".to_string()],
+        );
+
+        let input = make_request_bytes("GET", "https://evil.com/data");
+        let result = host_http_request(&ctx, &input).await;
+
+        let err = result.unwrap_err();
+        assert!(matches!(err, PluginError::RuntimeCapabilityViolation(_)));
+        assert!(err.to_string().contains("undeclared domain"));
+        assert!(err.to_string().contains("evil.com"));
+    }
+
+    #[tokio::test]
+    async fn declared_domain_is_allowed() {
+        let ctx = make_context_with_domains(
+            "test-plugin",
+            &[Capability::HttpOutbound],
+            vec!["192.0.2.1".to_string()],
+        );
+
+        // Domain is allowed but host is unreachable — we just check it gets past validation
+        let input = make_request_bytes("GET", "http://192.0.2.1:1/test");
+        let result = host_http_request(&ctx, &input).await;
+
+        // Should fail with ExecutionFailed (network error), NOT CapabilityViolation
+        let err = result.unwrap_err();
+        assert!(
+            matches!(err, PluginError::ExecutionFailed(_)),
+            "expected ExecutionFailed, got: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn no_domain_allowlist_permits_all_domains() {
+        let ctx = make_context("test-plugin", &[Capability::HttpOutbound]);
+
+        // Domain validation should not trigger when allowed_domains is None
+        let input = make_request_bytes("GET", "http://192.0.2.1:1/test");
+        let result = host_http_request(&ctx, &input).await;
+
+        // Should fail with network error, not capability error
         let err = result.unwrap_err();
         assert!(matches!(err, PluginError::ExecutionFailed(_)));
     }

@@ -3,6 +3,7 @@
 //! Provides Argon2id key derivation and the `PRAGMA rekey` workflow for
 //! changing the master passphrase on a Life Engine database file.
 //!
+#![allow(dead_code)]
 //! # Safety
 //!
 //! - Passphrases are read from the terminal via `rpassword` (no echo).

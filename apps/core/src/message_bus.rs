@@ -91,6 +91,7 @@ impl MessageBus {
     }
 
     /// Returns the number of active subscribers.
+    #[allow(dead_code)]
     pub fn subscriber_count(&self) -> usize {
         self.sender.receiver_count()
     }

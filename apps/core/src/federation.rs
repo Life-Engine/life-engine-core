@@ -3,6 +3,7 @@
 //! Enables peer-to-peer synchronisation of selected collections between
 //! independently operated Life Engine Core instances using mTLS for
 //! mutual authentication.
+#![allow(dead_code)]
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

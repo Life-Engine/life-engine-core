@@ -38,10 +38,10 @@ pub async fn host_storage_read(
     if !ctx.capabilities.has(Capability::StorageRead) {
         warn!(
             plugin_id = %ctx.plugin_id,
-            "storage:read capability violation"
+            "storage:doc:read capability violation"
         );
         return Err(PluginError::RuntimeCapabilityViolation(format!(
-            "plugin '{}' lacks capability 'storage:read'",
+            "plugin '{}' lacks capability 'storage:doc:read'",
             ctx.plugin_id
         )));
     }
@@ -93,10 +93,10 @@ pub async fn host_storage_write(
     if !ctx.capabilities.has(Capability::StorageWrite) {
         warn!(
             plugin_id = %ctx.plugin_id,
-            "storage:write capability violation"
+            "storage:doc:write capability violation"
         );
         return Err(PluginError::RuntimeCapabilityViolation(format!(
-            "plugin '{}' lacks capability 'storage:write'",
+            "plugin '{}' lacks capability 'storage:doc:write'",
             ctx.plugin_id
         )));
     }
@@ -122,6 +122,69 @@ pub async fn host_storage_write(
     ctx.storage.mutate(scoped_mutation).await.map_err(|e| {
         PluginError::ExecutionFailed(format!(
             "storage write failed for plugin '{}': {e}",
+            ctx.plugin_id
+        ))
+    })?;
+
+    // Return empty JSON object as success acknowledgement
+    Ok(b"{}".to_vec())
+}
+
+/// Executes a storage delete operation on behalf of a plugin.
+///
+/// Deserializes the delete mutation from JSON bytes, checks the `StorageDelete`
+/// capability, scopes the mutation to the calling plugin's ID, delegates to the
+/// storage backend, and returns an empty success response.
+pub async fn host_storage_delete(
+    ctx: &StorageHostContext,
+    input: &[u8],
+) -> Result<Vec<u8>, PluginError> {
+    // Check capability
+    if !ctx.capabilities.has(Capability::StorageDelete) {
+        warn!(
+            plugin_id = %ctx.plugin_id,
+            "storage:doc:delete capability violation"
+        );
+        return Err(PluginError::RuntimeCapabilityViolation(format!(
+            "plugin '{}' lacks capability 'storage:doc:delete'",
+            ctx.plugin_id
+        )));
+    }
+
+    // Deserialize the mutation from WASM input
+    let mutation: StorageMutation = serde_json::from_slice(input).map_err(|e| {
+        PluginError::ExecutionFailed(format!(
+            "failed to deserialize storage delete from plugin '{}': {e}",
+            ctx.plugin_id
+        ))
+    })?;
+
+    // Ensure the mutation is actually a Delete variant
+    let scoped_mutation = match mutation {
+        StorageMutation::Delete {
+            collection, id, ..
+        } => StorageMutation::Delete {
+            plugin_id: ctx.plugin_id.clone(),
+            collection,
+            id,
+        },
+        _ => {
+            return Err(PluginError::ExecutionFailed(format!(
+                "host_storage_delete received non-delete mutation from plugin '{}'",
+                ctx.plugin_id
+            )));
+        }
+    };
+
+    debug!(
+        plugin_id = %ctx.plugin_id,
+        "executing storage delete"
+    );
+
+    // Delegate to the storage backend
+    ctx.storage.mutate(scoped_mutation).await.map_err(|e| {
+        PluginError::ExecutionFailed(format!(
+            "storage delete failed for plugin '{}': {e}",
             ctx.plugin_id
         ))
     })?;
@@ -275,6 +338,7 @@ mod tests {
                 source: "test".into(),
                 timestamp: Utc::now(),
                 auth_context: None,
+                warnings: vec![],
             },
             payload: TypedPayload::Cdm(Box::new(CdmType::Task(Task {
                 id: Uuid::new_v4(),
@@ -370,7 +434,7 @@ mod tests {
 
         let err = result.unwrap_err();
         assert!(matches!(err, PluginError::RuntimeCapabilityViolation(_)));
-        assert!(err.to_string().contains("storage:read"));
+        assert!(err.to_string().contains("storage:doc:read"));
         assert!(err.to_string().contains("test-plugin"));
     }
 
@@ -386,7 +450,7 @@ mod tests {
 
         let err = result.unwrap_err();
         assert!(matches!(err, PluginError::RuntimeCapabilityViolation(_)));
-        assert!(err.to_string().contains("storage:write"));
+        assert!(err.to_string().contains("storage:doc:write"));
         assert!(err.to_string().contains("test-plugin"));
     }
 

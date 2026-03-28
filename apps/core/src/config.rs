@@ -1055,6 +1055,7 @@ pub mod startup {
             message: String,
         },
         /// A module's own validation reported errors.
+        #[allow(dead_code)]
         ModuleValidationFailed {
             module: String,
             errors: Vec<String>,
@@ -1191,14 +1192,14 @@ pub mod startup {
                     "config file not found, creating starter config"
                 );
                 // Create the config directory and write a starter config.
-                if let Some(parent) = config_path.parent() {
-                    if let Err(e) = std::fs::create_dir_all(parent) {
-                        tracing::warn!(
-                            path = %parent.display(),
-                            error = %e,
-                            "failed to create config directory"
-                        );
-                    }
+                if let Some(parent) = config_path.parent()
+                    && let Err(e) = std::fs::create_dir_all(parent)
+                {
+                    tracing::warn!(
+                        path = %parent.display(),
+                        error = %e,
+                        "failed to create config directory"
+                    );
                 }
                 if let Err(e) = std::fs::write(&config_path, STARTER_CONFIG) {
                     tracing::warn!(
@@ -1417,16 +1418,16 @@ pub mod startup {
     /// Expand a leading `~` in a path to the user's home directory,
     /// or `%APPDATA%` on Windows.
     fn expand_tilde(path: &str) -> PathBuf {
-        if let Some(rest) = path.strip_prefix("~/") {
-            if let Some(home) = dirs_home() {
-                return home.join(rest);
-            }
+        if let Some(rest) = path.strip_prefix("~/")
+            && let Some(home) = dirs_home()
+        {
+            return home.join(rest);
         }
         #[cfg(target_os = "windows")]
-        if let Some(rest) = path.strip_prefix("%APPDATA%\\") {
-            if let Ok(appdata) = std::env::var("APPDATA") {
-                return PathBuf::from(appdata).join(rest);
-            }
+        if let Some(rest) = path.strip_prefix("%APPDATA%\\")
+            && let Ok(appdata) = std::env::var("APPDATA")
+        {
+            return PathBuf::from(appdata).join(rest);
         }
         PathBuf::from(path)
     }
@@ -1557,13 +1558,13 @@ pub mod startup {
     /// The `approved_capabilities` field lists capability strings that the
     /// operator has approved for third-party plugins. All other keys are
     /// collected as plugin-specific configuration values.
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Default, Serialize, Deserialize)]
     pub struct PluginInstanceConfig {
         /// Approved capability strings for third-party plugins.
         ///
         /// First-party plugins are auto-granted all declared capabilities
-        /// regardless of this list. Valid values: `"storage:read"`,
-        /// `"storage:write"`, `"http:outbound"`, `"events:emit"`,
+        /// regardless of this list. Valid values: `"storage:doc:read"`,
+        /// `"storage:doc:write"`, `"http:outbound"`, `"events:emit"`,
         /// `"events:subscribe"`, `"config:read"`.
         #[serde(default)]
         pub approved_capabilities: Vec<String>,
@@ -1574,15 +1575,6 @@ pub mod startup {
         /// and passed to the plugin via the `config:read` host function.
         #[serde(flatten)]
         pub config: HashMap<String, toml::Value>,
-    }
-
-    impl Default for PluginInstanceConfig {
-        fn default() -> Self {
-            Self {
-                approved_capabilities: Vec::new(),
-                config: HashMap::new(),
-            }
-        }
     }
 
     fn default_plugins_path() -> String {
@@ -1673,7 +1665,7 @@ path = "/etc/life-engine/workflows"
 path = "/opt/life-engine/plugins"
 
 [plugins.config.connector-email]
-approved_capabilities = ["storage:read", "storage:write", "http:outbound"]
+approved_capabilities = ["storage:doc:read", "storage:doc:write", "http:outbound"]
 imap_host = "mail.example.com"
 imap_port = 993
 
@@ -1718,7 +1710,7 @@ format = "pretty"
             assert!(config.plugins.config.contains_key("connector-email"));
             assert_eq!(
                 config.plugins.config["connector-email"].approved_capabilities,
-                vec!["storage:read", "storage:write", "http:outbound"]
+                vec!["storage:doc:read", "storage:doc:write", "http:outbound"]
             );
             assert_eq!(
                 config.plugins.config["connector-email"]
@@ -2187,14 +2179,14 @@ path = "/custom/plugins"
         fn per_plugin_approved_capabilities_extracted() {
             let toml_str = r#"
 [plugins.config.connector-email]
-approved_capabilities = ["storage:read", "storage:write", "http:outbound"]
+approved_capabilities = ["storage:doc:read", "storage:doc:write", "http:outbound"]
 poll_interval = "5m"
 "#;
             let config: CoreConfig = toml::from_str(toml_str).unwrap();
             let email_cfg = &config.plugins.config["connector-email"];
             assert_eq!(
                 email_cfg.approved_capabilities,
-                vec!["storage:read", "storage:write", "http:outbound"]
+                vec!["storage:doc:read", "storage:doc:write", "http:outbound"]
             );
         }
 
@@ -2202,7 +2194,7 @@ poll_interval = "5m"
         fn plugin_specific_config_values_accessible() {
             let toml_str = r#"
 [plugins.config.connector-email]
-approved_capabilities = ["storage:read"]
+approved_capabilities = ["storage:doc:read"]
 imap_host = "mail.example.com"
 imap_port = 993
 use_tls = true

@@ -82,6 +82,7 @@ impl MockMessageBuilder {
                 source: self.source,
                 timestamp: Utc::now(),
                 auth_context: self.auth_context,
+                warnings: vec![],
             },
             payload: self.payload,
         }

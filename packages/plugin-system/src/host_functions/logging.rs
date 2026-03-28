@@ -25,6 +25,7 @@ pub enum PluginLogLevel {
 
 impl PluginLogLevel {
     /// Parse a log level string from the plugin.
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Result<Self, PluginError> {
         match s {
             "trace" => Ok(Self::Trace),

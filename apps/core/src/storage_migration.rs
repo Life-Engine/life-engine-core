@@ -3,6 +3,7 @@
 //! Provides atomic migration with record count verification, progress
 //! reporting, and rollback on failure. Data is migrated in batches to
 //! handle large datasets without excessive memory usage.
+#![allow(dead_code)]
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;

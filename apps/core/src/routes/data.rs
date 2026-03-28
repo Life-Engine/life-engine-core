@@ -193,14 +193,13 @@ pub async fn create_record(
         obj.remove("_user_id");
         obj.remove("_household_id");
     }
-    if let Some(axum::Extension(ref id)) = identity {
-        if let Some(ref uid) = id.user_id {
-            if let Some(obj) = record_data.as_object_mut() {
-                obj.insert("_user_id".to_string(), json!(uid));
-                if let Some(ref hid) = id.household_id {
-                    obj.insert("_household_id".to_string(), json!(hid));
-                }
-            }
+    if let Some(axum::Extension(ref id)) = identity
+        && let Some(ref uid) = id.user_id
+        && let Some(obj) = record_data.as_object_mut()
+    {
+        obj.insert("_user_id".to_string(), json!(uid));
+        if let Some(ref hid) = id.household_id {
+            obj.insert("_household_id".to_string(), json!(hid));
         }
     }
 

@@ -8,21 +8,23 @@ pub mod loader;
 pub mod migration;
 pub mod schema_registry;
 pub mod scheduler;
+pub mod triggers;
 pub mod types;
 
 pub use config::WorkflowConfig;
 pub use error::WorkflowError;
-pub use event_bus::EventBus;
+pub use event_bus::{Event, EventBus};
 pub use executor::{
-    build_initial_message, ExecutionLog, ExecutionStatus, JobStatus, NoOpEventEmitter,
+    build_initial_message, ExecutionLog, ExecutionStatus, JobEntry, JobStatus, NoOpEventEmitter,
     PipelineExecutor, PluginExecutor, StepErrorLog, StepLog, StepStatus, WorkflowEventEmitter,
 };
 pub use loader::{load_workflows, HttpMethod, TriggerRegistry};
 pub use schema_registry::{SchemaRegistry, SchemaRegistryError};
-pub use scheduler::Scheduler;
+pub use scheduler::{ScheduleJobTracker, Scheduler};
+pub use triggers::validate_triggers;
 pub use types::{
-    ConditionDef, ErrorStrategy, ErrorStrategyType, ExecutionMode, StepDef, TriggerContext,
-    TriggerDef, ValidationLevel, WorkflowDef,
+    ConditionDef, ConditionOperator, ErrorStrategy, ErrorStrategyType, ExecutionMode, StepDef,
+    TriggerContext, TriggerDef, ValidationLevel, WorkflowDef,
 };
 
 use std::sync::Arc;

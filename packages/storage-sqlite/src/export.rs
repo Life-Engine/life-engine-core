@@ -73,6 +73,9 @@ pub fn export_full_archive(conn: &Connection) -> Result<Vec<u8>, StorageError> {
     // Log the export event.
     let event = AuditEvent {
         event_type: AuditEventType::DataExport,
+        collection: None,
+        document_id: None,
+        identity_subject: None,
         plugin_id: None,
         details: serde_json::json!({
             "type": "full",
@@ -143,6 +146,9 @@ pub fn export_service_data(
     let collections: Vec<&str> = by_collection.keys().map(|s| s.as_str()).collect();
     let event = AuditEvent {
         event_type: AuditEventType::DataExport,
+        collection: None,
+        document_id: None,
+        identity_subject: None,
         plugin_id: Some(plugin_id.to_string()),
         details: serde_json::json!({
             "type": "per_service",

@@ -22,6 +22,7 @@ pub fn escape_value(s: &str) -> String {
 ///
 /// Handles `PROP;PARAM1=val1;PARAM2:value` format.
 /// Returns `None` if the line has no colon separator.
+#[allow(clippy::type_complexity)]
 pub fn parse_property_line(line: &str) -> Option<(&str, Vec<(&str, &str)>, &str)> {
     // Strip trailing CR for lines that still have CRLF endings (RFC 6350).
     let line = line.strip_suffix('\r').unwrap_or(line);

@@ -9,6 +9,8 @@ use serde_json::json;
 use std::path::PathBuf;
 
 const TEST_TIMESTAMP: &str = "2026-01-15T10:30:00Z";
+const TEST_UUID: &str = "00000000-0000-0000-0000-000000000001";
+const TEST_UUID_2: &str = "00000000-0000-0000-0000-000000000002";
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -73,7 +75,7 @@ fn all_schemas_parse_as_valid_json() {
 fn task_valid_fixture_passes_schema() {
     let schema = load_schema("tasks.schema.json");
     let fixture = json!({
-        "id": "task-001",
+        "id": TEST_UUID,
         "title": "Review pull request #42",
         "status": "pending",
         "priority": "high",
@@ -89,7 +91,7 @@ fn task_valid_fixture_passes_schema() {
 fn task_missing_required_field_fails_schema() {
     let schema = load_schema("tasks.schema.json");
     let fixture = json!({
-        "id": "task-001",
+        "id": TEST_UUID,
         // missing title
         "source": "com.life-engine.todoist",
         "source_id": "todoist-98765",
@@ -105,7 +107,7 @@ fn task_missing_required_field_fails_schema() {
 fn event_valid_fixture_passes_schema() {
     let schema = load_schema("events.schema.json");
     let fixture = json!({
-        "id": "evt-001",
+        "id": TEST_UUID,
         "title": "Team standup",
         "start": "2026-01-15T09:00:00Z",
         "end": "2026-01-15T09:30:00Z",
@@ -121,7 +123,7 @@ fn event_valid_fixture_passes_schema() {
 fn event_missing_required_field_fails_schema() {
     let schema = load_schema("events.schema.json");
     let fixture = json!({
-        "id": "evt-001",
+        "id": TEST_UUID,
         "title": "Team standup",
         // missing start, end
         "source": "com.life-engine.google-calendar",
@@ -138,7 +140,7 @@ fn event_missing_required_field_fails_schema() {
 fn contact_valid_fixture_passes_schema() {
     let schema = load_schema("contacts.schema.json");
     let fixture = json!({
-        "id": "contact-001",
+        "id": TEST_UUID,
         "name": {
             "given": "Ada",
             "family": "Lovelace"
@@ -155,10 +157,10 @@ fn contact_valid_fixture_passes_schema() {
 fn contact_missing_name_fields_fails_schema() {
     let schema = load_schema("contacts.schema.json");
     let fixture = json!({
-        "id": "contact-001",
+        "id": TEST_UUID,
         "name": {
             "given": "Ada"
-            // missing family, display
+            // missing family
         },
         "source": "com.life-engine.google-contacts",
         "source_id": "people/c123456",
@@ -174,10 +176,11 @@ fn contact_missing_name_fields_fails_schema() {
 fn email_valid_fixture_passes_schema() {
     let schema = load_schema("emails.schema.json");
     let fixture = json!({
-        "id": "email-001",
+        "id": TEST_UUID,
         "from": { "address": "alice@example.com" },
         "to": [{ "address": "bob@example.com" }],
         "subject": "Weekly sync notes",
+        "body_text": "Here are the notes from this week.",
         "date": TEST_TIMESTAMP,
         "source": "com.life-engine.imap",
         "source_id": "imap-msg-42",
@@ -191,7 +194,7 @@ fn email_valid_fixture_passes_schema() {
 fn email_wrong_type_for_to_fails_schema() {
     let schema = load_schema("emails.schema.json");
     let fixture = json!({
-        "id": "email-001",
+        "id": TEST_UUID,
         "from": { "address": "alice@example.com" },
         "to": "bob@example.com",  // should be array, not string
         "subject": "Weekly sync notes",
@@ -210,7 +213,7 @@ fn email_wrong_type_for_to_fails_schema() {
 fn file_valid_fixture_passes_schema() {
     let schema = load_schema("files.schema.json");
     let fixture = json!({
-        "id": "file-001",
+        "id": TEST_UUID,
         "filename": "quarterly-report.pdf",
         "path": "files/2026/01/quarterly-report.pdf",
         "mime_type": "application/pdf",
@@ -228,7 +231,7 @@ fn file_valid_fixture_passes_schema() {
 fn file_size_wrong_type_fails_schema() {
     let schema = load_schema("files.schema.json");
     let fixture = json!({
-        "id": "file-001",
+        "id": TEST_UUID,
         "filename": "report.pdf",
         "path": "files/report.pdf",
         "mime_type": "application/pdf",
@@ -248,7 +251,7 @@ fn file_size_wrong_type_fails_schema() {
 fn note_valid_fixture_passes_schema() {
     let schema = load_schema("notes.schema.json");
     let fixture = json!({
-        "id": "note-001",
+        "id": TEST_UUID,
         "title": "Meeting notes — Project kickoff",
         "body": "## Agenda\n\n- Introductions\n- Timeline review\n- Action items",
         "source": "com.life-engine.notes",
@@ -263,7 +266,7 @@ fn note_valid_fixture_passes_schema() {
 fn note_missing_body_fails_schema() {
     let schema = load_schema("notes.schema.json");
     let fixture = json!({
-        "id": "note-001",
+        "id": TEST_UUID,
         "title": "Meeting notes",
         // missing body
         "source": "com.life-engine.notes",
@@ -280,7 +283,7 @@ fn note_missing_body_fails_schema() {
 fn credential_valid_fixture_passes_schema() {
     let schema = load_schema("credentials.schema.json");
     let fixture = json!({
-        "id": "cred-001",
+        "id": TEST_UUID,
         "name": "Google OAuth",
         "credential_type": "oauth_token",
         "service": "google.com",
@@ -300,7 +303,7 @@ fn credential_valid_fixture_passes_schema() {
 fn credential_invalid_type_enum_fails_schema() {
     let schema = load_schema("credentials.schema.json");
     let fixture = json!({
-        "id": "cred-001",
+        "id": TEST_UUID,
         "name": "Bad Cred",
         "credential_type": "password",  // not in enum
         "service": "example.com",

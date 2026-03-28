@@ -254,11 +254,9 @@ pub async fn list_backups(backend: &dyn BackupBackend) -> anyhow::Result<Vec<Bac
     let results = futures::future::join_all(futures).await;
 
     let mut manifests = Vec::with_capacity(manifest_keys.len());
-    for result in results {
-        if let Ok(data) = result {
-            if let Ok(manifest) = serde_json::from_slice::<BackupManifest>(&data) {
-                manifests.push(manifest);
-            }
+    for data in results.into_iter().flatten() {
+        if let Ok(manifest) = serde_json::from_slice::<BackupManifest>(&data) {
+            manifests.push(manifest);
         }
     }
 

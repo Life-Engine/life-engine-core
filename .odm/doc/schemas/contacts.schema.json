@@ -1,0 +1,173 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://life-engine.io/schemas/cdm/contacts.schema.json",
+  "title": "Contact",
+  "description": "A contact in the Life Engine canonical data model.",
+  "type": "object",
+  "required": [
+    "id",
+    "name",
+    "source",
+    "source_id",
+    "created_at",
+    "updated_at"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "name": {
+      "$ref": "#/$defs/ContactName"
+    },
+    "emails": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ContactEmail"
+      },
+      "default": []
+    },
+    "phones": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ContactPhone"
+      },
+      "default": []
+    },
+    "addresses": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ContactAddress"
+      },
+      "default": []
+    },
+    "organization": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "birthday": {
+      "type": "string",
+      "format": "date"
+    },
+    "photo_url": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "groups": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "source": {
+      "type": "string"
+    },
+    "source_id": {
+      "type": "string"
+    },
+    "extensions": {},
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "ContactInfoType": {
+      "type": "string",
+      "enum": ["home", "work", "other"]
+    },
+    "PhoneType": {
+      "type": "string",
+      "enum": ["mobile", "home", "work", "fax", "other"]
+    },
+    "ContactName": {
+      "type": "object",
+      "required": ["given", "family"],
+      "properties": {
+        "given": {
+          "type": "string"
+        },
+        "family": {
+          "type": "string"
+        },
+        "prefix": {
+          "type": "string"
+        },
+        "suffix": {
+          "type": "string"
+        },
+        "middle": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ContactEmail": {
+      "type": "object",
+      "required": ["address"],
+      "properties": {
+        "address": {
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/ContactInfoType"
+        },
+        "primary": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ContactPhone": {
+      "type": "object",
+      "required": ["number"],
+      "properties": {
+        "number": {
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/PhoneType"
+        },
+        "primary": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ContactAddress": {
+      "type": "object",
+      "properties": {
+        "street": {
+          "type": "string"
+        },
+        "city": {
+          "type": "string"
+        },
+        "region": {
+          "type": "string"
+        },
+        "postal_code": {
+          "type": "string"
+        },
+        "country": {
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/ContactInfoType"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

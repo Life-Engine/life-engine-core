@@ -15,7 +15,7 @@ use life_engine_plugin_system::execute::PluginSystemExecutor;
 use life_engine_plugin_system::injection::injected_function_names;
 use life_engine_plugin_system::lifecycle::LifecycleManager;
 use life_engine_plugin_system::loader::PluginHandle;
-use life_engine_plugin_system::manifest::{ActionDef, CapabilitySet, PluginManifest, PluginMeta};
+use life_engine_plugin_system::manifest::{ActionDef, CapabilitySet, EventsDef, PluginManifest, PluginMeta, TrustLevel, DEFAULT_TIMEOUT_MS};
 use life_engine_plugin_system::runtime::load_plugin_from_bytes;
 use life_engine_traits::{Capability, EngineError, StorageBackend};
 use life_engine_types::{
@@ -192,6 +192,7 @@ fn test_manifest(id: &str, actions: Vec<&str>) -> PluginManifest {
             action.to_string(),
             ActionDef {
                 description: format!("{action} action"),
+                timeout_ms: DEFAULT_TIMEOUT_MS,
                 input_schema: None,
                 output_schema: None,
             },
@@ -204,9 +205,13 @@ fn test_manifest(id: &str, actions: Vec<&str>) -> PluginManifest {
             version: "1.0.0".to_string(),
             description: None,
             author: None,
+            license: None,
+            trust: TrustLevel::ThirdParty,
         },
         actions: action_map,
         capabilities: CapabilitySet::default(),
+        collections: HashMap::new(),
+        events: EventsDef::default(),
         config: None,
     }
 }
@@ -237,6 +242,7 @@ fn make_contact_message(source: &str) -> PipelineMessage {
             source: source.to_string(),
             timestamp: Utc::now(),
             auth_context: None,
+            warnings: vec![],
         },
         payload: TypedPayload::Cdm(Box::new(CdmType::Contact(Contact {
             id: Uuid::new_v4(),
@@ -287,6 +293,7 @@ async fn workflow_chaining_passes_output_as_next_input() {
     let workflow = WorkflowDef {
         id: "contact-pipeline".to_string(),
         name: "Contact Pipeline".to_string(),
+        description: None,
         mode: ExecutionMode::Sync,
         validate: ValidationLevel::None,
         trigger: TriggerDef {

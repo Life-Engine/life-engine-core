@@ -70,7 +70,7 @@ impl RateLimiter {
         let count = self
             .op_count
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        if count % CLEANUP_INTERVAL != 0 {
+        if !count.is_multiple_of(CLEANUP_INTERVAL) {
             return;
         }
         let cutoff = Instant::now() - std::time::Duration::from_secs(WINDOW_SECS);

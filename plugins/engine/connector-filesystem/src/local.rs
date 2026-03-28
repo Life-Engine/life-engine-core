@@ -172,7 +172,7 @@ impl LocalFsConnector {
                 continue;
             }
 
-            self.scan_directory(&watch_path, &mut results)?;
+            self.scan_directory(watch_path, &mut results)?;
         }
 
         Ok(results)

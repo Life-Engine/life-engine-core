@@ -3,6 +3,7 @@
 //! A household represents a group of users sharing a single Core instance.
 //! Each user has a role (Admin, Member, or Guest) that determines their
 //! access level. Data is isolated per-user by default, with designated
+#![allow(dead_code)]
 //! "shared collections" accessible by all household members.
 
 use chrono::{DateTime, Utc};
@@ -152,12 +153,12 @@ impl HouseholdStore {
         drop(map);
 
         let mut households = self.households.write().await;
-        if let Some(household) = households.get_mut(&household_id) {
-            if let Some(member) = household.members.iter_mut().find(|m| m.user_id == user_id) {
-                member.role = new_role;
-                household.updated_at = Utc::now();
-                return true;
-            }
+        if let Some(household) = households.get_mut(&household_id)
+            && let Some(member) = household.members.iter_mut().find(|m| m.user_id == user_id)
+        {
+            member.role = new_role;
+            household.updated_at = Utc::now();
+            return true;
         }
         false
     }
@@ -331,6 +332,7 @@ impl Default for HouseholdStore {
 /// permitted to write, even to shared collections.
 ///
 /// Returns `true` if access is allowed.
+#[allow(clippy::too_many_arguments)]
 pub fn check_record_access(
     requesting_user_id: &str,
     requesting_user_role: Option<HouseholdRole>,

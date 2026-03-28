@@ -3,6 +3,7 @@
 //! Detects and resolves conflicts when both local and remote versions of a
 //! record have been modified since the last sync. Supports multiple resolution
 //! strategies: last-write-wins, field-level merge, and manual resolution.
+#![allow(dead_code)]
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

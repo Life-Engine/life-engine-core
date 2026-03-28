@@ -15,7 +15,7 @@ services:
       LIFE_ENGINE_AUTH_PROVIDER: "local-token"
       LIFE_ENGINE_TRANSPORTS_REST_PORT: "3750"
     volumes:
-      - ./data:/data
+      - core-data:/data
       - ./plugins:/plugins
       - ./workflows:/workflows
       - ./config.toml:/app/config.toml:ro
@@ -29,3 +29,6 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+
+volumes:
+  core-data:

@@ -222,9 +222,11 @@ impl SqliteStorage {
                     &self.conn,
                     AuditEvent {
                         event_type: AuditEventType::CredentialAccess,
+                        collection: Some(collection.clone()),
+                        document_id: Some(id.clone()),
+                        identity_subject: None,
                         plugin_id: Some(query.plugin_id.clone()),
                         details: serde_json::json!({
-                            "credential_id": id,
                             "operation": "read"
                         }),
                     },
@@ -240,6 +242,7 @@ impl SqliteStorage {
                     source: format!("storage:{collection}"),
                     timestamp: Utc::now(),
                     auth_context: None,
+                    warnings: vec![],
                 },
                 payload,
             });
@@ -295,9 +298,11 @@ impl SqliteStorage {
                         &self.conn,
                         AuditEvent {
                             event_type: AuditEventType::CredentialModify,
+                            collection: Some(collection.clone()),
+                            document_id: Some(id.clone()),
+                            identity_subject: None,
                             plugin_id: Some(plugin_id),
                             details: serde_json::json!({
-                                "credential_id": id,
                                 "operation": "insert"
                             }),
                         },
@@ -360,9 +365,11 @@ impl SqliteStorage {
                         &self.conn,
                         AuditEvent {
                             event_type: AuditEventType::CredentialModify,
+                            collection: Some(collection.clone()),
+                            document_id: Some(id_str.clone()),
+                            identity_subject: None,
                             plugin_id: Some(plugin_id.clone()),
                             details: serde_json::json!({
-                                "credential_id": id_str,
                                 "operation": "update"
                             }),
                         },
@@ -397,9 +404,11 @@ impl SqliteStorage {
                         &self.conn,
                         AuditEvent {
                             event_type: AuditEventType::CredentialModify,
+                            collection: Some(collection),
+                            document_id: Some(id_str.clone()),
+                            identity_subject: None,
                             plugin_id: Some(plugin_id),
                             details: serde_json::json!({
-                                "credential_id": id_str,
                                 "operation": "delete"
                             }),
                         },
@@ -867,6 +876,7 @@ mod tests {
                 source: "test".into(),
                 timestamp: Utc::now(),
                 auth_context: None,
+                warnings: vec![],
             },
             payload: TypedPayload::Cdm(Box::new(CdmType::Task(task))),
         }
@@ -1256,6 +1266,7 @@ mod tests {
                 source: "test".into(),
                 timestamp: Utc::now(),
                 auth_context: None,
+                warnings: vec![],
             },
             payload: TypedPayload::Cdm(Box::new(CdmType::Event(event))),
         }
@@ -1397,6 +1408,7 @@ mod tests {
                 source: "test".into(),
                 timestamp: Utc::now(),
                 auth_context: None,
+                warnings: vec![],
             },
             payload: TypedPayload::Cdm(Box::new(CdmType::Credential(cred))),
         }
@@ -1549,7 +1561,18 @@ mod tests {
             .query_row(
                 "SELECT event_type, plugin_id, details FROM audit_log ORDER BY rowid DESC LIMIT 1",
                 [],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                |row| Ok((row.get(0)?, row.get(1)?, row.get::<_, Option<String>>(2)?.unwrap_or_default())),
+            )
+            .unwrap()
+    }
+
+    fn last_audit_document_id(storage: &SqliteStorage) -> Option<String> {
+        storage
+            .conn
+            .query_row(
+                "SELECT document_id FROM audit_log ORDER BY rowid DESC LIMIT 1",
+                [],
+                |row| row.get(0),
             )
             .unwrap()
     }
@@ -1609,7 +1632,8 @@ mod tests {
         assert_eq!(plugin_id.as_deref(), Some("plugin-a"));
         let details: serde_json::Value = serde_json::from_str(&details).unwrap();
         assert_eq!(details["operation"], "read");
-        assert_eq!(details["credential_id"], "00000000-0000-0000-0000-000000000099");
+        let doc_id = last_audit_document_id(&storage);
+        assert_eq!(doc_id.as_deref(), Some("00000000-0000-0000-0000-000000000099"));
     }
 
     #[test]
@@ -1623,6 +1647,7 @@ mod tests {
                 source: "test".into(),
                 timestamp: Utc::now(),
                 auth_context: None,
+                warnings: vec![],
             },
             payload: TypedPayload::Cdm(Box::new(CdmType::Credential(cred))),
         };

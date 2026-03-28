@@ -12,7 +12,7 @@ use life_engine_plugin_system::capability::ApprovedCapabilities;
 use life_engine_plugin_system::execute::PluginSystemExecutor;
 use life_engine_plugin_system::lifecycle::{LifecycleManager, LifecycleState};
 use life_engine_plugin_system::loader::PluginHandle;
-use life_engine_plugin_system::manifest::{ActionDef, CapabilitySet, PluginManifest, PluginMeta};
+use life_engine_plugin_system::manifest::{ActionDef, CapabilitySet, EventsDef, PluginManifest, PluginMeta, TrustLevel, DEFAULT_TIMEOUT_MS};
 use life_engine_plugin_system::runtime::load_plugin_from_bytes;
 use life_engine_traits::Severity;
 use life_engine_types::{CdmType, MessageMetadata, PipelineMessage, TypedPayload};
@@ -101,6 +101,7 @@ fn test_manifest(id: &str, actions: &[&str]) -> PluginManifest {
             action.to_string(),
             ActionDef {
                 description: format!("{action} action"),
+                timeout_ms: DEFAULT_TIMEOUT_MS,
                 input_schema: None,
                 output_schema: None,
             },
@@ -113,9 +114,13 @@ fn test_manifest(id: &str, actions: &[&str]) -> PluginManifest {
             version: "1.0.0".to_string(),
             description: None,
             author: None,
+            license: None,
+            trust: TrustLevel::ThirdParty,
         },
         actions: action_map,
         capabilities: CapabilitySet::default(),
+        collections: HashMap::new(),
+        events: EventsDef::default(),
         config: None,
     }
 }
@@ -145,6 +150,7 @@ fn test_pipeline_message() -> PipelineMessage {
             source: "test:crash-isolation".to_string(),
             timestamp: chrono::Utc::now(),
             auth_context: None,
+            warnings: vec![],
         },
         payload: TypedPayload::Cdm(Box::new(CdmType::TaskBatch(vec![]))),
     }
@@ -167,10 +173,10 @@ async fn panicking_plugin_returns_error_without_crashing_core() {
     let err = result.unwrap_err();
     assert_eq!(
         err.code(),
-        "PLUGIN_007",
-        "WASM trap should surface as ExecutionFailed"
+        "PLUGIN_010",
+        "WASM trap should surface as Crash"
     );
-    assert_eq!(err.severity(), Severity::Retryable);
+    assert_eq!(err.severity(), Severity::Fatal);
 }
 
 // ===========================================================================
@@ -323,5 +329,5 @@ async fn crashed_plugin_can_be_retried() {
         .execute("crasher", "execute", test_pipeline_message())
         .await;
     assert!(r2.is_err());
-    assert_eq!(r2.unwrap_err().code(), "PLUGIN_007");
+    assert_eq!(r2.unwrap_err().code(), "PLUGIN_010");
 }

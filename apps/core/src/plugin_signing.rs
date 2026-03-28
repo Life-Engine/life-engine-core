@@ -3,6 +3,7 @@
 //! Provides Ed25519 signing of `.wasm` plugin bundles, signature verification
 //! before plugin loading, key revocation, manifest hash inclusion in signatures,
 //! and verification tier classification.
+#![allow(dead_code)]
 
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use serde::{Deserialize, Serialize};

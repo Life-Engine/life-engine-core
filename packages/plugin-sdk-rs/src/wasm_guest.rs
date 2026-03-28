@@ -28,54 +28,106 @@ use crate::types::HttpMethod;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum HostRequest {
-    /// Read a record by ID. Requires `StorageRead` capability.
+    // --- Document storage ---
+
+    /// Read a document by ID. Requires `storage:doc:read` capability.
     StoreRead {
         collection: String,
         id: String,
     },
-    /// Create a record. Requires `StorageWrite` capability.
+    /// Create a document. Requires `storage:doc:write` capability.
     StoreWrite {
         collection: String,
         data: serde_json::Value,
     },
-    /// Query records. Requires `StorageRead` capability.
+    /// Query documents. Requires `storage:doc:read` capability.
     StoreQuery {
         collection: String,
         filters: serde_json::Value,
         limit: Option<u32>,
         offset: Option<u32>,
     },
-    /// Delete a record. Requires `StorageWrite` capability.
+    /// Count documents matching a query. Requires `storage:doc:read` capability.
+    StoreCount {
+        collection: String,
+        filters: serde_json::Value,
+    },
+    /// Partially update a document (merge patch). Requires `storage:doc:write` capability.
+    StorePartialUpdate {
+        collection: String,
+        id: String,
+        patch: serde_json::Value,
+    },
+    /// Create multiple documents in one call. Requires `storage:doc:write` capability.
+    StoreBatchCreate {
+        collection: String,
+        documents: Vec<serde_json::Value>,
+    },
+    /// Update multiple documents in one call. Requires `storage:doc:write` capability.
+    StoreBatchUpdate {
+        collection: String,
+        updates: Vec<serde_json::Value>,
+    },
+    /// Delete a document. Requires `storage:doc:delete` capability.
     StoreDelete {
         collection: String,
         id: String,
     },
-    /// Read a config value. Requires `ConfigRead` capability.
+
+    // --- Blob storage ---
+
+    /// Store a blob. Requires `storage:blob:write` capability.
+    BlobStore {
+        key: String,
+        data_base64: String,
+        content_type: Option<String>,
+    },
+    /// Retrieve a blob. Requires `storage:blob:read` capability.
+    BlobRetrieve {
+        key: String,
+    },
+    /// Delete a blob. Requires `storage:blob:delete` capability.
+    BlobDelete {
+        key: String,
+    },
+
+    // --- Config ---
+
+    /// Read a config value. Requires `config:read` capability.
     ConfigGet {
         key: String,
     },
-    /// Subscribe to events. Requires `EventsSubscribe` capability.
+
+    // --- Events ---
+
+    /// Subscribe to events. Requires `events:subscribe` capability.
     EventSubscribe {
         event_type: String,
     },
-    /// Emit an event. Requires `EventsEmit` capability.
+    /// Emit an event. Requires `events:emit` capability.
     EventEmit {
         event_type: String,
         payload: serde_json::Value,
     },
-    /// Log at info level. Requires `Logging` capability.
+
+    // --- Logging ---
+
+    /// Log at info level. No capability required.
     LogInfo {
         message: String,
     },
-    /// Log at warn level. Requires `Logging` capability.
+    /// Log at warn level. No capability required.
     LogWarn {
         message: String,
     },
-    /// Log at error level. Requires `Logging` capability.
+    /// Log at error level. No capability required.
     LogError {
         message: String,
     },
-    /// Make an HTTP request. Requires `HttpOutbound` capability.
+
+    // --- HTTP ---
+
+    /// Make an HTTP request. Requires `http:outbound` capability.
     HttpRequest {
         url: String,
         method: HttpMethod,
@@ -213,9 +265,37 @@ mod tests {
                 limit: Some(10),
                 offset: None,
             },
+            HostRequest::StoreCount {
+                collection: "c".into(),
+                filters: json!({}),
+            },
+            HostRequest::StorePartialUpdate {
+                collection: "c".into(),
+                id: "i".into(),
+                patch: json!({"field": "value"}),
+            },
+            HostRequest::StoreBatchCreate {
+                collection: "c".into(),
+                documents: vec![json!({}), json!({})],
+            },
+            HostRequest::StoreBatchUpdate {
+                collection: "c".into(),
+                updates: vec![json!({"id": "1", "data": {}})],
+            },
             HostRequest::StoreDelete {
                 collection: "c".into(),
                 id: "i".into(),
+            },
+            HostRequest::BlobStore {
+                key: "photos/img.png".into(),
+                data_base64: "AQID".into(),
+                content_type: Some("image/png".into()),
+            },
+            HostRequest::BlobRetrieve {
+                key: "photos/img.png".into(),
+            },
+            HostRequest::BlobDelete {
+                key: "photos/img.png".into(),
             },
             HostRequest::ConfigGet { key: "k".into() },
             HostRequest::EventSubscribe {

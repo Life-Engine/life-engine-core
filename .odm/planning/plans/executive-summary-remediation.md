@@ -12,7 +12,7 @@ This plan addresses all findings from the QA executive summary report across thr
 
 Work packages are organized by domain area within each tier. Tier 2 WPs depend on their related Tier 1 WPs being complete first (where applicable). Tier 3 WPs depend on related Tier 2 WPs.
 
-**Progress:** 8 / 13 work packages complete
+**Progress:** 9 / 13 work packages complete
 
 ---
 
@@ -225,27 +225,27 @@ Work packages are organized by domain area within each tier. Tier 2 WPs depend o
 > depends: 2.2
 > spec: .odm/qa/reports/EXECUTIVE-SUMMARY.md
 
-- [ ] Implement actual HTTP POST delivery with HMAC-SHA256 signing in webhook sender [ga-readiness]
+- [x] Implement actual HTTP POST delivery with HMAC-SHA256 signing in webhook sender [ga-readiness]
   <!-- file: plugins/engine/webhook-sender/src/lib.rs -->
   <!-- purpose: Make webhook delivery functional instead of log-only -->
   <!-- requirements: Tier 3, item 19 -->
   <!-- leverage: existing lib.rs:261-271, reqwest already in deps -->
-- [ ] Add exponential backoff and configurable timeouts to webhook delivery [ga-readiness]
+- [x] Add exponential backoff and configurable timeouts to webhook delivery [ga-readiness]
   <!-- file: plugins/engine/webhook-sender/src/lib.rs -->
   <!-- purpose: Handle transient delivery failures gracefully -->
   <!-- requirements: Tier 3, item 19 -->
   <!-- leverage: none -->
-- [ ] Implement minimum CalDAV protocol handlers: PROPFIND (depth 0/1), GET, PUT, OPTIONS with DAV headers [ga-readiness]
+- [x] Implement minimum CalDAV protocol handlers: PROPFIND (depth 0/1), GET, PUT, OPTIONS with DAV headers [ga-readiness]
   <!-- file: packages/transport-caldav/src/lib.rs -->
   <!-- purpose: Enable basic CalDAV client compatibility -->
   <!-- requirements: Tier 3, item 20 -->
   <!-- leverage: existing transport crate scaffolding -->
-- [ ] Implement minimum CardDAV protocol handlers: PROPFIND (depth 0/1), GET, PUT, OPTIONS with DAV headers [ga-readiness]
+- [x] Implement minimum CardDAV protocol handlers: PROPFIND (depth 0/1), GET, PUT, OPTIONS with DAV headers [ga-readiness]
   <!-- file: packages/transport-carddav/src/lib.rs -->
   <!-- purpose: Enable basic CardDAV client compatibility -->
   <!-- requirements: Tier 3, item 20 -->
   <!-- leverage: existing transport crate scaffolding -->
-- [ ] Add well-known redirects and current-user-principal for CalDAV and CardDAV discovery [ga-readiness]
+- [x] Add well-known redirects and current-user-principal for CalDAV and CardDAV discovery [ga-readiness]
   <!-- file: packages/transport-caldav/src/lib.rs -->
   <!-- purpose: Enable standard DAV client discovery flows -->
   <!-- requirements: Tier 3, item 20 -->

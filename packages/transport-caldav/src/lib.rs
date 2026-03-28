@@ -9,6 +9,7 @@ pub mod handlers;
 pub mod types;
 
 use async_trait::async_trait;
+use axum::response::Redirect;
 use axum::routing::{any, get};
 use axum::Router;
 use error::CaldavError;
@@ -65,17 +66,25 @@ impl CaldavTransport {
     /// Build the Axum router with CalDAV routes.
     pub fn build_router(&self, state: Arc<CaldavState>) -> Router {
         let base = &self.config.base_path;
+        let redirect_target = format!("{base}/");
 
         Router::new()
-            // Collection-level PROPFIND (calendar home)
+            // Well-known CalDAV discovery redirect (RFC 6764)
+            .route(
+                "/.well-known/caldav",
+                get(move || async move { Redirect::permanent(&redirect_target) }),
+            )
+            // OPTIONS for DAV compliance class discovery
             .route(
                 &format!("{base}/"),
-                any(handlers::handle_propfind),
+                any(handlers::handle_propfind)
+                    .options(handlers::handle_options),
             )
             // Collection-level PROPFIND and REPORT for a specific calendar
             .route(
                 &format!("{base}/{{collection}}/"),
-                any(handlers::handle_propfind),
+                any(handlers::handle_propfind)
+                    .options(handlers::handle_options),
             )
             // REPORT on a collection (without trailing slash)
             .route(
@@ -92,7 +101,8 @@ impl CaldavTransport {
                 &format!("{base}/{{collection}}/{{resource}}"),
                 get(handlers::handle_get)
                     .put(handlers::handle_put)
-                    .delete(handlers::handle_delete),
+                    .delete(handlers::handle_delete)
+                    .options(handlers::handle_options),
             )
             .with_state(state)
     }
@@ -100,7 +110,7 @@ impl CaldavTransport {
 
 #[async_trait]
 impl Transport for CaldavTransport {
-    async fn start(&self) -> Result<(), Box<dyn EngineError>> {
+    async fn start(&self, _config: toml::Value) -> Result<(), Box<dyn EngineError>> {
         let addr = self.bind_address();
 
         let state = Arc::new(CaldavState {

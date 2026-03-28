@@ -285,6 +285,16 @@ pub async fn handle_delete(
     }
 }
 
+/// OPTIONS handler — returns DAV compliance headers per RFC 4791.
+pub async fn handle_options() -> Response {
+    Response::builder()
+        .status(StatusCode::OK)
+        .header("Allow", "OPTIONS, GET, PUT, DELETE, PROPFIND, REPORT, MKCALENDAR")
+        .header("DAV", "1, 2, calendar-access")
+        .body(Body::empty())
+        .unwrap()
+}
+
 /// MKCALENDAR handler — creates a new calendar collection.
 pub async fn handle_mkcalendar(
     State(state): State<Arc<CaldavState>>,

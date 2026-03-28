@@ -9,6 +9,7 @@ pub mod handlers;
 pub mod types;
 
 use async_trait::async_trait;
+use axum::response::Redirect;
 use axum::routing::{any, get};
 use axum::Router;
 use error::CarddavError;
@@ -65,15 +66,24 @@ impl CarddavTransport {
     /// Build the Axum router with CardDAV routes.
     pub fn build_router(&self, state: Arc<CarddavState>) -> Router {
         let base = &self.config.base_path;
+        let redirect_target = format!("{base}/");
 
         Router::new()
+            // Well-known CardDAV discovery redirect (RFC 6764)
+            .route(
+                "/.well-known/carddav",
+                get(move || async move { Redirect::permanent(&redirect_target) }),
+            )
+            // OPTIONS for DAV compliance class discovery
             .route(
                 &format!("{base}/"),
-                any(handlers::handle_propfind),
+                any(handlers::handle_propfind)
+                    .options(handlers::handle_options),
             )
             .route(
                 &format!("{base}/{{addressbook}}/"),
-                any(handlers::handle_propfind),
+                any(handlers::handle_propfind)
+                    .options(handlers::handle_options),
             )
             .route(
                 &format!("{base}/{{addressbook}}"),
@@ -87,7 +97,8 @@ impl CarddavTransport {
                 &format!("{base}/{{addressbook}}/{{resource}}"),
                 get(handlers::handle_get)
                     .put(handlers::handle_put)
-                    .delete(handlers::handle_delete),
+                    .delete(handlers::handle_delete)
+                    .options(handlers::handle_options),
             )
             .with_state(state)
     }
@@ -95,7 +106,7 @@ impl CarddavTransport {
 
 #[async_trait]
 impl Transport for CarddavTransport {
-    async fn start(&self) -> Result<(), Box<dyn EngineError>> {
+    async fn start(&self, _config: toml::Value) -> Result<(), Box<dyn EngineError>> {
         let addr = self.bind_address();
 
         let state = Arc::new(CarddavState {

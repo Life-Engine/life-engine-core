@@ -269,6 +269,16 @@ pub async fn handle_delete(
     }
 }
 
+/// OPTIONS handler — returns DAV compliance headers per RFC 6352.
+pub async fn handle_options() -> Response {
+    Response::builder()
+        .status(StatusCode::OK)
+        .header("Allow", "OPTIONS, GET, PUT, DELETE, PROPFIND, REPORT, MKCOL")
+        .header("DAV", "1, 2, addressbook")
+        .body(Body::empty())
+        .unwrap()
+}
+
 /// MKCOL handler — creates a new addressbook collection.
 pub async fn handle_mkcol(
     State(state): State<Arc<CarddavState>>,

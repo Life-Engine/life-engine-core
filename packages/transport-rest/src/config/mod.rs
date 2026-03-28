@@ -242,6 +242,8 @@ fn validate_route_namespace(handler_type: &str, route: &RouteConfig) -> Result<(
 /// A plugin-declared route that will be merged into the router.
 #[derive(Debug, Clone)]
 pub struct PluginRoute {
+    /// Plugin identifier (e.g. `com.life-engine.webhook-receiver`).
+    pub plugin_id: String,
     pub method: String,
     pub path: String,
     pub workflow: String,

@@ -809,17 +809,17 @@ Build the HTTP entry point: listener configuration, route merging, REST and Grap
 
 ### 9.2 — Router and Route Merging
 
-- [ ] Implement route merging in `packages/transport-rest/src/router/`: combine routes from the listener config with routes from plugin manifests into a single route list. Plugin manifest routes are additive — they cannot override config routes. Detect and reject conflicts (same method + path from two sources).
+- [x] Implement route merging in `packages/transport-rest/src/router/`: combine routes from the listener config with routes from plugin manifests into a single route list. Plugin manifest routes are additive — they cannot override config routes. Detect and reject conflicts (same method + path from two sources).
   <!-- files: packages/transport-rest/src/router/merge.rs -->
   <!-- purpose: Unify config and plugin routes into a single router -->
   <!-- requirements: transport-layer 3.1, 3.2, 3.4, 5.1 -->
 
-- [ ] Build the immutable Axum `Router` from the merged route list. Each route extracts path parameters (`:collection`, `:id`) into `HashMap<String, String>` and dispatches to the appropriate handler (REST or GraphQL) based on handler type. The router is built once at startup and never modified.
+- [x] Build the immutable Axum `Router` from the merged route list. Each route extracts path parameters (`:collection`, `:id`) into `HashMap<String, String>` and dispatches to the appropriate handler (REST or GraphQL) based on handler type. The router is built once at startup and never modified.
   <!-- files: packages/transport-rest/src/router/build.rs -->
   <!-- purpose: Construct the runtime router from validated routes -->
   <!-- requirements: transport-layer 5.1, 5.2, 5.3, 5.4 -->
 
-- [ ] Write unit tests: route merging, collision detection, path parameter extraction, namespace validation.
+- [x] Write unit tests: route merging, collision detection, path parameter extraction, namespace validation.
   <!-- files: packages/transport-rest/src/router/tests.rs -->
   <!-- purpose: Verify router correctness -->
   <!-- requirements: transport-layer 3.1, 4.1, 5.1 -->

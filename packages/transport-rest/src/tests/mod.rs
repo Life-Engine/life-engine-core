@@ -4,8 +4,9 @@ mod middleware_test;
 
 use crate::config::{
     HandlerConfig, ListenerConfig, PluginRoute, RouteConfig, TlsConfig,
-    default_listener_config, merge_routes, validate_listener, write_default_config,
+    default_listener_config, validate_listener, write_default_config,
 };
+use crate::config::merge_routes;
 use crate::router::build_router;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
@@ -193,6 +194,7 @@ fn test_default_config_has_graphql_endpoint() {
 fn test_merge_routes_adds_plugin_routes() {
     let config = default_listener_config();
     let plugin_routes = vec![PluginRoute {
+        plugin_id: "com.test.plugin".into(),
         method: "POST".into(),
         path: "/api/v1/custom/action".into(),
         workflow: "custom.action".into(),
@@ -206,6 +208,7 @@ fn test_merge_routes_adds_plugin_routes() {
 fn test_merge_routes_detects_conflict() {
     let config = default_listener_config();
     let plugin_routes = vec![PluginRoute {
+        plugin_id: "com.test.conflicting".into(),
         method: "GET".into(),
         path: "/api/v1/health".into(),
         workflow: "plugin.health".into(),

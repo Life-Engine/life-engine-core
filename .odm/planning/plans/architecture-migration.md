@@ -342,32 +342,32 @@ Implement the concrete storage adapters (SQLite/SQLCipher, filesystem), the Stor
 
 ### 4.3 — Storage Router
 
-- [ ] Implement `StorageRouter` in `packages/traits/src/storage_router.rs`: holds references to the active `DocumentStorageAdapter` and `BlobStorageAdapter`. Routes document operations to the document adapter and blob operations to the blob adapter. The router is constructed at startup from `storage.toml` configuration, which specifies which adapter to use for each category.
+- [x] Implement `StorageRouter` in `packages/traits/src/storage_router.rs`: holds references to the active `DocumentStorageAdapter` and `BlobStorageAdapter`. Routes document operations to the document adapter and blob operations to the blob adapter. The router is constructed at startup from `storage.toml` configuration, which specifies which adapter to use for each category.
   <!-- files: packages/traits/src/storage_router.rs -->
   <!-- purpose: Decouple storage consumers from specific adapter implementations -->
   <!-- requirements: storage-router 1.1, 1.2, 2.1 -->
 
-- [ ] Implement timeout enforcement: wrap every adapter call in `tokio::time::timeout`. Read timeout and write timeout are configured separately in `storage.toml`. If a timeout fires, return `StorageError::Timeout` with the operation name and configured duration. Default timeouts: 5s read, 10s write.
+- [x] Implement timeout enforcement: wrap every adapter call in `tokio::time::timeout`. Read timeout and write timeout are configured separately in `storage.toml`. If a timeout fires, return `StorageError::Timeout` with the operation name and configured duration. Default timeouts: 5s read, 10s write.
   <!-- files: packages/traits/src/storage_router.rs -->
   <!-- purpose: Prevent hung adapter operations from blocking the pipeline -->
   <!-- requirements: storage-router 3.1, 3.2 -->
 
-- [ ] Implement metrics emission: record operation latency, success/failure counts, and active operation count via structured log events. Use `tracing::instrument` for automatic span creation. Metrics are emitted for every operation routed through the router.
+- [x] Implement metrics emission: record operation latency, success/failure counts, and active operation count via structured log events. Use `tracing::instrument` for automatic span creation. Metrics are emitted for every operation routed through the router.
   <!-- files: packages/traits/src/storage_router.rs -->
   <!-- purpose: Enable operational monitoring of storage performance -->
   <!-- requirements: storage-router 4.1 -->
 
-- [ ] Implement startup sequence: load `storage.toml`, resolve adapter names to concrete implementations (static registry: "sqlite" → SqliteDocumentAdapter, "filesystem" → FilesystemBlobAdapter), check required capabilities declared in config against adapter capabilities, run health checks on both adapters, abort startup if any check fails.
+- [x] Implement startup sequence: load `storage.toml`, resolve adapter names to concrete implementations (static registry: "sqlite" → SqliteDocumentAdapter, "filesystem" → FilesystemBlobAdapter), check required capabilities declared in config against adapter capabilities, run health checks on both adapters, abort startup if any check fails.
   <!-- files: packages/traits/src/storage_router.rs -->
   <!-- purpose: Validate storage configuration at startup -->
   <!-- requirements: storage-router 5.1, 5.2, 5.3 -->
 
-- [ ] Implement health aggregation: `StorageRouter::health()` calls `health()` on both adapters and returns a combined `HealthReport`. Status is the worst of both (if either is Unhealthy, the aggregate is Unhealthy).
+- [x] Implement health aggregation: `StorageRouter::health()` calls `health()` on both adapters and returns a combined `HealthReport`. Status is the worst of both (if either is Unhealthy, the aggregate is Unhealthy).
   <!-- files: packages/traits/src/storage_router.rs -->
   <!-- purpose: Single health check endpoint for all storage -->
   <!-- requirements: storage-router 6.1 -->
 
-- [ ] Write unit tests: routing to correct adapter, timeout enforcement (mock adapter with sleep), health aggregation, startup validation with capability mismatch.
+- [x] Write unit tests: routing to correct adapter, timeout enforcement (mock adapter with sleep), health aggregation, startup validation with capability mismatch.
   <!-- files: packages/traits/tests/storage_router_tests.rs -->
   <!-- purpose: Verify storage routing correctness -->
   <!-- requirements: storage-router 1.1 through 6.1 -->

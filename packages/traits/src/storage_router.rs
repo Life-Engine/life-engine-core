@@ -3,22 +3,25 @@
 //! `StorageRouter` holds references to a `DocumentStorageAdapter` and a
 //! `BlobStorageAdapter`, routing document operations to the document adapter
 //! and blob operations to the blob adapter. It enforces per-operation-class
-//! timeouts and aggregates health from both adapters.
+//! timeouts, emits structured tracing metrics for every operation, and
+//! aggregates health from both adapters.
 
 use std::sync::Arc;
 use std::time::Duration;
 
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::mpsc;
+use tracing::instrument;
 
 use crate::blob::{BlobInput, BlobKey, BlobMeta, BlobStorageAdapter};
 use crate::storage::{
-    ChangeEvent, CollectionDescriptor, DocumentList, DocumentStorageAdapter, FilterNode,
-    HealthReport, HealthStatus, QueryDescriptor, StorageError,
+    AdapterCapabilities, ChangeEvent, CollectionDescriptor, DocumentList, DocumentStorageAdapter,
+    FilterNode, HealthReport, HealthStatus, QueryDescriptor, StorageError,
 };
 
 /// Timeout configuration for storage operations, in milliseconds.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TimeoutConfig {
     /// Timeout for document read operations (get, query, count).
     pub document_read_ms: u64,
@@ -49,6 +52,59 @@ pub struct StorageRouter {
     timeouts: TimeoutConfig,
 }
 
+/// TOML-deserializable storage configuration used by the startup sequence.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StorageConfig {
+    /// Name of the document adapter to use (e.g. "sqlite").
+    pub document_adapter: String,
+    /// Name of the blob adapter to use (e.g. "filesystem").
+    pub blob_adapter: String,
+    /// Timeout configuration.
+    #[serde(default)]
+    pub timeouts: TimeoutConfig,
+    /// Required document adapter capabilities.
+    #[serde(default)]
+    pub required_capabilities: RequiredCapabilities,
+}
+
+/// Capabilities that must be present on the document adapter.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct RequiredCapabilities {
+    #[serde(default)]
+    pub transactions: bool,
+    #[serde(default)]
+    pub full_text_search: bool,
+    #[serde(default)]
+    pub watch: bool,
+    #[serde(default)]
+    pub batch_operations: bool,
+    #[serde(default)]
+    pub encryption: bool,
+}
+
+/// Errors that can occur during storage router startup.
+#[derive(Debug, thiserror::Error)]
+pub enum StartupError {
+    #[error("unknown document adapter: {0}")]
+    UnknownDocumentAdapter(String),
+    #[error("unknown blob adapter: {0}")]
+    UnknownBlobAdapter(String),
+    #[error("capability mismatch: {0}")]
+    CapabilityMismatch(String),
+    #[error("health check failed: {0}")]
+    HealthCheckFailed(String),
+    #[error("config error: {0}")]
+    ConfigError(String),
+}
+
+/// A factory function that produces a document adapter from a name.
+pub type DocAdapterFactory =
+    Box<dyn Fn(&str) -> Option<Arc<dyn DocumentStorageAdapter>> + Send + Sync>;
+
+/// A factory function that produces a blob adapter from a name.
+pub type BlobAdapterFactory =
+    Box<dyn Fn(&str) -> Option<Arc<dyn BlobStorageAdapter>> + Send + Sync>;
+
 impl StorageRouter {
     /// Create a new `StorageRouter` with the given adapters and timeout config.
     pub fn new(
@@ -61,6 +117,51 @@ impl StorageRouter {
             blob_adapter,
             timeouts,
         }
+    }
+
+    /// Perform the full startup sequence:
+    /// 1. Parse `StorageConfig`
+    /// 2. Resolve adapter names to concrete implementations via the provided factories
+    /// 3. Validate required capabilities against adapter capabilities
+    /// 4. Run health checks on both adapters
+    /// 5. Return a ready-to-use `StorageRouter`
+    pub async fn from_config(
+        config: StorageConfig,
+        resolve_doc: &DocAdapterFactory,
+        resolve_blob: &BlobAdapterFactory,
+    ) -> Result<Self, StartupError> {
+        let doc_adapter = resolve_doc(&config.document_adapter).ok_or_else(|| {
+            StartupError::UnknownDocumentAdapter(config.document_adapter.clone())
+        })?;
+
+        let blob_adapter = resolve_blob(&config.blob_adapter).ok_or_else(|| {
+            StartupError::UnknownBlobAdapter(config.blob_adapter.clone())
+        })?;
+
+        check_capabilities(&doc_adapter.capabilities(), &config.required_capabilities)?;
+
+        let router = Self::new(doc_adapter, blob_adapter, config.timeouts);
+
+        let health = router
+            .health()
+            .await
+            .map_err(|e| StartupError::HealthCheckFailed(e.to_string()))?;
+
+        if health.status == HealthStatus::Unhealthy {
+            return Err(StartupError::HealthCheckFailed(format!(
+                "storage unhealthy: {}",
+                health.message.unwrap_or_default()
+            )));
+        }
+
+        tracing::info!(
+            doc_adapter = config.document_adapter,
+            blob_adapter = config.blob_adapter,
+            health = ?health.status,
+            "storage router started"
+        );
+
+        Ok(router)
     }
 
     /// Apply a timeout to an async operation, returning `StorageError::Timeout`
@@ -102,6 +203,7 @@ impl StorageRouter {
     // -- Document read operations ---------------------------------------------
 
     /// Retrieve a single document by collection and ID.
+    #[instrument(skip(self), fields(op = "doc_get"))]
     pub async fn doc_get(&self, collection: &str, id: &str) -> Result<Value, StorageError> {
         let timeout = self.doc_read_timeout();
         self.with_timeout(timeout, "doc_get", self.doc_adapter.get(collection, id))
@@ -109,6 +211,7 @@ impl StorageRouter {
     }
 
     /// Execute a query and return matching documents.
+    #[instrument(skip(self, descriptor), fields(op = "doc_query"))]
     pub async fn doc_query(&self, descriptor: QueryDescriptor) -> Result<DocumentList, StorageError> {
         let timeout = self.doc_read_timeout();
         self.with_timeout(timeout, "doc_query", self.doc_adapter.query(descriptor))
@@ -116,6 +219,7 @@ impl StorageRouter {
     }
 
     /// Count documents matching optional filters.
+    #[instrument(skip(self, filters), fields(op = "doc_count"))]
     pub async fn doc_count(
         &self,
         collection: &str,
@@ -129,6 +233,7 @@ impl StorageRouter {
     // -- Document write operations --------------------------------------------
 
     /// Insert a new document into the collection.
+    #[instrument(skip(self, document), fields(op = "doc_create"))]
     pub async fn doc_create(
         &self,
         collection: &str,
@@ -140,6 +245,7 @@ impl StorageRouter {
     }
 
     /// Replace an existing document (full update).
+    #[instrument(skip(self, document), fields(op = "doc_update"))]
     pub async fn doc_update(
         &self,
         collection: &str,
@@ -156,6 +262,7 @@ impl StorageRouter {
     }
 
     /// Merge fields into an existing document (partial update).
+    #[instrument(skip(self, fields), fields(op = "doc_partial_update"))]
     pub async fn doc_partial_update(
         &self,
         collection: &str,
@@ -172,6 +279,7 @@ impl StorageRouter {
     }
 
     /// Delete a document by collection and ID.
+    #[instrument(skip(self), fields(op = "doc_delete"))]
     pub async fn doc_delete(&self, collection: &str, id: &str) -> Result<(), StorageError> {
         let timeout = self.doc_write_timeout();
         self.with_timeout(timeout, "doc_delete", self.doc_adapter.delete(collection, id))
@@ -179,6 +287,7 @@ impl StorageRouter {
     }
 
     /// Atomically insert multiple documents.
+    #[instrument(skip(self, documents), fields(op = "doc_batch_create", count = documents.len()))]
     pub async fn doc_batch_create(
         &self,
         collection: &str,
@@ -194,6 +303,7 @@ impl StorageRouter {
     }
 
     /// Atomically replace multiple documents.
+    #[instrument(skip(self, updates), fields(op = "doc_batch_update", count = updates.len()))]
     pub async fn doc_batch_update(
         &self,
         collection: &str,
@@ -209,6 +319,7 @@ impl StorageRouter {
     }
 
     /// Atomically delete multiple documents by ID.
+    #[instrument(skip(self, ids), fields(op = "doc_batch_delete", count = ids.len()))]
     pub async fn doc_batch_delete(
         &self,
         collection: &str,
@@ -224,6 +335,7 @@ impl StorageRouter {
     }
 
     /// Subscribe to changes on a collection.
+    #[instrument(skip(self), fields(op = "doc_watch"))]
     pub async fn doc_watch(
         &self,
         collection: &str,
@@ -234,6 +346,7 @@ impl StorageRouter {
     }
 
     /// Create or update a collection's schema.
+    #[instrument(skip(self, descriptor), fields(op = "doc_migrate"))]
     pub async fn doc_migrate(
         &self,
         descriptor: CollectionDescriptor,
@@ -246,6 +359,7 @@ impl StorageRouter {
     // -- Blob read operations -------------------------------------------------
 
     /// Retrieve a blob's data and metadata by key.
+    #[instrument(skip(self), fields(op = "blob_retrieve"))]
     pub async fn blob_retrieve(
         &self,
         key: BlobKey,
@@ -256,6 +370,7 @@ impl StorageRouter {
     }
 
     /// Check whether a blob exists at the given key.
+    #[instrument(skip(self), fields(op = "blob_exists"))]
     pub async fn blob_exists(&self, key: BlobKey) -> Result<bool, StorageError> {
         let timeout = self.blob_read_timeout();
         self.with_timeout(timeout, "blob_exists", self.blob_adapter.exists(key))
@@ -263,6 +378,7 @@ impl StorageRouter {
     }
 
     /// List blobs whose keys start with the given prefix.
+    #[instrument(skip(self), fields(op = "blob_list"))]
     pub async fn blob_list(&self, prefix: &str) -> Result<Vec<BlobMeta>, StorageError> {
         let timeout = self.blob_read_timeout();
         self.with_timeout(timeout, "blob_list", self.blob_adapter.list(prefix))
@@ -270,6 +386,7 @@ impl StorageRouter {
     }
 
     /// Retrieve metadata for a blob without downloading the data.
+    #[instrument(skip(self), fields(op = "blob_metadata"))]
     pub async fn blob_metadata(&self, key: BlobKey) -> Result<BlobMeta, StorageError> {
         let timeout = self.blob_read_timeout();
         self.with_timeout(timeout, "blob_metadata", self.blob_adapter.metadata(key))
@@ -279,6 +396,7 @@ impl StorageRouter {
     // -- Blob write operations ------------------------------------------------
 
     /// Store a blob at the given key, returning its metadata.
+    #[instrument(skip(self, input), fields(op = "blob_store"))]
     pub async fn blob_store(
         &self,
         key: BlobKey,
@@ -290,6 +408,7 @@ impl StorageRouter {
     }
 
     /// Copy a blob from source to destination.
+    #[instrument(skip(self), fields(op = "blob_copy"))]
     pub async fn blob_copy(
         &self,
         source: BlobKey,
@@ -301,6 +420,7 @@ impl StorageRouter {
     }
 
     /// Delete a blob by key.
+    #[instrument(skip(self), fields(op = "blob_delete"))]
     pub async fn blob_delete(&self, key: BlobKey) -> Result<(), StorageError> {
         let timeout = self.blob_write_timeout();
         self.with_timeout(timeout, "blob_delete", self.blob_adapter.delete(key))
@@ -310,6 +430,7 @@ impl StorageRouter {
     // -- Health ---------------------------------------------------------------
 
     /// Aggregate health from both adapters. Worst status wins.
+    #[instrument(skip(self), fields(op = "health"))]
     pub async fn health(&self) -> Result<HealthReport, StorageError> {
         let (doc_health, blob_health) = tokio::join!(
             self.doc_adapter.health(),
@@ -343,6 +464,37 @@ impl StorageRouter {
     /// Return a reference to the blob adapter.
     pub fn blob_adapter(&self) -> &dyn BlobStorageAdapter {
         self.blob_adapter.as_ref()
+    }
+}
+
+/// Check that the adapter provides all required capabilities.
+fn check_capabilities(
+    actual: &AdapterCapabilities,
+    required: &RequiredCapabilities,
+) -> Result<(), StartupError> {
+    let mut missing = Vec::new();
+    if required.transactions && !actual.transactions {
+        missing.push("transactions");
+    }
+    if required.full_text_search && !actual.full_text_search {
+        missing.push("full_text_search");
+    }
+    if required.watch && !actual.watch {
+        missing.push("watch");
+    }
+    if required.batch_operations && !actual.batch_operations {
+        missing.push("batch_operations");
+    }
+    if required.encryption && !actual.encryption {
+        missing.push("encryption");
+    }
+    if missing.is_empty() {
+        Ok(())
+    } else {
+        Err(StartupError::CapabilityMismatch(format!(
+            "adapter missing required capabilities: {}",
+            missing.join(", ")
+        )))
     }
 }
 
@@ -658,5 +810,159 @@ mod tests {
         assert_eq!(worst_status(HealthStatus::Healthy, HealthStatus::Unhealthy), HealthStatus::Unhealthy);
         assert_eq!(worst_status(HealthStatus::Unhealthy, HealthStatus::Degraded), HealthStatus::Unhealthy);
         assert_eq!(worst_status(HealthStatus::Degraded, HealthStatus::Unhealthy), HealthStatus::Unhealthy);
+    }
+
+    // =========================================================================
+    // Test: Capability checking
+    // =========================================================================
+
+    #[test]
+    fn capability_check_passes_when_all_met() {
+        let caps = AdapterCapabilities {
+            indexing: true,
+            transactions: true,
+            full_text_search: false,
+            watch: false,
+            batch_operations: true,
+            encryption: false,
+        };
+        let required = RequiredCapabilities {
+            transactions: true,
+            batch_operations: true,
+            ..Default::default()
+        };
+        assert!(check_capabilities(&caps, &required).is_ok());
+    }
+
+    #[test]
+    fn capability_check_fails_on_mismatch() {
+        let caps = AdapterCapabilities {
+            indexing: true,
+            transactions: false,
+            full_text_search: false,
+            watch: false,
+            batch_operations: true,
+            encryption: false,
+        };
+        let required = RequiredCapabilities {
+            transactions: true,
+            ..Default::default()
+        };
+        let err = check_capabilities(&caps, &required).unwrap_err();
+        assert!(err.to_string().contains("transactions"));
+    }
+
+    // =========================================================================
+    // Test: from_config startup sequence
+    // =========================================================================
+
+    #[tokio::test]
+    async fn from_config_resolves_adapters_and_checks_health() {
+        let config = StorageConfig {
+            document_adapter: "sqlite".into(),
+            blob_adapter: "filesystem".into(),
+            timeouts: TimeoutConfig::default(),
+            required_capabilities: RequiredCapabilities::default(),
+        };
+
+        let doc_factory: DocAdapterFactory = Box::new(|name| {
+            if name == "sqlite" {
+                Some(Arc::new(HealthDocAdapter(HealthStatus::Healthy)) as Arc<dyn DocumentStorageAdapter>)
+            } else {
+                None
+            }
+        });
+
+        let blob_factory: BlobAdapterFactory = Box::new(|name| {
+            if name == "filesystem" {
+                Some(Arc::new(HealthBlobAdapter(HealthStatus::Healthy)) as Arc<dyn BlobStorageAdapter>)
+            } else {
+                None
+            }
+        });
+
+        let router = StorageRouter::from_config(config, &doc_factory, &blob_factory).await;
+        assert!(router.is_ok());
+    }
+
+    #[tokio::test]
+    async fn from_config_rejects_unknown_adapter() {
+        let config = StorageConfig {
+            document_adapter: "postgres".into(),
+            blob_adapter: "filesystem".into(),
+            timeouts: TimeoutConfig::default(),
+            required_capabilities: RequiredCapabilities::default(),
+        };
+
+        let doc_factory: DocAdapterFactory = Box::new(|_| None);
+        let blob_factory: BlobAdapterFactory = Box::new(|name| {
+            if name == "filesystem" {
+                Some(Arc::new(HealthBlobAdapter(HealthStatus::Healthy)) as Arc<dyn BlobStorageAdapter>)
+            } else {
+                None
+            }
+        });
+
+        let result = StorageRouter::from_config(config, &doc_factory, &blob_factory).await;
+        assert!(matches!(result, Err(StartupError::UnknownDocumentAdapter(_))));
+    }
+
+    #[tokio::test]
+    async fn from_config_rejects_capability_mismatch() {
+        let config = StorageConfig {
+            document_adapter: "sqlite".into(),
+            blob_adapter: "filesystem".into(),
+            timeouts: TimeoutConfig::default(),
+            required_capabilities: RequiredCapabilities {
+                encryption: true,
+                ..Default::default()
+            },
+        };
+
+        let doc_factory: DocAdapterFactory = Box::new(|name| {
+            if name == "sqlite" {
+                Some(Arc::new(HealthDocAdapter(HealthStatus::Healthy)) as Arc<dyn DocumentStorageAdapter>)
+            } else {
+                None
+            }
+        });
+        let blob_factory: BlobAdapterFactory = Box::new(|name| {
+            if name == "filesystem" {
+                Some(Arc::new(HealthBlobAdapter(HealthStatus::Healthy)) as Arc<dyn BlobStorageAdapter>)
+            } else {
+                None
+            }
+        });
+
+        let result = StorageRouter::from_config(config, &doc_factory, &blob_factory).await;
+        assert!(matches!(result, Err(StartupError::CapabilityMismatch(_))));
+    }
+
+    #[tokio::test]
+    async fn from_config_rejects_unhealthy_adapters() {
+        let config = StorageConfig {
+            document_adapter: "sqlite".into(),
+            blob_adapter: "filesystem".into(),
+            timeouts: TimeoutConfig::default(),
+            required_capabilities: RequiredCapabilities::default(),
+        };
+
+        let doc_factory: DocAdapterFactory = Box::new(|name| {
+            if name == "sqlite" {
+                Some(Arc::new(HealthDocAdapter(HealthStatus::Unhealthy)) as Arc<dyn DocumentStorageAdapter>)
+            } else {
+                None
+            }
+        });
+        let blob_factory: BlobAdapterFactory = Box::new(|name| {
+            if name == "filesystem" {
+                Some(Arc::new(HealthBlobAdapter(HealthStatus::Healthy)) as Arc<dyn BlobStorageAdapter>)
+            } else {
+                None
+            }
+        });
+
+        let result = StorageRouter::from_config(config, &doc_factory, &blob_factory).await;
+        assert!(matches!(result, Err(StartupError::HealthCheckFailed(_))));
     }
 }

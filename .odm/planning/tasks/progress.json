@@ -146,7 +146,8 @@
     "executive-summary-remediation:3.2",
     "executive-summary-remediation:3.3",
     "executive-summary-remediation:3.4",
-    "architecture-migration:4.2"
+    "architecture-migration:4.2",
+    "architecture-migration:4.3"
   ],
   "history": [
     {
@@ -781,7 +782,16 @@
       "plan": "architecture-migration.md",
       "title": "Filesystem Blob Adapter",
       "timestamp": "2026-03-29T00:00:00Z",
+      "commit": "3fb3e39",
       "tasks_completed": 5,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "4.3",
+      "plan": "architecture-migration.md",
+      "title": "Storage Router",
+      "timestamp": "2026-03-29T00:00:00Z",
+      "tasks_completed": 6,
       "tasks_deferred": 0
     }
   ]

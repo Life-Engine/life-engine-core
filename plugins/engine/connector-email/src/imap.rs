@@ -172,14 +172,20 @@ impl ImapClient {
             "connecting to IMAP server"
         );
 
-        let tcp = TcpStream::connect((&*self.config.host, self.config.port))
-            .await
-            .context("failed to connect to IMAP server")?;
+        let connect_timeout = std::time::Duration::from_secs(30);
+
+        let tcp = tokio::time::timeout(
+            connect_timeout,
+            TcpStream::connect((&*self.config.host, self.config.port)),
+        )
+        .await
+        .map_err(|_| anyhow::anyhow!("IMAP connection timed out after {connect_timeout:?}"))?
+        .context("failed to connect to IMAP server")?;
 
         let tls = async_native_tls::TlsConnector::new();
-        let tls_stream = tls
-            .connect(&self.config.host, tcp)
+        let tls_stream = tokio::time::timeout(connect_timeout, tls.connect(&self.config.host, tcp))
             .await
+            .map_err(|_| anyhow::anyhow!("IMAP TLS handshake timed out after {connect_timeout:?}"))?
             .context("TLS handshake failed")?;
 
         let client = async_imap::Client::new(tls_stream);
@@ -212,9 +218,15 @@ impl ImapClient {
             "connecting to IMAP server (plain, no TLS)"
         );
 
-        let tcp = TcpStream::connect((&*self.config.host, self.config.port))
-            .await
-            .context("failed to connect to IMAP server")?;
+        let connect_timeout = std::time::Duration::from_secs(30);
+
+        let tcp = tokio::time::timeout(
+            connect_timeout,
+            TcpStream::connect((&*self.config.host, self.config.port)),
+        )
+        .await
+        .map_err(|_| anyhow::anyhow!("IMAP connection timed out after {connect_timeout:?}"))?
+        .context("failed to connect to IMAP server")?;
 
         let client = async_imap::Client::new(tcp);
         let session = client

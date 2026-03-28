@@ -124,7 +124,10 @@ impl GoogleContactsClient {
             config,
             sync_state: GoogleSyncState::default(),
             token_cache: None,
-            http_client: reqwest::Client::new(),
+            http_client: reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(30))
+                .build()
+                .expect("failed to build HTTP client"),
             api_base_url: PEOPLE_API_BASE.to_string(),
             token_endpoint_url: TOKEN_ENDPOINT.to_string(),
         }
@@ -141,7 +144,10 @@ impl GoogleContactsClient {
             config,
             sync_state: GoogleSyncState::default(),
             token_cache: None,
-            http_client: reqwest::Client::new(),
+            http_client: reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(30))
+                .build()
+                .expect("failed to build HTTP client"),
             api_base_url,
             token_endpoint_url,
         }
@@ -712,6 +718,7 @@ pub fn map_google_person(person: &GooglePerson) -> Contact {
         name: ContactName {
             given,
             family,
+            display: None,
             prefix: None,
             suffix: None,
             middle: None,

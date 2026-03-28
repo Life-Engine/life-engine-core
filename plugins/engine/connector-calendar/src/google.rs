@@ -16,6 +16,19 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
+/// Default HTTP request timeout for Google API calls.
+#[cfg(feature = "integration")]
+const HTTP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// Build an HTTP client with the default request timeout.
+#[cfg(feature = "integration")]
+fn http_client() -> reqwest::Client {
+    reqwest::Client::builder()
+        .timeout(HTTP_TIMEOUT)
+        .build()
+        .expect("failed to build HTTP client")
+}
+
 // ---------------------------------------------------------------------------
 // Error types
 // ---------------------------------------------------------------------------
@@ -215,7 +228,7 @@ pub async fn exchange_code(
     code_verifier: &str,
     client_secret: &str,
 ) -> Result<TokenState, GoogleApiError> {
-    let client = reqwest::Client::new();
+    let client = http_client();
     let response = client
         .post(&config.token_endpoint)
         .form(&[
@@ -269,7 +282,7 @@ pub async fn refresh_access_token(
     refresh_token: &str,
     client_secret: &str,
 ) -> Result<TokenState, GoogleApiError> {
-    let client = reqwest::Client::new();
+    let client = http_client();
     let response = client
         .post(&config.token_endpoint)
         .form(&[
@@ -619,7 +632,7 @@ impl GoogleCalendarClient {
         client_secret: &str,
     ) -> Result<Vec<GoogleCalendarListEntry>, GoogleApiError> {
         let access_token = self.ensure_valid_token(client_secret).await?;
-        let client = reqwest::Client::new();
+        let client = http_client();
 
         let response = client
             .get("https://www.googleapis.com/calendar/v3/users/me/calendarList")
@@ -660,7 +673,7 @@ impl GoogleCalendarClient {
         client_secret: &str,
     ) -> Result<GoogleEventsListResponse, GoogleApiError> {
         let access_token = self.ensure_valid_token(client_secret).await?;
-        let client = reqwest::Client::new();
+        let client = http_client();
 
         let encoded_id = urlencoding::encode(calendar_id);
         let url_str =
@@ -728,7 +741,7 @@ impl GoogleCalendarClient {
         client_secret: &str,
     ) -> Result<GoogleEvent, GoogleApiError> {
         let access_token = self.ensure_valid_token(client_secret).await?;
-        let client = reqwest::Client::new();
+        let client = http_client();
 
         let encoded_cal_id = urlencoding::encode(calendar_id);
         let encoded_evt_id = urlencoding::encode(event_id);

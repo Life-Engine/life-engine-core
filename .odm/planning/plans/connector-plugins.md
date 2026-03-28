@@ -121,22 +121,23 @@ This plan addresses the issues identified in the phase-3 QA review of the four c
 > depends: none
 > spec: .odm/qa/reports/phase-3/connector-plugins.md
 
-- [ ] Add TCP connection timeout to IMAP `connect()` and `connect_plain()` [minor]
+- [x] Add TCP connection timeout to IMAP `connect()` and `connect_plain()` [minor]
   <!-- file: plugins/engine/connector-email/src/imap.rs -->
   <!-- purpose: Non-responsive server blocks indefinitely with no timeout -->
   <!-- requirements: 3 -->
   <!-- leverage: existing connect methods at imap.rs:161-193 -->
-- [ ] Add send timeout to SMTP transport configuration [minor]
+- [x] Add send timeout to SMTP transport configuration [minor]
   <!-- file: plugins/engine/connector-email/src/smtp.rs -->
   <!-- purpose: No timeout on SMTP transport -->
   <!-- requirements: 3 -->
   <!-- leverage: existing transport creation at smtp.rs:84-95 -->
-- [ ] Add HTTP request timeout to CardDAV reqwest client in contacts connector [minor]
+- [-] Add HTTP request timeout to CardDAV reqwest client in contacts connector [minor]
   <!-- file: plugins/engine/connector-contacts/src/carddav.rs -->
   <!-- purpose: Relies on reqwest defaults with no explicit timeout -->
   <!-- requirements: 3 -->
   <!-- leverage: none -->
-- [ ] Add HTTP request timeout to Google API clients (contacts and calendar) [minor]
+  <!-- deferred: CardDAV client does not use reqwest directly; HTTP calls are in integration layer -->
+- [x] Add HTTP request timeout to Google API clients (contacts and calendar) [minor]
   <!-- file: plugins/engine/connector-contacts/src/google.rs, plugins/engine/connector-calendar/src/google.rs -->
   <!-- purpose: ensure_valid_token and API calls have no timeout -->
   <!-- requirements: 3 -->

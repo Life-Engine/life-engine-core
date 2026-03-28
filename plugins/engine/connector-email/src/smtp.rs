@@ -81,16 +81,20 @@ impl SmtpClient {
 
         let creds = Credentials::new(self.config.username.clone(), password.to_string());
 
+        let smtp_timeout = std::time::Duration::from_secs(30);
+
         let transport = if self.config.use_tls {
             AsyncSmtpTransport::<Tokio1Executor>::relay(&self.config.host)
                 .context("failed to create SMTP relay")?
                 .port(self.config.port)
                 .credentials(creds)
+                .timeout(Some(smtp_timeout))
                 .build()
         } else {
             AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(&self.config.host)
                 .port(self.config.port)
                 .credentials(creds)
+                .timeout(Some(smtp_timeout))
                 .build()
         };
 

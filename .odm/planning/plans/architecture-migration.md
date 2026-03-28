@@ -144,51 +144,51 @@ Build the schema validation engine and versioning rules. The data layer depends 
 
 ### 2.1 — Schema Registry
 
-- [ ] Implement `SchemaRegistry` in `packages/traits/src/schema.rs`: a registry that loads JSON Schema files at startup and exposes `validate(collection: &str, document: &Value) -> Result<(), ValidationErrors>`. The registry holds compiled schemas in a `HashMap<String, CompiledSchema>`. Use the `jsonschema` crate for Draft 2020-12 validation. Schemas are loaded from two sources: CDM schema files bundled with Core, and plugin manifest-declared schemas discovered at startup.
+- [x] Implement `SchemaRegistry` in `packages/traits/src/schema.rs`: a registry that loads JSON Schema files at startup and exposes `validate(collection: &str, document: &Value) -> Result<(), ValidationErrors>`. The registry holds compiled schemas in a `HashMap<String, CompiledSchema>`. Use the `jsonschema` crate for Draft 2020-12 validation. Schemas are loaded from two sources: CDM schema files bundled with Core, and plugin manifest-declared schemas discovered at startup.
   <!-- files: packages/traits/src/schema.rs -->
   <!-- purpose: Centralise schema validation so StorageContext and plugin system can reference it -->
   <!-- requirements: schema-and-validation 1.1, 1.2, 1.3 -->
 
-- [ ] Implement schema loading from plugin manifests: when a plugin declares `collections.{name}.schema = "path/to/schema.json"` in its manifest, the registry loads that schema file relative to the plugin directory. If the schema file is missing or invalid JSON Schema, fail at startup with a clear error.
+- [x] Implement schema loading from plugin manifests: when a plugin declares `collections.{name}.schema = "path/to/schema.json"` in its manifest, the registry loads that schema file relative to the plugin directory. If the schema file is missing or invalid JSON Schema, fail at startup with a clear error.
   <!-- files: packages/traits/src/schema.rs -->
   <!-- purpose: Enable plugins to declare and enforce custom schemas -->
   <!-- requirements: schema-and-validation 2.1, 2.2 -->
 
-- [ ] Implement validation behaviour: validation applies to write operations only (create, update, partial_update). Read operations never validate. If a collection has no registered schema, writes pass through without validation. If a collection has a schema and `strict: true` in its declaration, additional properties beyond those in the schema are rejected. If `strict: false` (default), additional properties are allowed.
+- [x] Implement validation behaviour: validation applies to write operations only (create, update, partial_update). Read operations never validate. If a collection has no registered schema, writes pass through without validation. If a collection has a schema and `strict: true` in its declaration, additional properties beyond those in the schema are rejected. If `strict: false` (default), additional properties are allowed.
   <!-- files: packages/traits/src/schema.rs -->
   <!-- purpose: Define when and how validation is applied -->
   <!-- requirements: schema-and-validation 3.1, 3.2, 3.3 -->
 
-- [ ] Implement system-managed base field handling: the fields `id`, `created_at`, and `updated_at` are managed by StorageContext, not by callers. The schema registry strips these fields before validation (they are always valid because the system controls them) and injects them after validation. This prevents plugins from setting invalid IDs or timestamps.
+- [x] Implement system-managed base field handling: the fields `id`, `created_at`, and `updated_at` are managed by StorageContext, not by callers. The schema registry strips these fields before validation (they are always valid because the system controls them) and injects them after validation. This prevents plugins from setting invalid IDs or timestamps.
   <!-- files: packages/traits/src/schema.rs -->
   <!-- purpose: Ensure system-managed fields are always correct -->
   <!-- requirements: schema-and-validation 4.1, 4.2 -->
 
-- [ ] Write unit tests: validate a valid CDM document against its schema, validate an invalid document and check error messages, test strict vs non-strict mode, test schema-less collection pass-through, test system field stripping.
+- [x] Write unit tests: validate a valid CDM document against its schema, validate an invalid document and check error messages, test strict vs non-strict mode, test schema-less collection pass-through, test system field stripping.
   <!-- files: packages/traits/tests/schema_tests.rs -->
   <!-- purpose: Verify schema validation behaviour comprehensively -->
   <!-- requirements: schema-and-validation 1.1 through 4.2 -->
 
 ### 2.2 — Index Hints
 
-- [ ] Implement index hint parsing from plugin manifest collection declarations. Index hints are suggestions to storage adapters, not requirements. The schema registry parses `indexes: [{ fields: ["email"], unique: true }]` from manifest collection blocks and stores them alongside the schema. Adapters query index hints when creating collections and decide whether to honour them based on their capabilities.
+- [x] Implement index hint parsing from plugin manifest collection declarations. Index hints are suggestions to storage adapters, not requirements. The schema registry parses `indexes: [{ fields: ["email"], unique: true }]` from manifest collection blocks and stores them alongside the schema. Adapters query index hints when creating collections and decide whether to honour them based on their capabilities.
   <!-- files: packages/traits/src/schema.rs -->
   <!-- purpose: Allow plugins to suggest optimal indexes without coupling to adapter internals -->
   <!-- requirements: schema-and-validation 5.1, 5.2 -->
 
 ### 2.3 — Schema Versioning Rules
 
-- [ ] Implement schema compatibility checker in `packages/traits/src/schema_versioning.rs`: given two schema versions (old and new), classify the change as non-breaking (additive) or breaking. Non-breaking changes: adding optional fields, adding new enum values, relaxing constraints (e.g. removing `required` from a field), adding new `$defs`. Breaking changes: removing fields, renaming fields, changing field types, adding required fields, removing enum values. The checker operates on the JSON Schema AST, comparing property sets, required arrays, and type declarations.
+- [x] Implement schema compatibility checker in `packages/traits/src/schema_versioning.rs`: given two schema versions (old and new), classify the change as non-breaking (additive) or breaking. Non-breaking changes: adding optional fields, adding new enum values, relaxing constraints (e.g. removing `required` from a field), adding new `$defs`. Breaking changes: removing fields, renaming fields, changing field types, adding required fields, removing enum values. The checker operates on the JSON Schema AST, comparing property sets, required arrays, and type declarations.
   <!-- files: packages/traits/src/schema_versioning.rs -->
   <!-- purpose: Enforce the additive-only rule within major SDK versions -->
   <!-- requirements: schema-versioning-rules 1.1, 2.1, 2.2, 3.1 -->
 
-- [ ] Implement deprecation tracking: when a schema field is deprecated, the schema must include a `deprecated: true` annotation on that field's definition. The compatibility checker warns (but does not reject) when deprecated fields are removed in a new major version. Deprecation notices must appear in CHANGELOG entries.
+- [x] Implement deprecation tracking: when a schema field is deprecated, the schema must include a `deprecated: true` annotation on that field's definition. The compatibility checker warns (but does not reject) when deprecated fields are removed in a new major version. Deprecation notices must appear in CHANGELOG entries.
   <!-- files: packages/traits/src/schema_versioning.rs -->
   <!-- purpose: Enable graceful schema evolution with advance deprecation notice -->
   <!-- requirements: schema-versioning-rules 4.1, 4.2 -->
 
-- [ ] Write unit tests: classify known non-breaking changes as compatible, classify known breaking changes as incompatible, test edge cases (enum value addition, required field removal, type widening).
+- [x] Write unit tests: classify known non-breaking changes as compatible, classify known breaking changes as incompatible, test edge cases (enum value addition, required field removal, type widening).
   <!-- files: packages/traits/tests/schema_versioning_tests.rs -->
   <!-- purpose: Verify schema compatibility classification accuracy -->
   <!-- requirements: schema-versioning-rules 1.1 through 4.2 -->

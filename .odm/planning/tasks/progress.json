@@ -129,7 +129,10 @@
     "architecture-migration:1.4",
     "executive-summary-remediation:1.5",
     "executive-summary-remediation:2.1",
-    "backup-and-webhooks:1.9"
+    "backup-and-webhooks:1.9",
+    "architecture-migration:2.1",
+    "architecture-migration:2.2",
+    "architecture-migration:2.3"
   ],
   "history": [
     {
@@ -637,6 +640,30 @@
       "title": "Minor Cleanup and Hardening",
       "timestamp": "2026-03-29T00:00:00Z",
       "tasks_completed": 6,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "2.1",
+      "plan": "architecture-migration.md",
+      "title": "Schema Registry",
+      "timestamp": "2026-03-29T00:00:00Z",
+      "tasks_completed": 5,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "2.2",
+      "plan": "architecture-migration.md",
+      "title": "Index Hints",
+      "timestamp": "2026-03-29T00:00:00Z",
+      "tasks_completed": 1,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "2.3",
+      "plan": "architecture-migration.md",
+      "title": "Schema Versioning Rules",
+      "timestamp": "2026-03-29T00:00:00Z",
+      "tasks_completed": 3,
       "tasks_deferred": 0
     }
   ]

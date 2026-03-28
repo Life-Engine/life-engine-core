@@ -110,17 +110,17 @@ This plan addresses the 27 issues identified in the phase-3 QA review of the bac
 > depends: 1.1
 > spec: .odm/qa/reports/phase-3/backup-and-webhooks.md
 
-- [ ] Encrypt backup manifests or provide an option to encrypt them [critical]
+- [x] Encrypt backup manifests or provide an option to encrypt them [critical]
   <!-- file: plugins/engine/backup/src/engine.rs -->
   <!-- purpose: Unencrypted manifests reveal collection names, record counts, timestamps to backend operators -->
   <!-- requirements: 3 -->
   <!-- leverage: existing manifest writing at engine.rs:83-85 -->
-- [ ] If manifests remain unencrypted, document the security trade-off explicitly in code and docs [critical]
+- [x] If manifests remain unencrypted, document the security trade-off explicitly in code and docs [critical]
   <!-- file: plugins/engine/backup/src/engine.rs -->
   <!-- purpose: Users must understand what metadata is exposed -->
   <!-- requirements: 3 -->
   <!-- leverage: none -->
-- [ ] Surface corrupted manifest errors in `list_backups` instead of silently dropping them [minor]
+- [x] Surface corrupted manifest errors in `list_backups` instead of silently dropping them [minor]
   <!-- file: plugins/engine/backup/src/engine.rs -->
   <!-- purpose: .flatten() on Results hides deserialization failures -->
   <!-- requirements: 18 -->
@@ -130,17 +130,17 @@ This plan addresses the 27 issues identified in the phase-3 QA review of the bac
 > depends: none
 > spec: .odm/qa/reports/phase-3/backup-and-webhooks.md
 
-- [ ] Implement S3 list pagination using `ContinuationToken` loop until `is_truncated` is false [major]
+- [x] Implement S3 list pagination using `ContinuationToken` loop until `is_truncated` is false [major]
   <!-- file: plugins/engine/backup/src/backend/s3.rs -->
   <!-- purpose: list_objects_v2 returns max 1000 objects; backups beyond that are silently truncated -->
   <!-- requirements: 4 -->
   <!-- leverage: existing list method at s3.rs:121-148 -->
-- [ ] Cache S3 client in `S3Backend` struct, create once in `new()` [major]
+- [x] Cache S3 client in `S3Backend` struct, create once in `new()` [major]
   <!-- file: plugins/engine/backup/src/backend/s3.rs -->
   <!-- purpose: build_sdk_client() is called per operation, wasting HTTP connection setup and TLS handshakes -->
   <!-- requirements: 5 -->
   <!-- leverage: existing build_sdk_client at s3.rs:166-183 -->
-- [ ] Remove unnecessary `head_object` check before `delete_object` [minor]
+- [x] Remove unnecessary `head_object` check before `delete_object` [minor]
   <!-- file: plugins/engine/backup/src/backend/s3.rs -->
   <!-- purpose: TOCTOU race; delete_object on non-existent keys is already a no-op in S3 -->
   <!-- requirements: 20 -->

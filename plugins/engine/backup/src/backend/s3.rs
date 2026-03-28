@@ -33,11 +33,19 @@ impl std::fmt::Debug for S3BackupConfig {
 /// S3-compatible backup backend.
 pub struct S3Backend {
     config: S3BackupConfig,
+    #[cfg(feature = "integration")]
+    client: aws_sdk_s3::Client,
 }
 
 impl S3Backend {
     pub fn new(config: S3BackupConfig) -> Self {
-        Self { config }
+        #[cfg(feature = "integration")]
+        let client = Self::build_sdk_client_from_config(&config);
+        Self {
+            config,
+            #[cfg(feature = "integration")]
+            client,
+        }
     }
 
     #[cfg_attr(not(feature = "integration"), allow(dead_code))]
@@ -61,10 +69,9 @@ impl BackupBackend for S3Backend {
     async fn put(&self, key: &str, data: &[u8]) -> anyhow::Result<()> {
         use aws_sdk_s3::primitives::ByteStream;
 
-        let client = self.build_sdk_client();
         let full_key = self.full_key(key);
 
-        client
+        self.client
             .put_object()
             .bucket(&self.config.bucket)
             .key(&full_key)
@@ -76,10 +83,9 @@ impl BackupBackend for S3Backend {
     }
 
     async fn get(&self, key: &str) -> anyhow::Result<Vec<u8>> {
-        let client = self.build_sdk_client();
         let full_key = self.full_key(key);
 
-        let resp = client
+        let resp = self.client
             .get_object()
             .bucket(&self.config.bucket)
             .key(&full_key)
@@ -91,67 +97,68 @@ impl BackupBackend for S3Backend {
     }
 
     async fn delete(&self, key: &str) -> anyhow::Result<bool> {
-        let client = self.build_sdk_client();
         let full_key = self.full_key(key);
 
-        let exists = client
-            .head_object()
+        // S3 delete on non-existent keys is a no-op, so no need to check first.
+        self.client
+            .delete_object()
             .bucket(&self.config.bucket)
             .key(&full_key)
             .send()
-            .await
-            .is_ok();
+            .await?;
 
-        if exists {
-            client
-                .delete_object()
-                .bucket(&self.config.bucket)
-                .key(&full_key)
-                .send()
-                .await?;
-        }
-
-        Ok(exists)
+        Ok(true)
     }
 
     async fn list(&self, prefix: &str) -> anyhow::Result<Vec<StoredBackup>> {
-        let client = self.build_sdk_client();
         let full_prefix = self.full_key(prefix);
-
-        let resp = client
-            .list_objects_v2()
-            .bucket(&self.config.bucket)
-            .prefix(&full_prefix)
-            .send()
-            .await?;
-
         let mut results = Vec::new();
-        for obj in resp.contents() {
-            let key = obj.key().unwrap_or_default().to_string();
-            let size = obj.size().unwrap_or_default() as u64;
-            let last_modified = obj
-                .last_modified()
-                .and_then(|dt| {
-                    chrono::DateTime::from_timestamp(dt.secs(), dt.subsec_nanos())
-                })
-                .map(|dt| dt.to_rfc3339())
-                .unwrap_or_default();
+        let mut continuation_token: Option<String> = None;
 
-            results.push(StoredBackup {
-                key,
-                size,
-                last_modified,
-            });
+        loop {
+            let mut req = self.client
+                .list_objects_v2()
+                .bucket(&self.config.bucket)
+                .prefix(&full_prefix);
+
+            if let Some(ref token) = continuation_token {
+                req = req.continuation_token(token);
+            }
+
+            let resp = req.send().await?;
+
+            for obj in resp.contents() {
+                let key = obj.key().unwrap_or_default().to_string();
+                let size = obj.size().unwrap_or_default() as u64;
+                let last_modified = obj
+                    .last_modified()
+                    .and_then(|dt| {
+                        chrono::DateTime::from_timestamp(dt.secs(), dt.subsec_nanos())
+                    })
+                    .map(|dt| dt.to_rfc3339())
+                    .unwrap_or_default();
+
+                results.push(StoredBackup {
+                    key,
+                    size,
+                    last_modified,
+                });
+            }
+
+            if resp.is_truncated() == Some(true) {
+                continuation_token = resp.next_continuation_token().map(|s| s.to_string());
+            } else {
+                break;
+            }
         }
 
         Ok(results)
     }
 
     async fn exists(&self, key: &str) -> anyhow::Result<bool> {
-        let client = self.build_sdk_client();
         let full_key = self.full_key(key);
 
-        Ok(client
+        Ok(self.client
             .head_object()
             .bucket(&self.config.bucket)
             .key(&full_key)
@@ -163,22 +170,22 @@ impl BackupBackend for S3Backend {
 
 #[cfg(feature = "integration")]
 impl S3Backend {
-    fn build_sdk_client(&self) -> aws_sdk_s3::Client {
+    fn build_sdk_client_from_config(config: &S3BackupConfig) -> aws_sdk_s3::Client {
         let creds = aws_sdk_s3::config::Credentials::new(
-            &self.config.access_key_id,
-            &self.config.secret_access_key,
+            &config.access_key_id,
+            &config.secret_access_key,
             None,
             None,
             "life-engine-backup",
         );
-        let config = aws_sdk_s3::config::Builder::new()
-            .endpoint_url(&self.config.endpoint)
-            .region(aws_sdk_s3::config::Region::new(self.config.region.clone()))
+        let sdk_config = aws_sdk_s3::config::Builder::new()
+            .endpoint_url(&config.endpoint)
+            .region(aws_sdk_s3::config::Region::new(config.region.clone()))
             .credentials_provider(creds)
             .force_path_style(true)
             .behavior_version_latest()
             .build();
-        aws_sdk_s3::Client::from_conf(config)
+        aws_sdk_s3::Client::from_conf(sdk_config)
     }
 }
 

@@ -1,18 +1,81 @@
-//! Listener: bind address+port, optional TLS, startup warnings (Requirements 15, 16).
+//! Listener: bind address+port, optional TLS, middleware stack, startup warnings
+//! (Requirements 11, 15, 16).
 
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use axum::Router;
+use life_engine_auth::{AuthProvider, RateLimiter};
 use tokio::net::TcpListener;
 use tokio_rustls::TlsAcceptor;
+use tower_http::catch_panic::CatchPanicLayer;
 
-use crate::config::{ListenerConfig, TlsConfig};
+use crate::config::ListenerConfig;
+use crate::config::TlsConfig;
 use crate::error::RestError;
+use crate::middleware::auth::{AuthState, auth_middleware};
+use crate::middleware::cors::cors_layer;
+use crate::middleware::error_handler::panic_handler;
+use crate::middleware::logging::logging_middleware;
+use crate::router::build::to_axum_path;
+
+/// Build a `Router` with the full middleware stack applied (Requirement 11).
+///
+/// Middleware execution order (outermost → innermost):
+///   CatchPanic → CORS → Auth → Logging → Handler
+///
+/// TLS is handled at the TCP level in [`serve`], not as a middleware layer.
+pub fn build_layered_router(
+    router: Router,
+    config: &ListenerConfig,
+    auth_provider: Arc<dyn AuthProvider>,
+) -> Router {
+    let public_routes = collect_public_routes(config);
+    let auth_state = AuthState {
+        provider: auth_provider,
+        rate_limiter: Arc::new(RateLimiter::new()),
+        public_routes: Arc::new(public_routes),
+    };
+
+    let bind_addr = format!("{}:{}", config.address, config.port);
+
+    router
+        // Innermost: logging — records handler duration and status.
+        .layer(axum::middleware::from_fn(logging_middleware))
+        // Auth — validates tokens, inserts Identity extension.
+        .layer(axum::middleware::from_fn_with_state(
+            auth_state,
+            auth_middleware,
+        ))
+        // CORS — handles preflight before auth.
+        .layer(cors_layer(&bind_addr, &[]))
+        // Outermost: panic handler — catches panics from any layer.
+        .layer(CatchPanicLayer::custom(panic_handler))
+}
+
+/// Collect public route keys (`"METHOD /path"`) from the listener config.
+///
+/// Uses Axum path syntax (`{param}`) so that the auth middleware can
+/// match against the `MatchedPath` provided by the router.
+fn collect_public_routes(config: &ListenerConfig) -> HashSet<String> {
+    let mut public = HashSet::new();
+    for handler in &config.handlers {
+        for route in &handler.routes {
+            if route.public {
+                let axum_path = to_axum_path(&route.path);
+                public.insert(format!("{} {}", route.method.to_uppercase(), axum_path));
+            }
+        }
+    }
+    public
+}
 
 /// Start serving the given router on the configured address and port.
 ///
 /// If TLS is configured, uses `tokio-rustls` for termination (Requirement 15).
 /// Logs a warning when bound to `0.0.0.0` (Requirement 16).
+///
+/// The router should already have middleware applied via [`build_layered_router`].
 pub async fn serve(config: &ListenerConfig, router: Router) -> Result<(), RestError> {
     let addr = format!("{}:{}", config.address, config.port);
 

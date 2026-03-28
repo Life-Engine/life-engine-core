@@ -1,5 +1,6 @@
 //! Tests for REST transport config, validation, route merging, and router.
 
+mod listener_test;
 mod middleware_test;
 
 use crate::config::{

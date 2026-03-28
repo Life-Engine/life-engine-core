@@ -860,34 +860,34 @@ Build the HTTP entry point: listener configuration, route merging, REST and Grap
 
 ### 9.5 — Middleware Stack
 
-- [ ] Implement CORS middleware: permissive when bound to `127.0.0.1` (allow all origins), strict when bound to `0.0.0.0` (configured allowed origins only). Use `tower-http::CorsLayer`.
+- [x] Implement CORS middleware: permissive when bound to `127.0.0.1` (allow all origins), strict when bound to `0.0.0.0` (configured allowed origins only). Use `tower-http::CorsLayer`.
   <!-- files: packages/transport-rest/src/middleware/cors.rs -->
   <!-- purpose: Handle cross-origin requests appropriately based on exposure -->
   <!-- requirements: transport-layer 12.1, 12.2, 12.3 -->
 
-- [ ] Implement auth middleware: validate tokens via Pocket ID (OIDC). On success, insert `Extension<Identity>` into the request. On failure, return 401. Routes marked `public: true` bypass auth entirely. The middleware reads from the OIDC provider's JWKS endpoint to validate JWTs.
+- [x] Implement auth middleware: validate tokens via Pocket ID (OIDC). On success, insert `Extension<Identity>` into the request. On failure, return 401. Routes marked `public: true` bypass auth entirely. The middleware reads from the OIDC provider's JWKS endpoint to validate JWTs.
   <!-- files: packages/transport-rest/src/middleware/auth.rs -->
   <!-- purpose: Authenticate requests at the transport boundary -->
   <!-- requirements: transport-layer 13.1, 13.2, 13.3, 13.4, 14.1, 14.2 -->
 
-- [ ] Implement structured JSON logging middleware: log every request with method, path, status code, and duration as structured JSON. Use `tracing` with `tracing-subscriber`'s JSON formatter.
+- [x] Implement structured JSON logging middleware: log every request with method, path, status code, and duration as structured JSON. Use `tracing` with `tracing-subscriber`'s JSON formatter.
   <!-- files: packages/transport-rest/src/middleware/logging.rs -->
   <!-- purpose: Provide operational request visibility -->
   <!-- requirements: transport-layer 11.1, 11.2 -->
 
-- [ ] Implement error handling middleware: catch panics and unhandled errors, translate them into a consistent JSON error shape. Never expose internal error details to the client.
+- [x] Implement error handling middleware: catch panics and unhandled errors, translate them into a consistent JSON error shape. Never expose internal error details to the client.
   <!-- files: packages/transport-rest/src/middleware/error.rs -->
   <!-- purpose: Ensure all errors produce well-formed responses -->
   <!-- requirements: transport-layer 11.1, 11.3 -->
 
 ### 9.6 — Listener and TLS
 
-- [ ] Implement listener socket binding: bind to the configured address and port, apply the middleware stack (TLS → CORS → Auth → Logging → Error), mount the Axum router. When TLS is configured, use `tokio-rustls` to terminate TLS. Log a startup warning when bound to `0.0.0.0`.
+- [x] Implement listener socket binding: bind to the configured address and port, apply the middleware stack (TLS → CORS → Auth → Logging → Error), mount the Axum router. When TLS is configured, use `tokio-rustls` to terminate TLS. Log a startup warning when bound to `0.0.0.0`.
   <!-- files: packages/transport-rest/src/listener.rs -->
   <!-- purpose: Start the HTTP server -->
   <!-- requirements: transport-layer 15.1, 15.2, 15.3, 16.1, 16.2 -->
 
-- [ ] Write integration tests: listener startup with and without TLS, REST and GraphQL requests to the same listener, public route bypasses auth, authenticated route rejects invalid token.
+- [x] Write integration tests: listener startup with and without TLS, REST and GraphQL requests to the same listener, public route bypasses auth, authenticated route rejects invalid token.
   <!-- files: packages/transport-rest/tests/ -->
   <!-- purpose: Verify end-to-end transport behaviour -->
   <!-- requirements: transport-layer 10.1, 10.2, 15.1, 16.1 -->

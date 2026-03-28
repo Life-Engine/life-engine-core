@@ -7,7 +7,7 @@ use life_engine_types::workflow::{
     ResponseMeta, WorkflowError, WorkflowResponse, WorkflowStatus,
 };
 
-use crate::config::{generate_schema, PluginSchemaDeclaration};
+use crate::config::{build_dynamic_schema, generate_schema, PluginSchemaDeclaration};
 use crate::types::{
     is_valid_cdm_collection, translate_request, translate_response, validate_mutation_collection,
     GraphqlRequest, CDM_COLLECTIONS,
@@ -320,4 +320,168 @@ fn mutation_without_collection_variable_passes() {
         variables: HashMap::new(),
     };
     assert!(validate_mutation_collection(&req).is_ok());
+}
+
+// ── Test 8: Mutation detection in translate_request (Req 8.1) ──
+
+#[test]
+fn translate_mutation_sets_graphql_mutation_workflow() {
+    let gql_req = GraphqlRequest {
+        query: "mutation { createTask(title: \"Test\") { id } }".into(),
+        operation_name: None,
+        variables: HashMap::from([("collection".into(), serde_json::json!("tasks"))]),
+    };
+    let wf_req = translate_request(&gql_req, Identity::guest());
+    assert_eq!(wf_req.workflow, "graphql.mutation");
+}
+
+#[test]
+fn translate_query_with_leading_whitespace() {
+    let gql_req = GraphqlRequest {
+        query: "  \n  { tasks { id } }".into(),
+        operation_name: None,
+        variables: HashMap::new(),
+    };
+    let wf_req = translate_request(&gql_req, Identity::guest());
+    assert_eq!(wf_req.workflow, "graphql.query");
+}
+
+// ── Test 9: Variable flattening edge cases (Req 8.1) ──
+
+#[test]
+fn translate_request_flattens_nested_json_variable_to_string() {
+    let gql_req = GraphqlRequest {
+        query: "{ tasks { id } }".into(),
+        operation_name: None,
+        variables: HashMap::from([
+            ("filter".into(), serde_json::json!({"status": "active"})),
+            ("flag".into(), serde_json::json!(true)),
+        ]),
+    };
+    let wf_req = translate_request(&gql_req, Identity::guest());
+    assert_eq!(
+        wf_req.query.get("filter").unwrap(),
+        "{\"status\":\"active\"}"
+    );
+    assert_eq!(wf_req.query.get("flag").unwrap(), "true");
+}
+
+#[test]
+fn translate_request_with_empty_variables() {
+    let gql_req = GraphqlRequest {
+        query: "{ tasks { id } }".into(),
+        operation_name: None,
+        variables: HashMap::new(),
+    };
+    let wf_req = translate_request(&gql_req, Identity::guest());
+    assert!(wf_req.query.is_empty());
+    assert!(wf_req.params.is_empty());
+}
+
+// ── Test 10: Dynamic schema generation (Req 9.1, 9.2) ──
+
+#[test]
+fn build_dynamic_schema_produces_valid_schema() {
+    let declarations = vec![PluginSchemaDeclaration {
+        collection: "tasks".into(),
+        fields: HashMap::from([
+            ("id".into(), "string".into()),
+            ("title".into(), "string".into()),
+            ("completed".into(), "boolean".into()),
+        ]),
+    }];
+    let schema = build_dynamic_schema(&declarations);
+    let sdl = schema.sdl();
+    assert!(sdl.contains("type Tasks"), "schema should contain Tasks type");
+    assert!(sdl.contains("tasks_list"), "schema should contain list query");
+    assert!(sdl.contains("tasks_get"), "schema should contain get query");
+    assert!(sdl.contains("tasks_create"), "schema should contain create mutation");
+    assert!(sdl.contains("tasks_update"), "schema should contain update mutation");
+    assert!(sdl.contains("tasks_delete"), "schema should contain delete mutation");
+}
+
+#[test]
+fn build_dynamic_schema_with_multiple_collections() {
+    let declarations = vec![
+        PluginSchemaDeclaration {
+            collection: "tasks".into(),
+            fields: HashMap::from([("id".into(), "string".into())]),
+        },
+        PluginSchemaDeclaration {
+            collection: "contacts".into(),
+            fields: HashMap::from([
+                ("id".into(), "string".into()),
+                ("email".into(), "string".into()),
+            ]),
+        },
+    ];
+    let schema = build_dynamic_schema(&declarations);
+    let sdl = schema.sdl();
+    assert!(sdl.contains("type Tasks"));
+    assert!(sdl.contains("type Contacts"));
+    assert!(sdl.contains("contacts_list"));
+    assert!(sdl.contains("contacts_get"));
+}
+
+#[test]
+fn build_dynamic_schema_with_no_declarations_still_valid() {
+    let schema = build_dynamic_schema(&[]);
+    let sdl = schema.sdl();
+    assert!(sdl.contains("type Query"), "empty schema still has Query root");
+}
+
+// ── Test 11: Response shape with Created status (Req 8.2) ──
+
+#[test]
+fn translate_created_response_is_success() {
+    let wf_resp = WorkflowResponse {
+        status: WorkflowStatus::Created,
+        data: Some(serde_json::json!({"id": "new-1"})),
+        errors: vec![],
+        meta: ResponseMeta {
+            request_id: "req-c".into(),
+            duration_ms: 3,
+            traces: vec![],
+        },
+    };
+    let (status_code, body) = translate_response(&wf_resp);
+    assert_eq!(status_code, 201);
+    assert!(body.get("data").is_some());
+    assert_eq!(body["data"]["id"], "new-1");
+}
+
+// ��─ Test 12: Multiple errors in response (Req 8.3) ──
+
+#[test]
+fn translate_response_with_multiple_errors() {
+    let wf_resp = WorkflowResponse {
+        status: WorkflowStatus::Invalid,
+        data: None,
+        errors: vec![
+            life_engine_types::workflow::WorkflowError {
+                code: "VALIDATION_ERROR".into(),
+                message: "Field 'title' is required".into(),
+                detail: None,
+            },
+            life_engine_types::workflow::WorkflowError {
+                code: "VALIDATION_ERROR".into(),
+                message: "Field 'status' must be a valid enum value".into(),
+                detail: None,
+            },
+        ],
+        meta: ResponseMeta {
+            request_id: "req-multi".into(),
+            duration_ms: 1,
+            traces: vec![],
+        },
+    };
+    let (status_code, body) = translate_response(&wf_resp);
+    assert_eq!(status_code, 400);
+    let errors = body.get("errors").unwrap().as_array().unwrap();
+    assert_eq!(errors.len(), 2);
+    assert_eq!(errors[0]["message"], "Field 'title' is required");
+    assert_eq!(
+        errors[1]["message"],
+        "Field 'status' must be a valid enum value"
+    );
 }

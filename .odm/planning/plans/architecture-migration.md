@@ -843,17 +843,17 @@ Build the HTTP entry point: listener configuration, route merging, REST and Grap
 
 ### 9.4 — GraphQL Handler
 
-- [ ] Implement GraphQL request-to-WorkflowRequest translation: parse the GraphQL query, set workflow to `graphql.query`, flatten query arguments (limit, offset, filters) into the `query` field, set body to the raw GraphQL query string.
+- [x] Implement GraphQL request-to-WorkflowRequest translation: parse the GraphQL query, set workflow to `graphql.query`, flatten query arguments (limit, offset, filters) into the `query` field, set body to the raw GraphQL query string.
   <!-- files: packages/transport-graphql/src/handler.rs -->
   <!-- purpose: Translate GraphQL requests into the workflow engine contract -->
   <!-- requirements: transport-layer 8.1 -->
 
-- [ ] Implement GraphQL schema generation at startup: for each plugin that declares a schema in its manifest, generate a GraphQL type with fields matching the schema's properties. Collections without a declared schema are not queryable via GraphQL. Generate query resolvers (list, get) and mutation resolvers (create, update, delete) for each typed collection.
+- [x] Implement GraphQL schema generation at startup: for each plugin that declares a schema in its manifest, generate a GraphQL type with fields matching the schema's properties. Collections without a declared schema are not queryable via GraphQL. Generate query resolvers (list, get) and mutation resolvers (create, update, delete) for each typed collection.
   <!-- files: packages/transport-graphql/src/schema.rs -->
   <!-- purpose: Auto-generate GraphQL schema from plugin declarations -->
   <!-- requirements: transport-layer 9.1, 9.2, 9.3, 9.4 -->
 
-- [ ] Write unit tests: GraphQL query parsing, argument flattening, schema generation from mock manifests, response shape verification.
+- [x] Write unit tests: GraphQL query parsing, argument flattening, schema generation from mock manifests, response shape verification.
   <!-- files: packages/transport-graphql/tests/ -->
   <!-- purpose: Verify GraphQL handler correctness -->
   <!-- requirements: transport-layer 8.1, 9.1 -->

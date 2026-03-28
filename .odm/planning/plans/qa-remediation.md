@@ -12,7 +12,7 @@ This plan addresses all findings from the Life Engine Core QA review (2026-03-28
 
 **Source:** .odm/qa/reports/EXECUTIVE-SUMMARY.md
 
-**Progress:** 15 / 30 work packages complete
+**Progress:** 22 / 30 work packages complete
 
 ---
 
@@ -355,17 +355,17 @@ This plan addresses all findings from the Life Engine Core QA review (2026-03-28
 > depends: none
 > spec: .odm/qa/reports/phase-2/transport-rest.md
 
-- [ ] Apply `DefaultBodyLimit` to REST routes [security]
+- [x] Apply `DefaultBodyLimit` to REST routes [security]
   <!-- file: packages/transport-rest/src/router/mod.rs -->
   <!-- purpose: Prevent unbounded request bodies from causing memory exhaustion -->
   <!-- requirements: No request body size limits finding -->
   <!-- leverage: tower-http DefaultBodyLimit -->
-- [ ] Apply body size limit to GraphQL endpoint [security]
+- [x] Apply body size limit to GraphQL endpoint [security]
   <!-- file: apps/core/src/routes/graphql.rs -->
   <!-- purpose: Prevent oversized GraphQL queries from consuming excessive memory -->
   <!-- requirements: No request body size limits finding -->
   <!-- leverage: tower-http DefaultBodyLimit -->
-- [ ] Add test verifying oversized requests are rejected [test]
+- [x] Add test verifying oversized requests are rejected [test]
   <!-- file: packages/transport-rest/src/router/mod.rs -->
   <!-- purpose: Regression test for body size limits -->
   <!-- requirements: Body size limits finding -->
@@ -450,22 +450,22 @@ This plan addresses all findings from the Life Engine Core QA review (2026-03-28
 > depends: 2.7
 > spec: .odm/qa/reports/phase-2/dav-and-webhooks.md
 
-- [ ] Implement PROPFIND handler (depth 0 and 1) for CalDAV transport [feature]
+- [x] Implement PROPFIND handler (depth 0 and 1) for CalDAV transport [feature]
   <!-- file: packages/transport-caldav/ -->
   <!-- purpose: Enable calendar discovery and collection listing -->
   <!-- requirements: Transport stubs finding, zero protocol logic -->
   <!-- leverage: none -->
-- [ ] Implement PROPFIND handler (depth 0 and 1) for CardDAV transport [feature]
+- [x] Implement PROPFIND handler (depth 0 and 1) for CardDAV transport [feature]
   <!-- file: packages/transport-carddav/ -->
   <!-- purpose: Enable contact discovery and collection listing -->
   <!-- requirements: Transport stubs finding, zero protocol logic -->
   <!-- leverage: CalDAV PROPFIND implementation as reference -->
-- [ ] Implement GET and PUT handlers for both transports [feature]
+- [x] Implement GET and PUT handlers for both transports [feature]
   <!-- file: packages/transport-caldav/ -->
   <!-- purpose: Enable reading and writing individual resources -->
   <!-- requirements: Transport stubs finding -->
   <!-- leverage: none -->
-- [ ] Implement OPTIONS handler with DAV headers for both transports [feature]
+- [x] Implement OPTIONS handler with DAV headers for both transports [feature]
   <!-- file: packages/transport-caldav/ -->
   <!-- purpose: Advertise DAV compliance level to clients -->
   <!-- requirements: Missing OPTIONS handler finding -->
@@ -480,17 +480,17 @@ This plan addresses all findings from the Life Engine Core QA review (2026-03-28
 > depends: none
 > spec: .odm/qa/reports/phase-3/core-application.md
 
-- [ ] Filter search queries by `user_id` and `household_id` [security]
+- [x] Filter search queries by `user_id` and `household_id` [security]
   <!-- file: apps/core/src/search.rs -->
   <!-- purpose: Prevent authenticated users from searching records belonging to other users -->
   <!-- requirements: Lines 144-227 no multi-tenancy isolation finding -->
   <!-- leverage: none -->
-- [ ] Add user/household fields to Tantivy index schema [feature]
+- [x] Add user/household fields to Tantivy index schema [feature]
   <!-- file: apps/core/src/search.rs -->
   <!-- purpose: Enable efficient filtering by ownership in the search index -->
   <!-- requirements: Search multi-tenancy finding -->
   <!-- leverage: existing Tantivy schema setup -->
-- [ ] Add tests verifying cross-user search isolation [test]
+- [x] Add tests verifying cross-user search isolation [test]
   <!-- file: apps/core/src/search.rs -->
   <!-- purpose: Regression test for multi-tenancy enforcement -->
   <!-- requirements: Search multi-tenancy finding -->
@@ -500,12 +500,12 @@ This plan addresses all findings from the Life Engine Core QA review (2026-03-28
 > depends: none
 > spec: .odm/qa/reports/phase-3/core-application.md
 
-- [ ] Buffer documents and use `commit_threshold` config for batch commits [performance]
+- [x] Buffer documents and use `commit_threshold` config for batch commits [performance]
   <!-- file: apps/core/src/search.rs -->
   <!-- purpose: Eliminate per-document commits that cause write amplification -->
   <!-- requirements: Lines 90-111 per-document commits finding -->
   <!-- leverage: existing commit_threshold config field -->
-- [ ] Add periodic commit flush for buffered documents [performance]
+- [x] Add periodic commit flush for buffered documents [performance]
   <!-- file: apps/core/src/search.rs -->
   <!-- purpose: Ensure buffered documents are committed within a reasonable time window -->
   <!-- requirements: Per-document commits finding -->
@@ -515,17 +515,17 @@ This plan addresses all findings from the Life Engine Core QA review (2026-03-28
 > depends: none
 > spec: .odm/qa/reports/phase-3/core-application.md
 
-- [ ] Add SQLite tables for peer registrations and sync cursors [feature]
+- [x] Add SQLite tables for peer registrations and sync cursors [feature]
   <!-- file: apps/core/src/federation.rs -->
   <!-- purpose: Survive process restarts without losing federation peer state -->
   <!-- requirements: In-memory state lost on restart finding -->
   <!-- leverage: existing SQLite storage patterns -->
-- [ ] Add SQLite tables for households and invites [feature]
+- [x] Add SQLite tables for households and invites [feature]
   <!-- file: apps/core/src/household.rs -->
   <!-- purpose: Survive process restarts without losing household membership state -->
   <!-- requirements: In-memory state lost on restart finding -->
   <!-- leverage: existing SQLite storage patterns -->
-- [ ] Migrate federation and household modules to load from and persist to SQLite [feature]
+- [x] Migrate federation and household modules to load from and persist to SQLite [feature]
   <!-- file: apps/core/src/federation.rs -->
   <!-- purpose: Replace volatile in-memory state with durable storage -->
   <!-- requirements: In-memory state lost on restart finding -->
@@ -535,12 +535,12 @@ This plan addresses all findings from the Life Engine Core QA review (2026-03-28
 > depends: none
 > spec: .odm/qa/reports/phase-3/search-indexer.md
 
-- [ ] Replace `Index::create_in_ram()` with `Index::create_in_dir()` [feature]
+- [x] Replace `Index::create_in_ram()` with `Index::create_in_dir()` [feature]
   <!-- file: apps/core/src/search.rs -->
   <!-- purpose: Persist search index to disk so it survives restarts -->
   <!-- requirements: Volatile in-memory index finding -->
   <!-- leverage: Tantivy create_in_dir API -->
-- [ ] Add configurable index directory path [feature]
+- [x] Add configurable index directory path [feature]
   <!-- file: apps/core/src/search.rs -->
   <!-- purpose: Allow users to configure where the search index is stored -->
   <!-- requirements: Volatile in-memory index finding -->
@@ -550,12 +550,12 @@ This plan addresses all findings from the Life Engine Core QA review (2026-03-28
 > depends: none
 > spec: .odm/qa/reports/phase-2/plugin-sdk.md
 
-- [ ] Reconcile divergent `Capability` enums between traits crate and SDK [refactor]
+- [x] Reconcile divergent `Capability` enums between traits crate and SDK [refactor]
   <!-- file: packages/plugin-sdk-rs/src/types.rs -->
   <!-- purpose: Eliminate silent divergence between two Capability enum definitions -->
   <!-- requirements: Divergent Capability enums finding -->
   <!-- leverage: none -->
-- [ ] Add explicit conversion functions or extend `traits::Capability` with SDK variants [refactor]
+- [x] Add explicit conversion functions or extend `traits::Capability` with SDK variants [refactor]
   <!-- file: packages/traits/src/lib.rs -->
   <!-- purpose: Provide a single source of truth for capability definitions -->
   <!-- requirements: Divergent Capability enums finding -->
@@ -575,17 +575,17 @@ This plan addresses all findings from the Life Engine Core QA review (2026-03-28
 > depends: none
 > spec: .odm/qa/reports/phase-1/build-and-config.md
 
-- [ ] Delete stale `apps/core/Dockerfile` that only copies 4 of 28 workspace members [cleanup]
+- [x] Delete stale `apps/core/Dockerfile` that only copies 4 of 28 workspace members [cleanup]
   <!-- file: apps/core/Dockerfile -->
   <!-- purpose: Remove broken Dockerfile that cannot build successfully -->
   <!-- requirements: Stale Dockerfile finding -->
   <!-- leverage: none -->
-- [ ] Fix Docker Compose config format mismatch (TOML mount vs YAML parser) [bugfix]
+- [x] Fix Docker Compose config format mismatch (TOML mount vs YAML parser) [bugfix]
   <!-- file: docker-compose.yml -->
   <!-- purpose: Align mounted config file format with what config.rs actually parses -->
   <!-- requirements: Config format mismatch finding -->
   <!-- leverage: none -->
-- [ ] Align `cron` version pin in backup plugin with workspace version [bugfix]
+- [x] Align `cron` version pin in backup plugin with workspace version [bugfix]
   <!-- file: plugins/engine/backup/Cargo.toml -->
   <!-- purpose: Fix genuine version mismatch between backup plugin (0.13) and workspace (0.15) -->
   <!-- requirements: Version pinning inconsistency finding -->
@@ -620,12 +620,12 @@ This plan addresses all findings from the Life Engine Core QA review (2026-03-28
 > depends: none
 > spec: .odm/qa/reports/EXECUTIVE-SUMMARY.md
 
-- [ ] Add blob size limit enforcement in plugin blob host functions [security]
+- [x] Add blob size limit enforcement in plugin blob host functions [security]
   <!-- file: packages/plugin-system/src/host_functions/blob.rs -->
   <!-- purpose: Prevent plugins from storing arbitrarily large blobs -->
   <!-- requirements: No blob size limit finding -->
   <!-- leverage: none -->
-- [ ] Add blob key path traversal prevention [security]
+- [x] Add blob key path traversal prevention [security]
   <!-- file: packages/plugin-system/src/host_functions/blob.rs -->
   <!-- purpose: Prevent ../ sequences from escaping plugin namespace -->
   <!-- requirements: Blob key path traversal finding, line 98 -->
@@ -640,7 +640,7 @@ This plan addresses all findings from the Life Engine Core QA review (2026-03-28
   <!-- purpose: Prevent malicious backup archives from consuming excessive resources -->
   <!-- requirements: Missing resource limits finding -->
   <!-- leverage: none -->
-- [ ] Add automatic job registry cleanup in workflow engine [bugfix]
+- [x] Add automatic job registry cleanup in workflow engine [bugfix]
   <!-- file: packages/workflow-engine/src/executor.rs -->
   <!-- purpose: Prevent unbounded memory growth from completed jobs -->
   <!-- requirements: Unbounded job registry finding, line 278 -->

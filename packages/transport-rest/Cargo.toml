@@ -37,3 +37,5 @@ rustls-pemfile = { workspace = true }
 tokio-rustls = { workspace = true }
 hyper = { workspace = true }
 hyper-util = { workspace = true }
+life-engine-transport-graphql = { path = "../transport-graphql" }
+chrono = { workspace = true }

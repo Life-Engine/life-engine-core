@@ -894,7 +894,7 @@ Build the HTTP entry point: listener configuration, route merging, REST and Grap
 
 ### 9.7 — Transport Equivalence Verification
 
-- [ ] Write integration test proving REST and GraphQL produce identical results for the same workflow: issue a `collection.list` request via REST and GraphQL, compare the returned data arrays. Both should dispatch through the same system workflow and return the same records.
+- [x] Write integration test proving REST and GraphQL produce identical results for the same workflow: issue a `collection.list` request via REST and GraphQL, compare the returned data arrays. Both should dispatch through the same system workflow and return the same records.
   <!-- files: packages/transport-rest/tests/transport_equivalence.rs -->
   <!-- purpose: Verify the design principle that both transports are interchangeable -->
   <!-- requirements: transport-layer 10.1, 10.2 -->

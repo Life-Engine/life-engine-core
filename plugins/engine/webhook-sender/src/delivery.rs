@@ -116,7 +116,7 @@ mod tests {
             uuid::Uuid::new_v4().to_string(),
             sub_id.to_string(),
             "record.created".to_string(),
-            serde_json::json!({"test": true}),
+            &serde_json::json!({"test": true}),
             status,
             1,
         )
@@ -127,7 +127,7 @@ mod tests {
             uuid::Uuid::new_v4().to_string(),
             sub_id.to_string(),
             "record.created".to_string(),
-            serde_json::json!({"test": true}),
+            &serde_json::json!({"test": true}),
             status,
             attempt,
             format!("HTTP {}", status),

@@ -140,7 +140,7 @@ fn delivery_log_evicts_oldest_with_vecdeque() {
             format!("del-{i}"),
             "sub-1".to_string(),
             "test".to_string(),
-            serde_json::json!({}),
+            &serde_json::json!({}),
             200,
             1,
         ));
@@ -157,13 +157,13 @@ fn delivery_log_evicts_oldest_with_vecdeque() {
 fn delivery_log_eviction_is_stable() {
     let mut log = DeliveryLog::with_max_capacity(2);
     log.record(DeliveryRecord::success(
-        "a".into(), "s".into(), "e".into(), serde_json::json!({}), 200, 1,
+        "a".into(), "s".into(), "e".into(), &serde_json::json!({}), 200, 1,
     ));
     log.record(DeliveryRecord::success(
-        "b".into(), "s".into(), "e".into(), serde_json::json!({}), 200, 1,
+        "b".into(), "s".into(), "e".into(), &serde_json::json!({}), 200, 1,
     ));
     log.record(DeliveryRecord::success(
-        "c".into(), "s".into(), "e".into(), serde_json::json!({}), 200, 1,
+        "c".into(), "s".into(), "e".into(), &serde_json::json!({}), 200, 1,
     ));
     assert_eq!(log.len(), 2);
     let records = log.all();

@@ -18,7 +18,6 @@ pub mod error;
 pub mod models;
 pub mod steps;
 pub mod transform;
-pub mod types;
 
 #[cfg(test)]
 #[path = "tests/mod.rs"]
@@ -220,7 +219,7 @@ impl WebhookSenderPlugin {
         &mut self,
         subscription_id: &str,
         event_type: &str,
-        payload: serde_json::Value,
+        payload: &serde_json::Value,
         status_code: u16,
         attempt: u32,
     ) {
@@ -244,7 +243,7 @@ impl WebhookSenderPlugin {
         &mut self,
         subscription_id: &str,
         event_type: &str,
-        payload: serde_json::Value,
+        payload: &serde_json::Value,
         status_code: u16,
         attempt: u32,
         error: &str,
@@ -672,7 +671,7 @@ mod tests {
         plugin.record_delivery_success(
             "sub-1",
             "record.created",
-            serde_json::json!({"id": "123"}),
+            &serde_json::json!({"id": "123"}),
             200,
             1,
         );
@@ -694,7 +693,7 @@ mod tests {
         let can_retry = plugin.record_delivery_failure(
             "sub-1",
             "record.created",
-            serde_json::json!({"id": "456"}),
+            &serde_json::json!({"id": "456"}),
             500,
             1,
             "Internal Server Error",
@@ -720,7 +719,7 @@ mod tests {
             let can_retry = plugin.record_delivery_failure(
                 "sub-1",
                 "record.created",
-                serde_json::json!({}),
+                &serde_json::json!({}),
                 503,
                 attempt,
                 "Service Unavailable",
@@ -746,14 +745,14 @@ mod tests {
         plugin.subscribe(test_subscription());
 
         // Fail twice
-        plugin.record_delivery_failure("sub-1", "record.created", serde_json::json!({}), 500, 1, "err");
-        plugin.record_delivery_failure("sub-1", "record.created", serde_json::json!({}), 500, 2, "err");
+        plugin.record_delivery_failure("sub-1", "record.created", &serde_json::json!({}), 500, 1, "err");
+        plugin.record_delivery_failure("sub-1", "record.created", &serde_json::json!({}), 500, 2, "err");
 
         let retry = plugin.retry_state("sub-1").unwrap();
         assert_eq!(retry.failure_count(), 2);
 
         // Succeed
-        plugin.record_delivery_success("sub-1", "record.created", serde_json::json!({}), 200, 3);
+        plugin.record_delivery_success("sub-1", "record.created", &serde_json::json!({}), 200, 3);
 
         let retry = plugin.retry_state("sub-1").unwrap();
         assert_eq!(retry.failure_count(), 0);
@@ -764,10 +763,10 @@ mod tests {
         let mut plugin = WebhookSenderPlugin::new();
         plugin.subscribe(test_subscription());
 
-        plugin.record_delivery_success("sub-1", "e", serde_json::json!({}), 200, 1);
-        plugin.record_delivery_failure("sub-1", "e", serde_json::json!({}), 500, 1, "err");
-        plugin.record_delivery_failure("sub-1", "e", serde_json::json!({}), 502, 2, "err");
-        plugin.record_delivery_success("sub-1", "e", serde_json::json!({}), 201, 1);
+        plugin.record_delivery_success("sub-1", "e", &serde_json::json!({}), 200, 1);
+        plugin.record_delivery_failure("sub-1", "e", &serde_json::json!({}), 500, 1, "err");
+        plugin.record_delivery_failure("sub-1", "e", &serde_json::json!({}), 502, 2, "err");
+        plugin.record_delivery_success("sub-1", "e", &serde_json::json!({}), 201, 1);
 
         let records = plugin.delivery_log().all();
         let codes: Vec<u16> = records.iter().map(|r| r.status_code).collect();

@@ -2,6 +2,7 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use url::Url;
 
 /// A webhook subscription that defines where to send events.
 #[derive(Clone, Serialize, Deserialize)]
@@ -17,6 +18,24 @@ pub struct WebhookSubscription {
     pub secret: Option<String>,
     /// Whether this subscription is active.
     pub active: bool,
+}
+
+impl WebhookSubscription {
+    /// Validate the subscription configuration, returning an error if the URL
+    /// is malformed or uses an unsupported scheme.
+    pub fn validate(&self) -> anyhow::Result<()> {
+        let parsed = Url::parse(&self.url)
+            .map_err(|e| anyhow::anyhow!("invalid webhook URL '{}': {}", self.url, e))?;
+        match parsed.scheme() {
+            "http" | "https" => {}
+            scheme => anyhow::bail!(
+                "unsupported URL scheme '{}' in webhook URL '{}': only http and https are allowed",
+                scheme,
+                self.url
+            ),
+        }
+        Ok(())
+    }
 }
 
 impl std::fmt::Debug for WebhookSubscription {
@@ -43,8 +62,9 @@ pub struct DeliveryRecord {
     pub subscription_id: String,
     /// The event type that triggered this delivery.
     pub event_type: String,
-    /// The payload that was sent.
-    pub payload: serde_json::Value,
+    /// SHA-256 hash of the payload that was sent (hex-encoded).
+    /// Avoids storing full payload copies across retries.
+    pub payload_hash: String,
     /// HTTP status code received (0 if request failed).
     pub status_code: u16,
     /// Whether the delivery was successful (2xx status code).
@@ -69,12 +89,20 @@ pub enum DeliveryStatus {
 }
 
 impl DeliveryRecord {
+    /// Compute a hex-encoded SHA-256 hash of a JSON payload.
+    pub fn hash_payload(payload: &serde_json::Value) -> String {
+        use sha2::{Digest, Sha256};
+        let bytes = serde_json::to_vec(payload).unwrap_or_default();
+        let digest = Sha256::digest(&bytes);
+        hex::encode(digest)
+    }
+
     /// Create a new successful delivery record.
     pub fn success(
         id: String,
         subscription_id: String,
         event_type: String,
-        payload: serde_json::Value,
+        payload: &serde_json::Value,
         status_code: u16,
         attempt: u32,
     ) -> Self {
@@ -82,7 +110,7 @@ impl DeliveryRecord {
             id,
             subscription_id,
             event_type,
-            payload,
+            payload_hash: Self::hash_payload(payload),
             status_code,
             success: true,
             attempt,
@@ -96,7 +124,7 @@ impl DeliveryRecord {
         id: String,
         subscription_id: String,
         event_type: String,
-        payload: serde_json::Value,
+        payload: &serde_json::Value,
         status_code: u16,
         attempt: u32,
         error: String,
@@ -105,7 +133,7 @@ impl DeliveryRecord {
             id,
             subscription_id,
             event_type,
-            payload,
+            payload_hash: Self::hash_payload(payload),
             status_code,
             success: false,
             attempt,
@@ -155,11 +183,12 @@ mod tests {
 
     #[test]
     fn delivery_record_success() {
+        let payload = serde_json::json!({"id": "123"});
         let record = DeliveryRecord::success(
             "del-1".to_string(),
             "sub-1".to_string(),
             "record.created".to_string(),
-            serde_json::json!({"id": "123"}),
+            &payload,
             200,
             1,
         );
@@ -167,6 +196,7 @@ mod tests {
         assert_eq!(record.status_code, 200);
         assert!(record.error.is_none());
         assert_eq!(record.attempt, 1);
+        assert_eq!(record.payload_hash, DeliveryRecord::hash_payload(&payload));
     }
 
     #[test]
@@ -175,7 +205,7 @@ mod tests {
             "del-2".to_string(),
             "sub-1".to_string(),
             "record.created".to_string(),
-            serde_json::json!({"id": "456"}),
+            &serde_json::json!({"id": "456"}),
             500,
             3,
             "Internal Server Error".to_string(),
@@ -184,6 +214,7 @@ mod tests {
         assert_eq!(record.status_code, 500);
         assert_eq!(record.error.as_deref(), Some("Internal Server Error"));
         assert_eq!(record.attempt, 3);
+        assert!(!record.payload_hash.is_empty());
     }
 
     #[test]
@@ -192,7 +223,7 @@ mod tests {
             "del-1".to_string(),
             "sub-1".to_string(),
             "sync.complete".to_string(),
-            serde_json::json!({}),
+            &serde_json::json!({}),
             201,
             1,
         );
@@ -223,5 +254,63 @@ mod tests {
         let json = serde_json::to_string(&sub).expect("serialize");
         let restored: WebhookSubscription = serde_json::from_str(&json).expect("deserialize");
         assert!(restored.secret.is_none());
+    }
+
+    #[test]
+    fn validate_accepts_https_url() {
+        let sub = WebhookSubscription {
+            id: "s".into(),
+            url: "https://example.com/webhook".into(),
+            event_types: vec![],
+            secret: None,
+            active: true,
+        };
+        assert!(sub.validate().is_ok());
+    }
+
+    #[test]
+    fn validate_accepts_http_url() {
+        let sub = WebhookSubscription {
+            id: "s".into(),
+            url: "http://localhost:8080/hook".into(),
+            event_types: vec![],
+            secret: None,
+            active: true,
+        };
+        assert!(sub.validate().is_ok());
+    }
+
+    #[test]
+    fn validate_rejects_malformed_url() {
+        let sub = WebhookSubscription {
+            id: "s".into(),
+            url: "not a url".into(),
+            event_types: vec![],
+            secret: None,
+            active: true,
+        };
+        assert!(sub.validate().is_err());
+    }
+
+    #[test]
+    fn validate_rejects_unsupported_scheme() {
+        let sub = WebhookSubscription {
+            id: "s".into(),
+            url: "ftp://example.com/file".into(),
+            event_types: vec![],
+            secret: None,
+            active: true,
+        };
+        let err = sub.validate().unwrap_err();
+        assert!(err.to_string().contains("unsupported URL scheme"));
+    }
+
+    #[test]
+    fn payload_hash_is_deterministic() {
+        let payload = serde_json::json!({"key": "value"});
+        let h1 = DeliveryRecord::hash_payload(&payload);
+        let h2 = DeliveryRecord::hash_payload(&payload);
+        assert_eq!(h1, h2);
+        assert_eq!(h1.len(), 64); // SHA-256 hex
     }
 }

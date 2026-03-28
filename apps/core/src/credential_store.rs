@@ -7,10 +7,9 @@
 //!
 //! # Encryption
 //!
-//! Credential values are encrypted using a simple XOR-based key derivation
-//! with a per-instance secret and base64 encoding. This provides basic
-//! at-rest protection. A future phase will integrate SQLCipher for
-//! full database-level encryption.
+//! Credential values are encrypted using AES-256-GCM with keys derived
+//! via HKDF-SHA256 from a per-instance master key. Nonces are randomly
+//! generated per encryption and prepended to the ciphertext.
 //!
 //! # Security
 //!

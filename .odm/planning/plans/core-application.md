@@ -55,12 +55,12 @@ This plan addresses the issues identified in the phase-3 QA review of the `apps/
 > depends: none
 > spec: .odm/qa/reports/phase-3/core-application.md
 
-- [ ] Add `storage.passphrase` to redaction logic in `to_redacted_json()` [major]
+- [x] Add `storage.passphrase` to redaction logic in `to_redacted_json()` [major]
   <!-- file: apps/core/src/config.rs -->
   <!-- purpose: Plaintext passphrase could appear in GET /api/system/config response -->
   <!-- requirements: 3 -->
   <!-- leverage: existing redaction pattern for oidc client_secret and pg password -->
-- [ ] Update credential store module doc comment from "XOR-based" to describe actual AES-256-GCM implementation [major]
+- [x] Update credential store module doc comment from "XOR-based" to describe actual AES-256-GCM implementation [major]
   <!-- file: apps/core/src/credential_store.rs -->
   <!-- purpose: Misleading doc could cause confusion during security audits -->
   <!-- requirements: 7 -->

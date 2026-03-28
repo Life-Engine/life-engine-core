@@ -11,6 +11,7 @@ pub mod blob_fs;
 pub mod config;
 pub mod credentials;
 pub mod document;
+pub mod encryption;
 pub mod error;
 pub mod export;
 pub mod migration;
@@ -18,8 +19,10 @@ pub mod schema;
 pub mod types;
 pub mod validation;
 
+use std::path::Path;
+
 use rusqlite::Connection;
-use zeroize::Zeroize;
+use zeroize::{Zeroize, Zeroizing};
 
 pub use error::StorageError;
 pub use validation::PrivateSchemaRegistry;
@@ -112,6 +115,52 @@ impl SqliteStorage {
             private_schemas: PrivateSchemaRegistry::new(),
             master_key: key,
         })
+    }
+
+    /// Open (or create) a SQLCipher-encrypted database using a master passphrase.
+    ///
+    /// Derives the encryption key from the passphrase using Argon2id with the
+    /// salt stored alongside the database (generated on first run). The raw
+    /// passphrase is zeroized immediately after key derivation.
+    ///
+    /// This is the preferred entry point when the passphrase is available
+    /// (e.g. from an environment variable or interactive prompt). Use [`init`]
+    /// when you already have a pre-derived key.
+    pub fn from_passphrase(
+        config: toml::Value,
+        passphrase: Zeroizing<String>,
+    ) -> Result<Self, StorageError> {
+        let db_path_str = config
+            .get("database_path")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                StorageError::InvalidConfig(
+                    "missing or invalid 'database_path' in storage config".to_string(),
+                )
+            })?;
+        let db_path = Path::new(db_path_str);
+
+        let key = encryption::derive_db_key(&passphrase, db_path)?;
+        // passphrase is dropped (and zeroized) here when it goes out of scope.
+        drop(passphrase);
+
+        Self::init(config, *key)
+    }
+
+    /// Performs passphrase-based key rotation.
+    ///
+    /// Derives the new key from the new passphrase using the existing salt,
+    /// then re-encrypts the database via `PRAGMA rekey` and re-encrypts all
+    /// per-credential data. Both passphrases are zeroized after derivation.
+    pub fn rekey_with_passphrase(
+        &mut self,
+        db_path: &Path,
+        new_passphrase: Zeroizing<String>,
+    ) -> Result<(), StorageError> {
+        let new_key = encryption::derive_db_key(&new_passphrase, db_path)?;
+        drop(new_passphrase);
+
+        self.rekey(*new_key)
     }
 
     /// Returns a reference to the underlying database connection.

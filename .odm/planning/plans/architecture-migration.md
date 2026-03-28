@@ -437,12 +437,12 @@ Layer encryption-at-rest and audit logging onto the storage infrastructure built
 
 ### 5.2 — Database Encryption
 
-- [ ] Implement SQLCipher key derivation and database opening in `packages/storage-sqlite/`: derive the encryption key from a user-provided master passphrase using `argon2id_derive_key`, open the database with `PRAGMA key = x'...'`. The passphrase is provided at startup via environment variable or interactive prompt. The derived key is held in memory for the lifetime of the process. The raw passphrase is zeroized immediately after derivation.
+- [x] Implement SQLCipher key derivation and database opening in `packages/storage-sqlite/`: derive the encryption key from a user-provided master passphrase using `argon2id_derive_key`, open the database with `PRAGMA key = x'...'`. The passphrase is provided at startup via environment variable or interactive prompt. The derived key is held in memory for the lifetime of the process. The raw passphrase is zeroized immediately after derivation.
   <!-- files: packages/storage-sqlite/src/encryption.rs -->
   <!-- purpose: Encrypt the entire database at rest -->
   <!-- requirements: encryption-and-audit 3.1, 3.2, 3.3 -->
 
-- [ ] Implement key rotation: `rekey(old_passphrase, new_passphrase)` derives a new key and calls `PRAGMA rekey`. This re-encrypts the entire database. The operation is atomic — if it fails, the database retains the old key.
+- [x] Implement key rotation: `rekey(old_passphrase, new_passphrase)` derives a new key and calls `PRAGMA rekey`. This re-encrypts the entire database. The operation is atomic — if it fails, the database retains the old key.
   <!-- files: packages/storage-sqlite/src/encryption.rs -->
   <!-- purpose: Support passphrase changes without data loss -->
   <!-- requirements: encryption-and-audit 3.4 -->

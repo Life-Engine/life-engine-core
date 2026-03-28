@@ -12,7 +12,8 @@ use life_engine_auth::{AuthError, AuthIdentity, AuthProvider, RateLimiter};
 use tower::ServiceExt;
 use uuid::Uuid;
 
-use crate::middleware::auth::{AuthState, Identity, auth_middleware};
+use crate::middleware::auth::{AuthState, auth_middleware};
+use life_engine_types::identity::Identity;
 use crate::middleware::cors::cors_layer;
 use crate::middleware::error_handler::panic_handler;
 use crate::middleware::logging::logging_middleware;
@@ -188,7 +189,7 @@ async fn auth_passes_identity_extension_on_valid_token() {
         .route(
             "/api/v1/data/tasks",
             get(|ext: axum::Extension<Identity>| async move {
-                ext.0.user_id
+                ext.0.subject
             }),
         )
         .layer(axum::middleware::from_fn_with_state(

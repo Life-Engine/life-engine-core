@@ -13,23 +13,27 @@ use axum::http::StatusCode;
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use life_engine_auth::{AuthError, AuthIdentity, AuthProvider, RateLimiter};
-use serde::{Deserialize, Serialize};
+use life_engine_types::identity::Identity;
 
-/// Authenticated identity inserted as an Axum extension (Requirement 13.2).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Identity {
-    pub user_id: String,
-    pub provider: String,
-    pub scopes: Vec<String>,
-}
-
-impl From<AuthIdentity> for Identity {
-    fn from(auth: AuthIdentity) -> Self {
-        Self {
-            user_id: auth.user_id,
-            provider: auth.provider,
-            scopes: auth.scopes,
-        }
+/// Convert an `AuthIdentity` from the auth layer into the canonical
+/// `life_engine_types::Identity` used by handlers and the workflow engine.
+fn auth_identity_to_identity(auth: AuthIdentity) -> Identity {
+    let mut claims = std::collections::HashMap::new();
+    if !auth.scopes.is_empty() {
+        claims.insert(
+            "scopes".to_string(),
+            serde_json::Value::Array(
+                auth.scopes
+                    .into_iter()
+                    .map(serde_json::Value::String)
+                    .collect(),
+            ),
+        );
+    }
+    Identity {
+        subject: auth.user_id,
+        issuer: auth.provider,
+        claims,
     }
 }
 
@@ -48,11 +52,19 @@ pub struct AuthState {
 /// or returns 401 on failure.
 pub async fn auth_middleware(
     axum::extract::State(state): axum::extract::State<AuthState>,
+    matched_path: Option<axum::extract::MatchedPath>,
     request: Request,
     next: Next,
 ) -> Response {
-    let path = request.uri().path().to_string();
     let method = request.method().to_string();
+
+    // Use the matched route template (e.g., "/api/data/{collection}") so that
+    // parameterized routes are correctly recognized as public. Fall back to
+    // the raw URI path for unmatched routes (e.g., 404 paths).
+    let path = matched_path
+        .as_ref()
+        .map(|m| m.as_str().to_string())
+        .unwrap_or_else(|| request.uri().path().to_string());
     let route_key = format!("{method} {path}");
 
     // Public route bypass (Requirement 13.4).
@@ -83,7 +95,7 @@ pub async fn auth_middleware(
 
     match result {
         Ok(auth_identity) => {
-            let identity = Identity::from(auth_identity);
+            let identity = auth_identity_to_identity(auth_identity);
             let mut request = request;
             request.extensions_mut().insert(identity);
             next.run(request).await

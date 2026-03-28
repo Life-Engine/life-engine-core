@@ -658,6 +658,7 @@ async fn main() -> anyhow::Result<()> {
         .layer(axum::middleware::from_fn_with_state(auth_mw_state, auth_middleware))
         .layer(axum::middleware::from_fn_with_state(general_rate_limiter, rate_limit_middleware))
         .merge(storage_init_router)
+        .layer(axum::extract::DefaultBodyLimit::max(2 * 1024 * 1024)) // 2 MB
         .layer(TraceLayer::new_for_http())
         .layer(axum::middleware::from_fn_with_state(shared_config, dynamic_cors_middleware));
 

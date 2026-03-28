@@ -140,17 +140,17 @@ Work packages are organized by domain area within each tier. Tier 2 WPs depend o
 > depends: 1.3
 > spec: .odm/qa/reports/EXECUTIVE-SUMMARY.md
 
-- [ ] Remove middleware-local `Identity` type and use `life_engine_types::identity::Identity` [functional]
+- [x] Remove middleware-local `Identity` type and use `life_engine_types::identity::Identity` [functional]
   <!-- file: packages/transport-rest/src/middleware/auth.rs -->
   <!-- purpose: Fix runtime extraction failure caused by dual Identity types -->
   <!-- requirements: Tier 2, item 8 -->
   <!-- leverage: existing auth.rs:19-24 -->
-- [ ] Fix public route bypass to match against `MatchedPath` or use `.route_layer()` [functional]
+- [x] Fix public route bypass to match against `MatchedPath` or use `.route_layer()` [functional]
   <!-- file: packages/transport-rest/src/middleware/auth.rs -->
   <!-- purpose: Fix parameterized routes incorrectly requiring authentication -->
   <!-- requirements: Tier 2, item 9 -->
   <!-- leverage: existing auth.rs:56-60 -->
-- [ ] Apply `DefaultBodyLimit` to REST and GraphQL routes [functional]
+- [x] Apply `DefaultBodyLimit` to REST and GraphQL routes [functional]
   <!-- file: packages/transport-rest/src/lib.rs -->
   <!-- purpose: Prevent unbounded request body consumption -->
   <!-- requirements: Tier 2, item 16 -->

@@ -2,6 +2,8 @@
 
 ## 2026-03-29
 
+- Executive Summary WP 2.1 — Fix REST Transport Auth and Identity: replace middleware-local Identity struct in packages/transport-rest/src/middleware/auth.rs with life_engine_types::identity::Identity, converting AuthIdentity fields (user_id→subject, provider→issuer, scopes→claims). Fix public route bypass to use MatchedPath instead of raw URI path so parameterized routes are correctly recognized. Add DefaultBodyLimit (2 MB) layer to apps/core/src/main.rs router to prevent unbounded request body consumption. Update middleware tests accordingly.
+
 - Executive Summary WP 1.5 — Fix API Key Material Exposure and Credential Re-encryption: add ApiKeyMetadata type (excludes key_hash and salt) to packages/auth/src/types.rs with From<ApiKeyRecord> conversion. Update list_keys to return Vec<ApiKeyMetadata> instead of Vec<ApiKeyRecord>, extract internal list_key_records for validation use. Implement re_encrypt_credentials in packages/storage-sqlite/src/credentials.rs — reads all credential rows, decrypts with old key, re-encrypts with new key, all within a single SQLite transaction for atomicity.
 
 - Architecture Migration WP 1.3/1.4 — CDM JSON Schemas and Workflow Engine Contract Types: add TriggerContext enum (Endpoint, Event, Schedule variants) to new packages/types/src/trigger.rs with re-export at crate root. WorkflowRequest, WorkflowResponse, WorkflowStatus, Identity, and helpers were already implemented. Add 5 TriggerContext tests. WP 1.3 verified complete — 6 schema files at .odm/doc/schemas/ with 22 passing validation tests. Phase 1 (Foundation Types) now fully complete.

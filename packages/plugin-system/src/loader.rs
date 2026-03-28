@@ -145,11 +145,27 @@ fn load_single_plugin(
     // Injection gating: only approved host functions are registered in the
     // WASM sandbox. Unapproved functions don't exist — the plugin cannot
     // call them at all. host_log is always injected.
+    let declared_emit = if manifest.events.emit.is_empty() {
+        None
+    } else {
+        Some(manifest.events.emit.clone())
+    };
+    let declared_subscribe = if manifest.events.subscribe.is_empty() {
+        None
+    } else {
+        Some(manifest.events.subscribe.clone())
+    };
+
     let deps = InjectionDeps {
         storage: Arc::clone(storage),
         event_bus: Arc::clone(event_bus),
         log_rate_limiter: Arc::clone(log_rate_limiter),
         plugin_config: config.plugin_configs.get(plugin_id).cloned(),
+        blob_storage: None, // TODO: wire blob backend when available
+        allowed_domains: None, // TODO: extract from manifest when schema supports it
+        declared_emit_events: declared_emit,
+        declared_subscribe_events: declared_subscribe,
+        execution_depth: 0,
     };
     let host_functions = build_host_functions(plugin_id, &capabilities, &deps);
 
@@ -259,7 +275,7 @@ mod tests {
 
     #[async_trait]
     impl WorkflowEventEmitter for MockEventBus {
-        async fn emit(&self, event_name: &str, payload: serde_json::Value) {
+        async fn emit(&self, event_name: &str, payload: serde_json::Value, _depth: u32) {
             self.emit_calls
                 .lock()
                 .unwrap()

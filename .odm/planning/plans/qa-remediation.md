@@ -12,7 +12,7 @@ This plan addresses all findings from the Life Engine Core QA review (2026-03-28
 
 **Source:** .odm/qa/reports/EXECUTIVE-SUMMARY.md
 
-**Progress:** 7 / 30 work packages complete
+**Progress:** 15 / 30 work packages complete
 
 ---
 
@@ -200,22 +200,22 @@ This plan addresses all findings from the Life Engine Core QA review (2026-03-28
 > depends: none
 > spec: .odm/qa/reports/phase-2/transport-rest.md
 
-- [ ] Remove middleware-local `Identity` struct from `middleware/auth.rs` [refactor]
+- [x] Remove middleware-local `Identity` struct from `middleware/auth.rs` [refactor]
   <!-- file: packages/transport-rest/src/middleware/auth.rs -->
   <!-- purpose: Eliminate duplicate Identity type that causes runtime extraction failure -->
   <!-- requirements: Dual Identity types finding, lines 19-24 -->
   <!-- leverage: life_engine_types::identity::Identity -->
-- [ ] Convert auth middleware to insert `life_engine_types::identity::Identity` into extensions [refactor]
+- [x] Convert auth middleware to insert `life_engine_types::identity::Identity` into extensions [refactor]
   <!-- file: packages/transport-rest/src/middleware/auth.rs -->
   <!-- purpose: Ensure handlers can extract the correct Identity type from Axum extensions -->
   <!-- requirements: Dual Identity types finding -->
   <!-- leverage: life_engine_types::identity::Identity -->
-- [ ] Update handler extraction to match the unified Identity type [refactor]
+- [x] Update handler extraction to match the unified Identity type [refactor]
   <!-- file: packages/transport-rest/src/handlers/mod.rs -->
   <!-- purpose: Ensure handlers extract the same type the middleware inserts -->
   <!-- requirements: Dual Identity types finding -->
   <!-- leverage: none -->
-- [ ] Add integration test verifying identity flows from middleware to handler [test]
+- [x] Add integration test verifying identity flows from middleware to handler [test]
   <!-- file: packages/transport-rest/src/middleware/auth.rs -->
   <!-- purpose: Verify identity extraction works end-to-end -->
   <!-- requirements: Dual Identity types finding -->
@@ -225,12 +225,12 @@ This plan addresses all findings from the Life Engine Core QA review (2026-03-28
 > depends: 2.1
 > spec: .odm/qa/reports/phase-2/transport-rest.md
 
-- [ ] Replace concrete path matching with Axum `MatchedPath` or `.route_layer()` for public route exemption [bugfix]
+- [x] Replace concrete path matching with Axum `MatchedPath` or `.route_layer()` for public route exemption [bugfix]
   <!-- file: packages/transport-rest/src/middleware/auth.rs -->
   <!-- purpose: Fix public route bypass that fails for any parameterized route -->
   <!-- requirements: Lines 56-60 parameterized route bypass finding -->
   <!-- leverage: Axum MatchedPath extractor -->
-- [ ] Add tests for parameterized public routes like `/api/v1/data/:collection` [test]
+- [x] Add tests for parameterized public routes like `/api/v1/data/:collection` [test]
   <!-- file: packages/transport-rest/src/middleware/auth.rs -->
   <!-- purpose: Verify parameterized routes can be marked as public -->
   <!-- requirements: Parameterized route bypass finding -->
@@ -240,22 +240,22 @@ This plan addresses all findings from the Life Engine Core QA review (2026-03-28
 > depends: none
 > spec: .odm/qa/reports/phase-2/plugin-system.md
 
-- [ ] Implement `build_blob_store_function()`, `build_blob_retrieve_function()`, `build_blob_delete_function()` builders [feature]
+- [x] Implement `build_blob_store_function()`, `build_blob_retrieve_function()`, `build_blob_delete_function()` builders [feature]
   <!-- file: packages/plugin-system/src/injection.rs -->
   <!-- purpose: Create the blob host function builders that injection.rs is missing -->
   <!-- requirements: Blob host functions not injected finding -->
   <!-- leverage: existing host function builder pattern in injection.rs -->
-- [ ] Add blob builders to `build_host_functions()` for StorageBlobRead/Write/Delete capabilities [feature]
+- [x] Add blob builders to `build_host_functions()` for StorageBlobRead/Write/Delete capabilities [feature]
   <!-- file: packages/plugin-system/src/injection.rs -->
   <!-- purpose: Wire blob host functions so plugins with blob capabilities can actually use them -->
   <!-- requirements: Blob host functions not injected finding -->
   <!-- leverage: existing capability-to-function mapping pattern -->
-- [ ] Pass `BlobBackend` through `InjectionDeps` [feature]
+- [x] Pass `BlobBackend` through `InjectionDeps` [feature]
   <!-- file: packages/plugin-system/src/injection.rs -->
   <!-- purpose: Provide blob storage backend to host function implementations -->
   <!-- requirements: Blob host functions not injected finding -->
   <!-- leverage: existing InjectionDeps pattern -->
-- [ ] Add integration test verifying blob operations work through plugin system [test]
+- [x] Add integration test verifying blob operations work through plugin system [test]
   <!-- file: packages/plugin-system/src/injection.rs -->
   <!-- purpose: End-to-end test for blob host functions -->
   <!-- requirements: Blob host functions finding -->
@@ -265,17 +265,17 @@ This plan addresses all findings from the Life Engine Core QA review (2026-03-28
 > depends: none
 > spec: .odm/qa/reports/phase-2/plugin-system.md
 
-- [ ] Replace system-wide `std::sync::Mutex` with per-plugin locks or extract handles before WASM calls [performance]
+- [x] Replace system-wide `std::sync::Mutex` with per-plugin locks or extract handles before WASM calls [performance]
   <!-- file: packages/plugin-system/src/execute.rs -->
   <!-- purpose: Allow multiple plugins to execute concurrently instead of serializing all execution -->
   <!-- requirements: Executor serializes all plugin execution finding, line 79 -->
   <!-- leverage: none -->
-- [ ] Replace `std::sync::Mutex` with `tokio::sync::Mutex` or handle poison explicitly [bugfix]
+- [x] Replace `std::sync::Mutex` with `tokio::sync::Mutex` or handle poison explicitly [bugfix]
   <!-- file: packages/plugin-system/src/execute.rs -->
   <!-- purpose: Prevent a single panic from permanently disabling the executor -->
   <!-- requirements: Mutex poison in async executor finding -->
   <!-- leverage: tokio::sync::Mutex -->
-- [ ] Add test verifying concurrent plugin execution is possible [test]
+- [x] Add test verifying concurrent plugin execution is possible [test]
   <!-- file: packages/plugin-system/src/execute.rs -->
   <!-- purpose: Verify the locking fix allows parallel execution -->
   <!-- requirements: Executor locking finding -->
@@ -285,12 +285,12 @@ This plan addresses all findings from the Life Engine Core QA review (2026-03-28
 > depends: none
 > spec: .odm/qa/reports/phase-2/workflow-engine.md
 
-- [ ] Register the job inline before spawning the execution task [bugfix]
+- [x] Register the job inline before spawning the execution task [bugfix]
   <!-- file: packages/workflow-engine/src/executor.rs -->
   <!-- purpose: Ensure job_status() returns valid state immediately after spawn() -->
   <!-- requirements: Lines 358-369 race condition finding -->
   <!-- leverage: none -->
-- [ ] Add test verifying job_status() returns valid state immediately after spawn() [test]
+- [x] Add test verifying job_status() returns valid state immediately after spawn() [test]
   <!-- file: packages/workflow-engine/src/executor.rs -->
   <!-- purpose: Regression test for the spawn race condition -->
   <!-- requirements: Race condition finding -->
@@ -300,12 +300,12 @@ This plan addresses all findings from the Life Engine Core QA review (2026-03-28
 > depends: none
 > spec: .odm/qa/reports/phase-2/workflow-engine.md
 
-- [ ] Fix `WorkflowEventEmitter` to increment depth when emitting events from event-triggered workflows [bugfix]
+- [x] Fix `WorkflowEventEmitter` to increment depth when emitting events from event-triggered workflows [bugfix]
   <!-- file: packages/workflow-engine/src/event_bus.rs -->
   <!-- purpose: Restore loop prevention for cascading workflows -->
   <!-- requirements: Lines 222-234 event depth tracking defeated finding -->
   <!-- leverage: existing depth field on events -->
-- [ ] Add test verifying depth increments on cascading workflow events [test]
+- [x] Add test verifying depth increments on cascading workflow events [test]
   <!-- file: packages/workflow-engine/src/event_bus.rs -->
   <!-- purpose: Regression test for event depth tracking -->
   <!-- requirements: Event depth tracking finding -->
@@ -315,17 +315,17 @@ This plan addresses all findings from the Life Engine Core QA review (2026-03-28
 > depends: none
 > spec: .odm/qa/reports/phase-3/api-plugins.md
 
-- [ ] Add `Propfind` and `Report` variants to `HttpMethod` enum [feature]
+- [x] Add `Propfind` and `Report` variants to `HttpMethod` enum [feature]
   <!-- file: packages/plugin-sdk-rs/src/types.rs -->
   <!-- purpose: Unblock CalDAV and CardDAV plugins that require these essential WebDAV methods -->
   <!-- requirements: Missing HTTP methods finding -->
   <!-- leverage: existing HttpMethod enum -->
-- [ ] Add serialization and deserialization support for the new variants [feature]
+- [x] Add serialization and deserialization support for the new variants [feature]
   <!-- file: packages/plugin-sdk-rs/src/types.rs -->
   <!-- purpose: Ensure new methods work through the WASM boundary -->
   <!-- requirements: Missing HTTP methods finding -->
   <!-- leverage: existing serde patterns on HttpMethod -->
-- [ ] Add tests for the new HttpMethod variants [test]
+- [x] Add tests for the new HttpMethod variants [test]
   <!-- file: packages/plugin-sdk-rs/src/types.rs -->
   <!-- purpose: Verify round-trip serialization of new methods -->
   <!-- requirements: Missing HTTP methods finding -->
@@ -335,17 +335,17 @@ This plan addresses all findings from the Life Engine Core QA review (2026-03-28
 > depends: none
 > spec: .odm/qa/reports/phase-3/api-plugins.md
 
-- [ ] Replace byte-offset folding with `char_indices()` in CalDAV serializer [bugfix]
+- [x] Replace byte-offset folding with `char_indices()` in CalDAV serializer [bugfix]
   <!-- file: plugins/engine/api-caldav/src/serializer.rs -->
   <!-- purpose: Prevent multi-byte UTF-8 characters from being split and corrupted at fold boundaries -->
   <!-- requirements: UTF-8 line folding corruption finding -->
   <!-- leverage: none -->
-- [ ] Replace byte-offset folding with `char_indices()` in CardDAV serializer [bugfix]
+- [x] Replace byte-offset folding with `char_indices()` in CardDAV serializer [bugfix]
   <!-- file: plugins/engine/api-carddav/src/serializer.rs -->
   <!-- purpose: Prevent multi-byte UTF-8 characters from being split and corrupted at fold boundaries -->
   <!-- requirements: UTF-8 line folding corruption finding -->
   <!-- leverage: none -->
-- [ ] Add tests with multi-byte characters (CJK, emoji, accented) at fold boundaries [test]
+- [x] Add tests with multi-byte characters (CJK, emoji, accented) at fold boundaries [test]
   <!-- file: plugins/engine/api-caldav/src/serializer.rs -->
   <!-- purpose: Verify non-ASCII text survives folding without corruption -->
   <!-- requirements: UTF-8 line folding finding -->

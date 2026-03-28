@@ -15,6 +15,7 @@ use life_engine_workflow_engine::WorkflowEventEmitter;
 use tracing::debug;
 
 use crate::capability::ApprovedCapabilities;
+use crate::host_functions::blob::{BlobBackend, BlobHostContext};
 use crate::host_functions::config::ConfigHostContext;
 use crate::host_functions::events::EventsHostContext;
 use crate::host_functions::http::HttpHostContext;
@@ -31,6 +32,17 @@ pub struct InjectionDeps {
     pub log_rate_limiter: Arc<LogRateLimiter>,
     /// Per-plugin config section (if any).
     pub plugin_config: Option<serde_json::Value>,
+    /// Shared blob storage backend (optional — only needed if blob capabilities are granted).
+    pub blob_storage: Option<Arc<dyn BlobBackend>>,
+    /// Domains this plugin is allowed to contact via HTTP outbound (from manifest).
+    /// `None` means all domains are allowed (backwards compat).
+    pub allowed_domains: Option<Vec<String>>,
+    /// Event names this plugin declared in its manifest `[events.emit]` section.
+    pub declared_emit_events: Option<Vec<String>>,
+    /// Event names this plugin declared in its manifest `[events.subscribe]` section.
+    pub declared_subscribe_events: Option<Vec<String>>,
+    /// Current execution depth for cascading event tracking.
+    pub execution_depth: u32,
 }
 
 /// Builds the set of Extism host functions for a plugin based on its approved
@@ -81,8 +93,41 @@ pub fn build_host_functions(
         debug!(plugin_id = %plugin_id, "injected host_storage_delete");
     }
 
+    if let Some(ref blob_storage) = deps.blob_storage {
+        if capabilities.has(Capability::StorageBlobRead) {
+            functions.push(build_blob_retrieve_function(
+                plugin_id,
+                capabilities,
+                blob_storage,
+            ));
+            debug!(plugin_id = %plugin_id, "injected host_blob_retrieve");
+        }
+
+        if capabilities.has(Capability::StorageBlobWrite) {
+            functions.push(build_blob_store_function(
+                plugin_id,
+                capabilities,
+                blob_storage,
+            ));
+            debug!(plugin_id = %plugin_id, "injected host_blob_store");
+        }
+
+        if capabilities.has(Capability::StorageBlobDelete) {
+            functions.push(build_blob_delete_function(
+                plugin_id,
+                capabilities,
+                blob_storage,
+            ));
+            debug!(plugin_id = %plugin_id, "injected host_blob_delete");
+        }
+    }
+
     if capabilities.has(Capability::HttpOutbound) {
-        functions.push(build_http_request_function(plugin_id, capabilities));
+        functions.push(build_http_request_function(
+            plugin_id,
+            capabilities,
+            &deps.allowed_domains,
+        ));
         debug!(plugin_id = %plugin_id, "injected host_http_request");
     }
 
@@ -91,6 +136,9 @@ pub fn build_host_functions(
             plugin_id,
             capabilities,
             &deps.event_bus,
+            &deps.declared_emit_events,
+            &deps.declared_subscribe_events,
+            deps.execution_depth,
         ));
         debug!(plugin_id = %plugin_id, "injected host_events_emit");
     }
@@ -100,6 +148,9 @@ pub fn build_host_functions(
             plugin_id,
             capabilities,
             &deps.event_bus,
+            &deps.declared_emit_events,
+            &deps.declared_subscribe_events,
+            deps.execution_depth,
         ));
         debug!(plugin_id = %plugin_id, "injected host_events_subscribe");
     }
@@ -313,15 +364,136 @@ fn build_storage_delete_function(
     .with_namespace("life_engine")
 }
 
+fn build_blob_store_function(
+    plugin_id: &str,
+    capabilities: &ApprovedCapabilities,
+    blob_storage: &Arc<dyn BlobBackend>,
+) -> Function {
+    let ctx = BlobHostContext {
+        plugin_id: plugin_id.to_string(),
+        capabilities: capabilities.clone(),
+        blob_storage: Arc::clone(blob_storage),
+    };
+
+    Function::new(
+        "host_blob_store",
+        [PTR],
+        [PTR],
+        UserData::new(ctx),
+        |plugin, inputs, outputs, user_data| {
+            let data = user_data.get()?;
+            let ctx = data.lock().unwrap();
+            let input: Vec<u8> = plugin.memory_get_val(&inputs[0])?;
+
+            let rt = tokio::runtime::Handle::try_current()
+                .map(|h| h.block_on(crate::host_functions::blob::host_blob_store(&ctx, &input)))
+                .unwrap_or_else(|_| {
+                    let rt = tokio::runtime::Runtime::new().unwrap();
+                    rt.block_on(crate::host_functions::blob::host_blob_store(&ctx, &input))
+                });
+
+            match rt {
+                Ok(output) => {
+                    plugin.memory_set_val(&mut outputs[0], output)?;
+                    Ok(())
+                }
+                Err(e) => Err(extism::Error::msg(e.to_string())),
+            }
+        },
+    )
+    .with_namespace("life_engine")
+}
+
+fn build_blob_retrieve_function(
+    plugin_id: &str,
+    capabilities: &ApprovedCapabilities,
+    blob_storage: &Arc<dyn BlobBackend>,
+) -> Function {
+    let ctx = BlobHostContext {
+        plugin_id: plugin_id.to_string(),
+        capabilities: capabilities.clone(),
+        blob_storage: Arc::clone(blob_storage),
+    };
+
+    Function::new(
+        "host_blob_retrieve",
+        [PTR],
+        [PTR],
+        UserData::new(ctx),
+        |plugin, inputs, outputs, user_data| {
+            let data = user_data.get()?;
+            let ctx = data.lock().unwrap();
+            let input: Vec<u8> = plugin.memory_get_val(&inputs[0])?;
+
+            let rt = tokio::runtime::Handle::try_current()
+                .map(|h| h.block_on(crate::host_functions::blob::host_blob_retrieve(&ctx, &input)))
+                .unwrap_or_else(|_| {
+                    let rt = tokio::runtime::Runtime::new().unwrap();
+                    rt.block_on(crate::host_functions::blob::host_blob_retrieve(&ctx, &input))
+                });
+
+            match rt {
+                Ok(output) => {
+                    plugin.memory_set_val(&mut outputs[0], output)?;
+                    Ok(())
+                }
+                Err(e) => Err(extism::Error::msg(e.to_string())),
+            }
+        },
+    )
+    .with_namespace("life_engine")
+}
+
+fn build_blob_delete_function(
+    plugin_id: &str,
+    capabilities: &ApprovedCapabilities,
+    blob_storage: &Arc<dyn BlobBackend>,
+) -> Function {
+    let ctx = BlobHostContext {
+        plugin_id: plugin_id.to_string(),
+        capabilities: capabilities.clone(),
+        blob_storage: Arc::clone(blob_storage),
+    };
+
+    Function::new(
+        "host_blob_delete",
+        [PTR],
+        [PTR],
+        UserData::new(ctx),
+        |plugin, inputs, outputs, user_data| {
+            let data = user_data.get()?;
+            let ctx = data.lock().unwrap();
+            let input: Vec<u8> = plugin.memory_get_val(&inputs[0])?;
+
+            let rt = tokio::runtime::Handle::try_current()
+                .map(|h| h.block_on(crate::host_functions::blob::host_blob_delete(&ctx, &input)))
+                .unwrap_or_else(|_| {
+                    let rt = tokio::runtime::Runtime::new().unwrap();
+                    rt.block_on(crate::host_functions::blob::host_blob_delete(&ctx, &input))
+                });
+
+            match rt {
+                Ok(output) => {
+                    plugin.memory_set_val(&mut outputs[0], output)?;
+                    Ok(())
+                }
+                Err(e) => Err(extism::Error::msg(e.to_string())),
+            }
+        },
+    )
+    .with_namespace("life_engine")
+}
+
 fn build_http_request_function(
     plugin_id: &str,
     capabilities: &ApprovedCapabilities,
+    allowed_domains: &Option<Vec<String>>,
 ) -> Function {
     let ctx = HttpHostContext {
         plugin_id: plugin_id.to_string(),
         capabilities: capabilities.clone(),
         client: reqwest::Client::new(),
-        allowed_domains: None,
+        allowed_domains: allowed_domains.clone(),
     };
 
     Function::new(
@@ -357,13 +529,17 @@ fn build_events_emit_function(
     plugin_id: &str,
     capabilities: &ApprovedCapabilities,
     event_bus: &Arc<dyn WorkflowEventEmitter>,
+    declared_emit_events: &Option<Vec<String>>,
+    declared_subscribe_events: &Option<Vec<String>>,
+    execution_depth: u32,
 ) -> Function {
     let ctx = EventsHostContext {
         plugin_id: plugin_id.to_string(),
         capabilities: capabilities.clone(),
         event_bus: Arc::clone(event_bus),
-        declared_emit_events: None,
-        execution_depth: 0,
+        declared_emit_events: declared_emit_events.clone(),
+        declared_subscribe_events: declared_subscribe_events.clone(),
+        execution_depth,
     };
 
     Function::new(
@@ -399,13 +575,17 @@ fn build_events_subscribe_function(
     plugin_id: &str,
     capabilities: &ApprovedCapabilities,
     event_bus: &Arc<dyn WorkflowEventEmitter>,
+    declared_emit_events: &Option<Vec<String>>,
+    declared_subscribe_events: &Option<Vec<String>>,
+    execution_depth: u32,
 ) -> Function {
     let ctx = EventsHostContext {
         plugin_id: plugin_id.to_string(),
         capabilities: capabilities.clone(),
         event_bus: Arc::clone(event_bus),
-        declared_emit_events: None,
-        execution_depth: 0,
+        declared_emit_events: declared_emit_events.clone(),
+        declared_subscribe_events: declared_subscribe_events.clone(),
+        execution_depth,
     };
 
     Function::new(

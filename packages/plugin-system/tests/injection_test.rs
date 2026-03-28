@@ -56,7 +56,7 @@ impl MockEventBus {
 
 #[async_trait]
 impl WorkflowEventEmitter for MockEventBus {
-    async fn emit(&self, event_name: &str, payload: serde_json::Value) {
+    async fn emit(&self, event_name: &str, payload: serde_json::Value, _depth: u32) {
         self.emit_calls
             .lock()
             .unwrap()
@@ -77,6 +77,11 @@ fn make_deps() -> InjectionDeps {
         event_bus: Arc::new(MockEventBus::new()),
         log_rate_limiter: Arc::new(LogRateLimiter::new()),
         plugin_config: None,
+        blob_storage: None,
+        allowed_domains: None,
+        declared_emit_events: None,
+        declared_subscribe_events: None,
+        execution_depth: 0,
     }
 }
 

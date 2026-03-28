@@ -14,7 +14,7 @@ Work packages are ordered by dependency: Capability unification (1.1) must come 
 
 **Source:** .odm/qa/reports/phase-2/plugin-sdk.md
 
-**Progress:** 4 / 5 work packages complete
+**Progress:** 5 / 5 work packages complete
 
 ---
 
@@ -157,32 +157,32 @@ Work packages are ordered by dependency: Capability unification (1.1) must come 
 > depends: 1.1, 1.3
 > spec: .odm/qa/reports/phase-2/plugin-sdk.md
 
-- [ ] Add crate-level documentation section explaining when to use `CorePlugin` vs `Plugin`, which context type each uses, and the planned convergence path [docs]
+- [x] Add crate-level documentation section explaining when to use `CorePlugin` vs `Plugin`, which context type each uses, and the planned convergence path [docs]
   <!-- file: packages/plugin-sdk-rs/src/lib.rs -->
   <!-- purpose: Guide plugin authors to the correct plugin model for their use case -->
   <!-- requirements: C-002 (two plugin models without migration path) -->
   <!-- leverage: existing crate-level docs -->
-- [ ] Add prominent doc comments to `register_plugin!` macro explaining statelessness and per-call instantiation [docs]
+- [x] Add prominent doc comments to `register_plugin!` macro explaining statelessness and per-call instantiation [docs]
   <!-- file: packages/plugin-sdk-rs/src/macros.rs -->
   <!-- purpose: Prevent plugin authors from expecting state persistence across WASM calls -->
   <!-- requirements: M-003 (register_plugin creates new instance per call) -->
   <!-- leverage: existing macro docs -->
-- [ ] Document the relationship between `PluginContext` and `ActionContext` [docs]
+- [x] Document the relationship between `PluginContext` and `ActionContext` [docs]
   <!-- file: packages/plugin-sdk-rs/src/types.rs, packages/plugin-sdk-rs/src/context.rs -->
   <!-- purpose: Clarify which context type is used by which plugin model -->
   <!-- requirements: M-004 (overlapping contexts) -->
   <!-- leverage: existing context types -->
-- [ ] Document the relationship between `CredentialStore` and `CredentialAccess` traits [docs]
+- [x] Document the relationship between `CredentialStore` and `CredentialAccess` traits [docs]
   <!-- file: packages/plugin-sdk-rs/src/credential_store.rs -->
   <!-- purpose: Clarify layering: CredentialStore is Core's impl, CredentialAccess is the plugin-facing interface -->
   <!-- requirements: m-credential-overlap -->
   <!-- leverage: existing trait definitions -->
-- [ ] Update or remove stale "Phase 1" comment in `PluginRoute` [fix]
+- [x] Update or remove stale "Phase 1" comment in `PluginRoute` [fix]
   <!-- file: packages/plugin-sdk-rs/src/types.rs -->
   <!-- purpose: Remove outdated TODO reference that creates confusion about project state -->
   <!-- requirements: m-001 (stale comment) -->
   <!-- leverage: none -->
-- [ ] Add or verify `.cargo/config.toml` referenced in crate-level docs, or remove the reference [fix]
+- [x] Add or verify `.cargo/config.toml` referenced in crate-level docs, or remove the reference [fix]
   <!-- file: packages/plugin-sdk-rs/src/lib.rs -->
   <!-- purpose: Fix documentation reference to potentially non-existent file -->
   <!-- requirements: m-010 (referenced config may not exist) -->

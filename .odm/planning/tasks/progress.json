@@ -88,7 +88,9 @@
     "plugin-sdk:1.2",
     "plugin-sdk:1.3",
     "plugin-sdk:1.4",
-    "backup-and-webhooks:1.7"
+    "plugin-sdk:1.5",
+    "backup-and-webhooks:1.7",
+    "backup-and-webhooks:1.8"
   ],
   "history": [
     {
@@ -444,6 +446,22 @@
       "title": "Error Handling and DX Improvements",
       "timestamp": "2026-03-28T00:00:00Z",
       "tasks_completed": 7,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "1.5",
+      "plan": "plugin-sdk.md",
+      "title": "Documentation and Cleanup",
+      "timestamp": "2026-03-28T00:00:00Z",
+      "tasks_completed": 6,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "1.8",
+      "plan": "backup-and-webhooks.md",
+      "title": "Webhook Receiver Completeness",
+      "timestamp": "2026-03-28T00:00:00Z",
+      "tasks_completed": 6,
       "tasks_deferred": 0
     }
   ]

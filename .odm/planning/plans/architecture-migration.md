@@ -826,17 +826,17 @@ Build the HTTP entry point: listener configuration, route merging, REST and Grap
 
 ### 9.3 — REST Handler
 
-- [ ] Implement REST request-to-WorkflowRequest translation: extract `workflow` from route config, `identity` from auth middleware extension, `params` from path parameters, `query` from URL query string, `body` from JSON request body, `meta` with generated request ID and timestamp.
+- [x] Implement REST request-to-WorkflowRequest translation: extract `workflow` from route config, `identity` from auth middleware extension, `params` from path parameters, `query` from URL query string, `body` from JSON request body, `meta` with generated request ID and timestamp.
   <!-- files: packages/transport-rest/src/handlers/rest.rs -->
   <!-- purpose: Translate HTTP requests into the workflow engine contract -->
   <!-- requirements: transport-layer 7.1 -->
 
-- [ ] Implement WorkflowResponse-to-HTTP translation: map `WorkflowStatus` to HTTP status codes (Ok→200, Created→201, NotFound→404, Denied→403, Invalid→400, Error→500). Wrap success data in `{ "data": ... }`, errors in `{ "error": { "code": "...", "message": "..." } }`.
+- [x] Implement WorkflowResponse-to-HTTP translation: map `WorkflowStatus` to HTTP status codes (Ok→200, Created→201, NotFound→404, Denied→403, Invalid→400, Error→500). Wrap success data in `{ "data": ... }`, errors in `{ "error": { "code": "...", "message": "..." } }`.
   <!-- files: packages/transport-rest/src/handlers/rest.rs -->
   <!-- purpose: Translate workflow responses back to HTTP -->
   <!-- requirements: transport-layer 7.2, 7.3, 7.4 -->
 
-- [ ] Write unit tests: request translation with various HTTP methods, response translation for all status variants, JSON body parsing, path parameter extraction.
+- [x] Write unit tests: request translation with various HTTP methods, response translation for all status variants, JSON body parsing, path parameter extraction.
   <!-- files: packages/transport-rest/src/handlers/rest_tests.rs -->
   <!-- purpose: Verify REST handler correctness -->
   <!-- requirements: transport-layer 7.1, 7.2 -->

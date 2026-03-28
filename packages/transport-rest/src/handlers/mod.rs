@@ -98,9 +98,10 @@ pub fn workflow_response_to_http(response: WorkflowResponse) -> impl IntoRespons
 /// Handler for requests that carry a JSON body (POST, PUT, PATCH).
 ///
 /// Extracts route config, identity, path params, query params, and body,
-/// then builds a `WorkflowRequest`. In a full integration the request
-/// would be dispatched to the workflow engine; here we return the request
-/// for testability until the engine dispatcher is wired.
+/// then builds a `WorkflowRequest` (Requirement 7.1). The request is
+/// ready for dispatch to the workflow engine; until the dispatcher is
+/// wired (Phase 10), we echo a placeholder response preserving the
+/// request ID for correlation.
 pub async fn handle_with_body(
     Extension(route_config): Extension<RouteConfig>,
     Extension(identity): Extension<Identity>,
@@ -108,7 +109,7 @@ pub async fn handle_with_body(
     Query(query): Query<HashMap<String, String>>,
     Json(body): Json<Value>,
 ) -> impl IntoResponse {
-    let _request = build_workflow_request(
+    let request = build_workflow_request(
         route_config.workflow,
         identity,
         params,
@@ -116,14 +117,14 @@ pub async fn handle_with_body(
         Some(body),
     );
 
-    // TODO: dispatch to workflow engine and translate response.
-    // For now, return a placeholder success.
+    // TODO: dispatch `request` to workflow engine and translate response.
+    // For now, return a placeholder success preserving the request ID.
     let response = WorkflowResponse {
         status: WorkflowStatus::Ok,
         data: Some(json!({"placeholder": true})),
         errors: vec![],
         meta: ResponseMeta {
-            request_id: _request.meta.request_id,
+            request_id: request.meta.request_id,
             duration_ms: 0,
             traces: vec![],
         },
@@ -135,14 +136,14 @@ pub async fn handle_with_body(
 /// Handler for requests without a body (GET, DELETE).
 ///
 /// Same translation logic as `handle_with_body` but without consuming
-/// a JSON body from the request.
+/// a JSON body from the request (Requirement 7.1).
 pub async fn handle_without_body(
     Extension(route_config): Extension<RouteConfig>,
     Extension(identity): Extension<Identity>,
     Path(params): Path<HashMap<String, String>>,
     Query(query): Query<HashMap<String, String>>,
 ) -> impl IntoResponse {
-    let _request = build_workflow_request(
+    let request = build_workflow_request(
         route_config.workflow,
         identity,
         params,
@@ -155,7 +156,7 @@ pub async fn handle_without_body(
         data: Some(json!({"placeholder": true})),
         errors: vec![],
         meta: ResponseMeta {
-            request_id: _request.meta.request_id,
+            request_id: request.meta.request_id,
             duration_ms: 0,
             traces: vec![],
         },
@@ -393,5 +394,126 @@ mod tests {
 
         assert_eq!(req.params.get("collection").unwrap(), "contacts");
         assert_eq!(req.params.get("id").unwrap(), "42");
+    }
+
+    // ---------------------------------------------------------------
+    // Test 10: Denied response returns 403 with error envelope (Req 7.3, 7.4)
+    // ---------------------------------------------------------------
+    #[tokio::test]
+    async fn denied_response_returns_403() {
+        let response = WorkflowResponse {
+            status: WorkflowStatus::Denied,
+            data: None,
+            errors: vec![WorkflowError {
+                code: "FORBIDDEN".to_string(),
+                message: "Insufficient permissions".to_string(),
+                detail: None,
+            }],
+            meta: ResponseMeta {
+                request_id: "req-5".to_string(),
+                duration_ms: 0,
+                traces: vec![],
+            },
+        };
+
+        let (parts, body) = workflow_response_to_http(response).into_response().into_parts();
+        assert_eq!(parts.status, StatusCode::FORBIDDEN);
+
+        let bytes = axum::body::to_bytes(body, usize::MAX).await.unwrap();
+        let json_body: Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(json_body["error"]["code"], "FORBIDDEN");
+    }
+
+    // ---------------------------------------------------------------
+    // Test 11: Invalid response returns 400 with error envelope (Req 7.3, 7.4)
+    // ---------------------------------------------------------------
+    #[tokio::test]
+    async fn invalid_response_returns_400() {
+        let response = WorkflowResponse {
+            status: WorkflowStatus::Invalid,
+            data: None,
+            errors: vec![WorkflowError {
+                code: "VALIDATION_ERROR".to_string(),
+                message: "Field 'title' is required".to_string(),
+                detail: Some(json!({"field": "title"})),
+            }],
+            meta: ResponseMeta {
+                request_id: "req-6".to_string(),
+                duration_ms: 0,
+                traces: vec![],
+            },
+        };
+
+        let (parts, body) = workflow_response_to_http(response).into_response().into_parts();
+        assert_eq!(parts.status, StatusCode::BAD_REQUEST);
+
+        let bytes = axum::body::to_bytes(body, usize::MAX).await.unwrap();
+        let json_body: Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(json_body["error"]["code"], "VALIDATION_ERROR");
+        assert_eq!(json_body["error"]["message"], "Field 'title' is required");
+    }
+
+    // ---------------------------------------------------------------
+    // Test 12: Query parameters are correctly propagated (Req 7.1)
+    // ---------------------------------------------------------------
+    #[test]
+    fn query_params_propagated_to_request() {
+        let mut query = HashMap::new();
+        query.insert("limit".to_string(), "25".to_string());
+        query.insert("offset".to_string(), "50".to_string());
+        query.insert("sort".to_string(), "created_at".to_string());
+
+        let req = build_workflow_request(
+            "collection.list".to_string(),
+            Identity::guest(),
+            HashMap::new(),
+            query,
+            None,
+        );
+
+        assert_eq!(req.query.get("limit").unwrap(), "25");
+        assert_eq!(req.query.get("offset").unwrap(), "50");
+        assert_eq!(req.query.get("sort").unwrap(), "created_at");
+    }
+
+    // ---------------------------------------------------------------
+    // Test 13: JSON body is preserved exactly in request (Req 7.1)
+    // ---------------------------------------------------------------
+    #[test]
+    fn json_body_preserved_in_request() {
+        let body = json!({
+            "title": "Buy milk",
+            "tags": ["grocery", "urgent"],
+            "metadata": {"priority": 1}
+        });
+
+        let req = build_workflow_request(
+            "collection.create".to_string(),
+            Identity::guest(),
+            HashMap::new(),
+            HashMap::new(),
+            Some(body.clone()),
+        );
+
+        assert_eq!(req.body.unwrap(), body);
+    }
+
+    // ---------------------------------------------------------------
+    // Test 14: Timestamp is set on request meta (Req 7.1)
+    // ---------------------------------------------------------------
+    #[test]
+    fn request_meta_has_timestamp() {
+        let before = Utc::now();
+        let req = build_workflow_request(
+            "collection.list".to_string(),
+            Identity::guest(),
+            HashMap::new(),
+            HashMap::new(),
+            None,
+        );
+        let after = Utc::now();
+
+        assert!(req.meta.timestamp >= before);
+        assert!(req.meta.timestamp <= after);
     }
 }

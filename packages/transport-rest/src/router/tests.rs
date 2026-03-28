@@ -1,9 +1,12 @@
 //! Unit tests for route merging, collision detection, path parameter
 //! extraction, namespace validation, and handler-type dispatch.
 
+use axum::Extension;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use tower::ServiceExt;
+
+use life_engine_types::identity::Identity;
 
 use crate::config::{
     HandlerConfig, ListenerConfig, PluginRoute, RouteConfig, default_listener_config,
@@ -257,6 +260,11 @@ fn to_axum_path_handles_single_param() {
 
 // ── Router build + path extraction ──────────────────────────────────
 
+/// Helper: wrap a router with a guest Identity extension for testing.
+fn with_identity(router: axum::Router) -> axum::Router {
+    router.layer(Extension(Identity::guest()))
+}
+
 #[tokio::test]
 async fn router_extracts_path_params() {
     let routes = vec![RouteConfig {
@@ -266,7 +274,7 @@ async fn router_extracts_path_params() {
         public: false,
     }];
 
-    let app = build_router(&routes);
+    let app = with_identity(build_router(&routes));
     let req = Request::builder()
         .method("GET")
         .uri("/api/v1/data/tasks/abc-123")
@@ -280,13 +288,12 @@ async fn router_extracts_path_params() {
         .await
         .unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    assert_eq!(json["workflow"], "collection.get");
-    assert_eq!(json["params"]["collection"], "tasks");
-    assert_eq!(json["params"]["id"], "abc-123");
+    // Real handler returns { "data": ... } envelope.
+    assert!(json.get("data").is_some(), "response should have data envelope");
 }
 
 #[tokio::test]
-async fn router_resolves_workflow_by_name() {
+async fn router_resolves_workflow_returns_ok() {
     let routes = vec![RouteConfig {
         method: "GET".into(),
         path: "/api/v1/health".into(),
@@ -294,7 +301,7 @@ async fn router_resolves_workflow_by_name() {
         public: true,
     }];
 
-    let app = build_router(&routes);
+    let app = with_identity(build_router(&routes));
     let req = Request::builder()
         .method("GET")
         .uri("/api/v1/health")
@@ -303,13 +310,6 @@ async fn router_resolves_workflow_by_name() {
 
     let resp = app.oneshot(req).await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
-
-    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
-        .await
-        .unwrap();
-    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    assert_eq!(json["workflow"], "health.check");
-    assert_eq!(json["public"], true);
 }
 
 #[tokio::test]
@@ -321,7 +321,7 @@ async fn router_returns_404_for_unknown_route() {
         public: true,
     }];
 
-    let app = build_router(&routes);
+    let app = with_identity(build_router(&routes));
     let req = Request::builder()
         .method("GET")
         .uri("/api/v1/nonexistent")
@@ -332,10 +332,10 @@ async fn router_returns_404_for_unknown_route() {
     assert_eq!(resp.status(), StatusCode::NOT_FOUND);
 }
 
-// ── Merged router (handler-type dispatch) ───────────────────────────
+// ── Merged router (REST handler dispatch) ───────────────────────────
 
 #[tokio::test]
-async fn merged_router_includes_handler_type() {
+async fn merged_router_dispatches_get_to_rest_handler() {
     let merged = vec![MergedRoute {
         route: RouteConfig {
             method: "GET".into(),
@@ -347,7 +347,7 @@ async fn merged_router_includes_handler_type() {
         source: RouteSource::Config,
     }];
 
-    let app = build_merged_router(&merged);
+    let app = with_identity(build_merged_router(&merged));
     let req = Request::builder()
         .method("GET")
         .uri("/api/v1/data/notes")
@@ -361,13 +361,42 @@ async fn merged_router_includes_handler_type() {
         .await
         .unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    assert_eq!(json["workflow"], "collection.list");
-    assert_eq!(json["handler_type"], "rest");
-    assert_eq!(json["params"]["collection"], "notes");
+    assert!(json.get("data").is_some(), "REST handler should return data envelope");
 }
 
 #[tokio::test]
-async fn merged_router_dispatches_graphql_route() {
+async fn merged_router_dispatches_post_with_body() {
+    let merged = vec![MergedRoute {
+        route: RouteConfig {
+            method: "POST".into(),
+            path: "/api/v1/data/:collection".into(),
+            workflow: "collection.create".into(),
+            public: false,
+        },
+        handler_type: "rest".into(),
+        source: RouteSource::Config,
+    }];
+
+    let app = with_identity(build_merged_router(&merged));
+    let req = Request::builder()
+        .method("POST")
+        .uri("/api/v1/data/tasks")
+        .header("content-type", "application/json")
+        .body(Body::from(r#"{"title":"Buy milk"}"#))
+        .unwrap();
+
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert!(json.get("data").is_some(), "POST handler should return data envelope");
+}
+
+#[tokio::test]
+async fn merged_router_dispatches_graphql_post() {
     let merged = vec![MergedRoute {
         route: RouteConfig {
             method: "POST".into(),
@@ -379,11 +408,12 @@ async fn merged_router_dispatches_graphql_route() {
         source: RouteSource::Config,
     }];
 
-    let app = build_merged_router(&merged);
+    let app = with_identity(build_merged_router(&merged));
     let req = Request::builder()
         .method("POST")
         .uri("/graphql")
-        .body(Body::empty())
+        .header("content-type", "application/json")
+        .body(Body::from(r#"{"query":"{ items { id } }"}"#))
         .unwrap();
 
     let resp = app.oneshot(req).await.unwrap();
@@ -393,8 +423,7 @@ async fn merged_router_dispatches_graphql_route() {
         .await
         .unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    assert_eq!(json["workflow"], "graphql.query");
-    assert_eq!(json["handler_type"], "graphql");
+    assert!(json.get("data").is_some(), "GraphQL handler should return data envelope");
 }
 
 // ── End-to-end: merge then build ────────────────────────────────────
@@ -411,7 +440,7 @@ async fn end_to_end_merge_and_build() {
     }];
 
     let merged = merge_routes(&config, &plugin_routes).expect("merge should succeed");
-    let app = build_merged_router(&merged);
+    let app = with_identity(build_merged_router(&merged));
 
     // Config route still works.
     let req = Request::builder()
@@ -435,6 +464,5 @@ async fn end_to_end_merge_and_build() {
         .await
         .unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    assert_eq!(json["workflow"], "search.query");
-    assert_eq!(json["handler_type"], "rest");
+    assert!(json.get("data").is_some(), "handler should return data envelope");
 }

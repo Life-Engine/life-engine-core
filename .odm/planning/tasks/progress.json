@@ -90,7 +90,39 @@
     "plugin-sdk:1.4",
     "plugin-sdk:1.5",
     "backup-and-webhooks:1.7",
-    "backup-and-webhooks:1.8"
+    "backup-and-webhooks:1.8",
+    "backup-and-webhooks:1.9",
+    "transport-graphql:1.1",
+    "transport-graphql:1.2",
+    "transport-graphql:1.3",
+    "transport-graphql:1.4",
+    "transport-graphql:1.5",
+    "workflow-engine:1.1",
+    "workflow-engine:1.2",
+    "workflow-engine:1.3",
+    "workflow-engine:1.4",
+    "workflow-engine:1.5",
+    "connector-plugins:1.1",
+    "connector-plugins:1.2",
+    "connector-plugins:1.3",
+    "connector-plugins:1.4",
+    "connector-plugins:1.5",
+    "connector-plugins:1.6",
+    "connector-plugins:1.7",
+    "connector-plugins:1.8",
+    "connector-plugins:1.9",
+    "connector-plugins:1.10",
+    "devops-deployment:1.1",
+    "devops-deployment:1.2",
+    "devops-deployment:2.1",
+    "dependency-audit:1.1",
+    "dependency-audit:1.2",
+    "dependency-audit:2.1",
+    "dependency-audit:3.1",
+    "dependency-audit:4.1",
+    "devops-deployment:2.2",
+    "devops-deployment:3.1",
+    "devops-deployment:3.2"
   ],
   "history": [
     {
@@ -462,6 +494,86 @@
       "title": "Webhook Receiver Completeness",
       "timestamp": "2026-03-28T00:00:00Z",
       "tasks_completed": 6,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "2.1",
+      "plan": "devops-deployment.md",
+      "title": "Fix Reverse Proxy Configurations",
+      "timestamp": "2026-03-28T00:00:00Z",
+      "tasks_completed": 5,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "1.1",
+      "plan": "dependency-audit.md",
+      "title": "Resolve Wasmtime Security Vulnerabilities",
+      "timestamp": "2026-03-28T00:00:00Z",
+      "tasks_completed": 3,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "1.2",
+      "plan": "dependency-audit.md",
+      "title": "Fix Version Conflict and Advisory Compliance",
+      "timestamp": "2026-03-28T00:00:00Z",
+      "tasks_completed": 3,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "2.1",
+      "plan": "dependency-audit.md",
+      "title": "Migrate Unmaintained Crates and Centralize Workspace Dependencies",
+      "timestamp": "2026-03-28T00:00:00Z",
+      "tasks_completed": 6,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "3.1",
+      "plan": "dependency-audit.md",
+      "title": "Fix Feature Flags and Centralize Shared Dependencies",
+      "timestamp": "2026-03-28T00:00:00Z",
+      "tasks_completed": 4,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "4.1",
+      "plan": "dependency-audit.md",
+      "title": "Dependency Cleanup",
+      "timestamp": "2026-03-28T00:00:00Z",
+      "tasks_completed": 2,
+      "tasks_deferred": 1
+    },
+    {
+      "wp_id": "1.2",
+      "plan": "devops-deployment.md",
+      "title": "Fix Service Manager Issues (systemd and launchd)",
+      "timestamp": "2026-03-28T00:00:00Z",
+      "tasks_completed": 6,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "2.2",
+      "plan": "devops-deployment.md",
+      "title": "Fix Docker Build and Compose Issues",
+      "timestamp": "2026-03-28T00:00:00Z",
+      "tasks_completed": 7,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "3.1",
+      "plan": "devops-deployment.md",
+      "title": "Fix Config and Tooling Issues",
+      "timestamp": "2026-03-28T00:00:00Z",
+      "tasks_completed": 6,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "3.2",
+      "plan": "devops-deployment.md",
+      "title": "Config Code Cleanup",
+      "timestamp": "2026-03-29T00:00:00Z",
+      "tasks_completed": 3,
       "tasks_deferred": 0
     }
   ]

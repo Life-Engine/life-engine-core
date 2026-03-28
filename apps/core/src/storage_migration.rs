@@ -257,7 +257,7 @@ mod tests {
             port: url_parsed.port().unwrap_or(5432),
             dbname: url_parsed.path().trim_start_matches('/').into(),
             user: url_parsed.username().into(),
-            password: url_parsed.password().unwrap_or("").into(),
+            password: url_parsed.password().map(String::from),
             pool_size: 4,
             ssl_mode,
         };

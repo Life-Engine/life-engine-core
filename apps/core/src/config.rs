@@ -254,9 +254,9 @@ pub struct PostgresSettings {
     /// Username.
     #[serde(default = "default_pg_user")]
     pub user: String,
-    /// Password.
+    /// Password. `None` means not configured; use `resolve_passphrase()` pattern.
     #[serde(default)]
-    pub password: String,
+    pub password: Option<String>,
     /// Connection pool size.
     #[serde(default = "default_pg_pool_size")]
     pub pool_size: usize,
@@ -287,7 +287,7 @@ impl Default for PostgresSettings {
             port: default_pg_port(),
             dbname: default_pg_dbname(),
             user: default_pg_user(),
-            password: String::new(),
+            password: None,
             pool_size: default_pg_pool_size(),
             ssl_mode: PgSslMode::default(),
         }
@@ -466,7 +466,7 @@ fn default_argon2_parallelism() -> u32 {
     4
 }
 fn default_cors_origins() -> Vec<String> {
-    vec!["http://localhost:1420".into()]
+    vec!["http://localhost:3750".into()]
 }
 fn default_rate_limit() -> u32 {
     60
@@ -586,75 +586,42 @@ impl CoreConfig {
         if let Ok(val) = std::env::var("LIFE_ENGINE_AUTH_PROVIDER") {
             self.auth.provider = val;
         }
-        // OIDC env var overrides.
-        if let Ok(issuer) = std::env::var("LIFE_ENGINE_OIDC_ISSUER_URL") {
-            let oidc = self.auth.oidc.get_or_insert(OidcSettings {
-                issuer_url: String::new(),
-                client_id: String::new(),
-                client_secret: None,
-                jwks_uri: None,
-                audience: None,
-            });
-            oidc.issuer_url = issuer;
-        }
-        if let Ok(client_id) = std::env::var("LIFE_ENGINE_OIDC_CLIENT_ID") {
-            let oidc = self.auth.oidc.get_or_insert(OidcSettings {
-                issuer_url: String::new(),
-                client_id: String::new(),
-                client_secret: None,
-                jwks_uri: None,
-                audience: None,
-            });
-            oidc.client_id = client_id;
-        }
-        if let Ok(secret) = std::env::var("LIFE_ENGINE_OIDC_CLIENT_SECRET") {
-            let oidc = self.auth.oidc.get_or_insert(OidcSettings {
-                issuer_url: String::new(),
-                client_id: String::new(),
-                client_secret: None,
-                jwks_uri: None,
-                audience: None,
-            });
-            oidc.client_secret = Some(secret);
-        }
-        // WebAuthn env var overrides.
-        if let Ok(rp_name) = std::env::var("LIFE_ENGINE_WEBAUTHN_RP_NAME") {
-            let wn = self.auth.webauthn.get_or_insert(WebAuthnSettings {
-                rp_name: String::new(),
-                rp_id: String::new(),
-                rp_origin: String::new(),
-                challenge_ttl_secs: default_webauthn_challenge_ttl(),
-            });
-            wn.rp_name = rp_name;
-        }
-        if let Ok(rp_id) = std::env::var("LIFE_ENGINE_WEBAUTHN_RP_ID") {
-            let wn = self.auth.webauthn.get_or_insert(WebAuthnSettings {
-                rp_name: String::new(),
-                rp_id: String::new(),
-                rp_origin: String::new(),
-                challenge_ttl_secs: default_webauthn_challenge_ttl(),
-            });
-            wn.rp_id = rp_id;
-        }
-        if let Ok(rp_origin) = std::env::var("LIFE_ENGINE_WEBAUTHN_RP_ORIGIN") {
-            let wn = self.auth.webauthn.get_or_insert(WebAuthnSettings {
-                rp_name: String::new(),
-                rp_id: String::new(),
-                rp_origin: String::new(),
-                challenge_ttl_secs: default_webauthn_challenge_ttl(),
-            });
-            wn.rp_origin = rp_origin;
-        }
-        if let Ok(ttl) = std::env::var("LIFE_ENGINE_WEBAUTHN_CHALLENGE_TTL")
-            && let Ok(secs) = ttl.parse::<u64>()
+        // OIDC env var overrides — insert default once, then apply all overrides.
         {
-            let wn = self.auth.webauthn.get_or_insert(WebAuthnSettings {
-                rp_name: String::new(),
-                rp_id: String::new(),
-                rp_origin: String::new(),
-                challenge_ttl_secs: default_webauthn_challenge_ttl(),
-            });
-            wn.challenge_ttl_secs = secs;
+            let has_oidc_env = ["LIFE_ENGINE_OIDC_ISSUER_URL", "LIFE_ENGINE_OIDC_CLIENT_ID", "LIFE_ENGINE_OIDC_CLIENT_SECRET"]
+                .iter().any(|k| std::env::var(k).is_ok());
+            if has_oidc_env {
+                let oidc = self.auth.oidc.get_or_insert(OidcSettings {
+                    issuer_url: String::new(),
+                    client_id: String::new(),
+                    client_secret: None,
+                    jwks_uri: None,
+                    audience: None,
+                });
+                if let Ok(val) = std::env::var("LIFE_ENGINE_OIDC_ISSUER_URL") { oidc.issuer_url = val; }
+                if let Ok(val) = std::env::var("LIFE_ENGINE_OIDC_CLIENT_ID") { oidc.client_id = val; }
+                if let Ok(val) = std::env::var("LIFE_ENGINE_OIDC_CLIENT_SECRET") { oidc.client_secret = Some(val); }
+            }
+        }
+        // WebAuthn env var overrides — insert default once, then apply all overrides.
+        {
+            let has_webauthn_env = ["LIFE_ENGINE_WEBAUTHN_RP_NAME", "LIFE_ENGINE_WEBAUTHN_RP_ID",
+                "LIFE_ENGINE_WEBAUTHN_RP_ORIGIN", "LIFE_ENGINE_WEBAUTHN_CHALLENGE_TTL"]
+                .iter().any(|k| std::env::var(k).is_ok());
+            if has_webauthn_env {
+                let wa = self.auth.webauthn.get_or_insert(WebAuthnSettings {
+                    rp_name: String::new(),
+                    rp_id: String::new(),
+                    rp_origin: String::new(),
+                    challenge_ttl_secs: default_webauthn_challenge_ttl(),
+                });
+                if let Ok(val) = std::env::var("LIFE_ENGINE_WEBAUTHN_RP_NAME") { wa.rp_name = val; }
+                if let Ok(val) = std::env::var("LIFE_ENGINE_WEBAUTHN_RP_ID") { wa.rp_id = val; }
+                if let Ok(val) = std::env::var("LIFE_ENGINE_WEBAUTHN_RP_ORIGIN") { wa.rp_origin = val; }
+                if let Ok(ttl) = std::env::var("LIFE_ENGINE_WEBAUTHN_CHALLENGE_TTL")
+                    && let Ok(secs) = ttl.parse::<u64>()
+                { wa.challenge_ttl_secs = secs; }
+            }
         }
         if let Ok(val) = std::env::var("LIFE_ENGINE_STORAGE_BACKEND") {
             self.storage.backend = val;
@@ -685,7 +652,7 @@ impl CoreConfig {
         }
         if let Ok(password) = std::env::var("LIFE_ENGINE_PG_PASSWORD") {
             let pg = self.storage.postgres.get_or_insert(PostgresSettings::default());
-            pg.password = password;
+            pg.password = Some(password);
         }
         if let Ok(ssl_mode) = std::env::var("LIFE_ENGINE_PG_SSLMODE")
             && let Ok(mode) = ssl_mode.parse::<PgSslMode>()
@@ -2456,7 +2423,7 @@ core:
         let config = CoreConfig::default();
         assert_eq!(
             config.network.cors.allowed_origins,
-            vec!["http://localhost:1420"]
+            vec!["http://localhost:3750"]
         );
     }
 
@@ -2546,7 +2513,7 @@ network:
             port: 5432,
             dbname: "mydb".into(),
             user: "admin".into(),
-            password: "s3cret-password".into(),
+            password: Some("s3cret-password".into()),
             pool_size: 8,
             ssl_mode: PgSslMode::default(),
         };

@@ -141,7 +141,7 @@ impl PgStorage {
         pool_config.port = Some(config.port);
         pool_config.dbname = Some(config.dbname.clone());
         pool_config.user = Some(config.user.clone());
-        pool_config.password = Some(config.password.clone());
+        pool_config.password = config.password.clone();
 
         let pool = match config.ssl_mode {
             PgSslMode::Disable => {
@@ -893,7 +893,7 @@ mod tests {
             port: url_parsed.port().unwrap_or(5432),
             dbname: url_parsed.path().trim_start_matches('/').into(),
             user: url_parsed.username().into(),
-            password: url_parsed.password().unwrap_or("").into(),
+            password: url_parsed.password().map(String::from),
             pool_size: 4,
             ssl_mode,
         };

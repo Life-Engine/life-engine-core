@@ -1,5 +1,9 @@
 # Change Log
 
+## 2026-03-29
+
+- DevOps WP 3.2 — Config Code Cleanup: change PostgreSQL password field from String (empty default) to Option<String> (None default) in PostgresSettings, update pg_storage and storage_migration usages, add passphrase minimum-length guidance to .env.example.
+
 ## 2026-03-28
 
 - QA phase-2 remediation — plugin-sdk WP 1.5: verify all documentation and cleanup tasks already complete — crate-level CorePlugin vs Plugin guide, register_plugin! statelessness docs, PluginContext/ActionContext relationship docs, CredentialStore/CredentialAccess layering docs, Phase 1 stale comment removed, .cargo/config.toml exists. Plugin SDK plan now fully complete (5/5 WPs).

@@ -12,7 +12,7 @@ This plan addresses all findings from the QA executive summary report across thr
 
 Work packages are organized by domain area within each tier. Tier 2 WPs depend on their related Tier 1 WPs being complete first (where applicable). Tier 3 WPs depend on related Tier 2 WPs.
 
-**Progress:** 10 / 13 work packages complete
+**Progress:** 11 / 13 work packages complete
 
 ---
 
@@ -285,27 +285,27 @@ Work packages are organized by domain area within each tier. Tier 2 WPs depend o
 > depends: 2.2
 > spec: .odm/qa/reports/EXECUTIVE-SUMMARY.md
 
-- [ ] Unify `Capability` enums between traits crate and SDK or add explicit conversion functions [ga-readiness]
+- [x] Unify `Capability` enums between traits crate and SDK or add explicit conversion functions [ga-readiness]
   <!-- file: packages/plugin-sdk-rs/src/types.rs -->
   <!-- purpose: Eliminate divergent Capability definitions -->
   <!-- requirements: Tier 3, item 25 -->
   <!-- leverage: existing traits::Capability and SDK Capability -->
-- [ ] Document `CorePlugin` vs `Plugin` usage and migration path [ga-readiness]
+- [x] Document `CorePlugin` vs `Plugin` usage and migration path [ga-readiness]
   <!-- file: packages/plugin-sdk-rs/src/lib.rs -->
   <!-- purpose: Guide developers on which plugin model to use -->
   <!-- requirements: Tier 3, item 26 -->
   <!-- leverage: none -->
-- [ ] Delete stale `apps/core/Dockerfile` [ga-readiness]
+- [x] Delete stale `apps/core/Dockerfile` [ga-readiness]
   <!-- file: apps/core/Dockerfile -->
   <!-- purpose: Remove non-functional Dockerfile that copies only 4 of 28 workspace members -->
   <!-- requirements: Tier 3, item 27 -->
   <!-- leverage: none -->
-- [ ] Fix Docker Compose config format mismatch (TOML mount vs YAML parser) [ga-readiness]
+- [x] Fix Docker Compose config format mismatch (TOML mount vs YAML parser) [ga-readiness]
   <!-- file: docker-compose.yml -->
   <!-- purpose: Align mounted config format with what config.rs expects -->
   <!-- requirements: Tier 3, item 27 -->
   <!-- leverage: none -->
-- [ ] Align backup plugin cron version pin (`0.13`) with workspace (`0.15`) [ga-readiness]
+- [x] Align backup plugin cron version pin (`0.13`) with workspace (`0.15`) [ga-readiness]
   <!-- file: plugins/engine/backup/Cargo.toml -->
   <!-- purpose: Fix genuine version mismatch -->
   <!-- requirements: Tier 3, item 27 -->

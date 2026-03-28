@@ -5,6 +5,34 @@
 //! native targets (for testing) and `wasm32-wasip1` (for production plugin
 //! builds).
 //!
+//! # Plugin Models
+//!
+//! Life Engine supports two plugin models through two traits:
+//!
+//! ## `CorePlugin` (recommended for new plugins)
+//!
+//! Defined in this crate (`plugin-sdk-rs`). Use `CorePlugin` for plugins
+//! that need async I/O, HTTP route handling, event subscriptions, credential
+//! storage, and the full lifecycle API (`on_load`/`on_unload`). All
+//! built-in engine plugins (backup, connectors, DAV transports, etc.)
+//! implement `CorePlugin`.
+//!
+//! ## `Plugin` (workflow-engine action model)
+//!
+//! Defined in `life-engine-traits` and re-exported here. Use `Plugin` for
+//! lightweight, synchronous action plugins that the workflow engine invokes
+//! via `execute(action, PipelineMessage)`. `Plugin` declares named actions
+//! with optional JSON Schema validation and does not participate in the
+//! async lifecycle or route system.
+//!
+//! ## Migration path
+//!
+//! New plugins should implement `CorePlugin`. The `Plugin` trait remains
+//! stable for workflow-engine actions. If you have a `Plugin` implementation
+//! that needs async capabilities, routes, or event handling, migrate to
+//! `CorePlugin` — they share the same `Capability` enum and identity
+//! conventions.
+//!
 //! # Quick Start
 //!
 //! ```rust,ignore

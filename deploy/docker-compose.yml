@@ -19,12 +19,18 @@ services:
       - core-data:/data
       - ./plugins:/plugins
       - ./workflows:/workflows
-      - ./config.toml:/app/config.toml:ro
+      - ./config.yaml:/app/config.yaml:ro
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
     deploy:
       resources:
         limits:
           memory: 256M
+          cpus: "2.0"
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:3750/api/system/health"]
       interval: 30s

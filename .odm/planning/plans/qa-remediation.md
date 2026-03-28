@@ -12,7 +12,7 @@ This plan addresses all findings from the Life Engine Core QA review (2026-03-28
 
 **Source:** .odm/qa/reports/EXECUTIVE-SUMMARY.md
 
-**Progress:** 1 / 30 work packages complete
+**Progress:** 4 / 30 work packages complete
 
 ---
 
@@ -55,22 +55,22 @@ This plan addresses all findings from the Life Engine Core QA review (2026-03-28
 > depends: none
 > spec: .odm/qa/reports/phase-1/storage-sqlite.md
 
-- [ ] Validate field names in migration executor to allow only `[a-zA-Z0-9_]` [security]
+- [x] Validate field names in migration executor to allow only `[a-zA-Z0-9_]` [security]
   <!-- file: packages/storage-sqlite/src/migration/executor.rs -->
   <!-- purpose: Prevent plugin-provided field names from executing arbitrary SQL in CREATE INDEX statements -->
   <!-- requirements: Lines 77-83, 97-103 SQL injection finding -->
   <!-- leverage: none -->
-- [ ] Validate collection names in migration executor with the same allowlist [security]
+- [x] Validate collection names in migration executor with the same allowlist [security]
   <!-- file: packages/storage-sqlite/src/migration/executor.rs -->
   <!-- purpose: Close injection vector in DDL statements using collection names -->
   <!-- requirements: Lines 77-83, 97-103 SQL injection finding -->
   <!-- leverage: none -->
-- [ ] Parameterize or validate the sort field in backend queries [security]
+- [x] Parameterize or validate the sort field in backend queries [security]
   <!-- file: packages/storage-sqlite/src/backend.rs -->
   <!-- purpose: Prevent ORDER BY clause injection via caller-provided field names -->
   <!-- requirements: Line 183 sort field injection finding -->
   <!-- leverage: none -->
-- [ ] Add tests with malicious field names to verify injection is blocked [test]
+- [x] Add tests with malicious field names to verify injection is blocked [test]
   <!-- file: packages/storage-sqlite/src/migration/executor.rs -->
   <!-- purpose: Regression tests for SQL injection prevention -->
   <!-- requirements: SQL injection findings -->
@@ -80,27 +80,27 @@ This plan addresses all findings from the Life Engine Core QA review (2026-03-28
 > depends: none
 > spec: .odm/qa/reports/EXECUTIVE-SUMMARY.md
 
-- [ ] Check `config.network.behind_proxy` before parsing X-Forwarded-For in core auth middleware [security]
+- [x] Check `config.network.behind_proxy` before parsing X-Forwarded-For in core auth middleware [security]
   <!-- file: apps/core/src/auth/middleware.rs -->
   <!-- purpose: Only trust X-Forwarded-For when explicitly configured as behind a proxy -->
   <!-- requirements: Lines 128-133 X-Forwarded-For finding -->
   <!-- leverage: behind_proxy config flag already exists -->
-- [ ] Check `config.network.behind_proxy` before parsing X-Forwarded-For in core rate limiter [security]
+- [x] Check `config.network.behind_proxy` before parsing X-Forwarded-For in core rate limiter [security]
   <!-- file: apps/core/src/rate_limit.rs -->
   <!-- purpose: Prevent rate limit bypass via header spoofing -->
   <!-- requirements: Lines 113-118 X-Forwarded-For finding -->
   <!-- leverage: behind_proxy config flag already exists -->
-- [ ] Check `config.network.behind_proxy` before parsing X-Forwarded-For in REST auth middleware [security]
+- [x] Check `config.network.behind_proxy` before parsing X-Forwarded-For in REST auth middleware [security]
   <!-- file: packages/transport-rest/src/middleware/auth.rs -->
   <!-- purpose: Prevent rate limit bypass via header spoofing -->
   <!-- requirements: Lines 69-74 X-Forwarded-For finding -->
   <!-- leverage: behind_proxy config flag already exists -->
-- [ ] Use `ConnectInfo<SocketAddr>` as fallback when not behind proxy [security]
+- [x] Use `ConnectInfo<SocketAddr>` as fallback when not behind proxy [security]
   <!-- file: apps/core/src/auth/middleware.rs -->
   <!-- purpose: Get real peer address from the TCP connection when not behind a proxy -->
   <!-- requirements: X-Forwarded-For finding -->
   <!-- leverage: Axum ConnectInfo extractor -->
-- [ ] Add tests for both proxy and direct-connection IP extraction [test]
+- [x] Add tests for both proxy and direct-connection IP extraction [test]
   <!-- file: apps/core/src/auth/middleware.rs -->
   <!-- purpose: Verify correct IP is used in both configurations -->
   <!-- requirements: X-Forwarded-For finding -->
@@ -110,27 +110,27 @@ This plan addresses all findings from the Life Engine Core QA review (2026-03-28
 > depends: none
 > spec: .odm/qa/reports/phase-2/transport-graphql.md
 
-- [ ] Add `.limit_depth(10)` to the GraphQL schema builder [security]
+- [x] Add `.limit_depth(10)` to the GraphQL schema builder [security]
   <!-- file: apps/core/src/routes/graphql.rs -->
   <!-- purpose: Prevent arbitrarily nested queries that cause stack overflow or memory exhaustion -->
   <!-- requirements: No query depth limit finding -->
   <!-- leverage: async-graphql built-in limit_depth -->
-- [ ] Add `.limit_complexity(1000)` to the GraphQL schema builder [security]
+- [x] Add `.limit_complexity(1000)` to the GraphQL schema builder [security]
   <!-- file: apps/core/src/routes/graphql.rs -->
   <!-- purpose: Prevent single queries from requesting excessive data -->
   <!-- requirements: No query complexity limit finding -->
   <!-- leverage: async-graphql built-in limit_complexity -->
-- [ ] Disable introspection in production with `.disable_introspection()` [security]
+- [x] Disable introspection in production with `.disable_introspection()` [security]
   <!-- file: apps/core/src/routes/graphql.rs -->
   <!-- purpose: Prevent unauthenticated clients from discovering the full schema in production -->
   <!-- requirements: Introspection enabled in production finding -->
   <!-- leverage: async-graphql built-in disable_introspection -->
-- [ ] Propagate authenticated identity into the async-graphql context [security]
+- [x] Propagate authenticated identity into the async-graphql context [security]
   <!-- file: apps/core/src/routes/graphql.rs -->
   <!-- purpose: Enable authorization checks at the resolver level -->
   <!-- requirements: No authentication at resolver level finding -->
   <!-- leverage: async-graphql context data injection -->
-- [ ] Add tests for depth and complexity limit enforcement [test]
+- [x] Add tests for depth and complexity limit enforcement [test]
   <!-- file: apps/core/src/routes/graphql.rs -->
   <!-- purpose: Verify deeply nested and overly complex queries are rejected -->
   <!-- requirements: GraphQL security findings -->

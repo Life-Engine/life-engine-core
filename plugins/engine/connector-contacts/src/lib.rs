@@ -25,6 +25,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use life_engine_plugin_sdk::prelude::*;
+use life_engine_plugin_sdk::retry::RetryState;
 use life_engine_plugin_sdk::types::Capability;
 
 use crate::carddav::{CardDavClient, CardDavConfig};
@@ -44,6 +45,8 @@ pub struct ContactsConnectorPlugin {
     sync_interval: Duration,
     /// Timestamp of the last successful sync.
     last_sync: Option<DateTime<Utc>>,
+    /// Retry state for exponential backoff on transient sync failures.
+    retry_state: RetryState,
 }
 
 impl ContactsConnectorPlugin {
@@ -54,6 +57,7 @@ impl ContactsConnectorPlugin {
             google: None,
             sync_interval: Duration::from_secs(300), // 5 minutes
             last_sync: None,
+            retry_state: RetryState::with_config(5, 60, 3600).with_jitter(true),
         }
     }
 
@@ -194,6 +198,7 @@ impl CorePlugin for ContactsConnectorPlugin {
         self.carddav = None;
         self.google = None;
         self.last_sync = None;
+        self.retry_state = RetryState::with_config(5, 60, 3600).with_jitter(true);
         tracing::info!("contacts connector plugin unloaded");
         Ok(())
     }

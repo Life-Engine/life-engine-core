@@ -59,14 +59,28 @@ pub fn compress(data: &[u8]) -> Result<Vec<u8>> {
     Ok(compressed)
 }
 
-/// Decompress gzip data.
+/// Maximum decompressed size (256 MiB) to protect against decompression bombs.
+const MAX_DECOMPRESSED_SIZE: u64 = 256 * 1024 * 1024;
+
+/// Decompress gzip data with decompression bomb protection.
+///
+/// Limits the decompressed output to `MAX_DECOMPRESSED_SIZE` bytes to
+/// prevent memory exhaustion from malicious backup archives.
 pub fn decompress(data: &[u8]) -> Result<Vec<u8>> {
     use flate2::read::GzDecoder;
     use std::io::Read;
 
-    let mut decoder = GzDecoder::new(data);
+    let mut decoder = GzDecoder::new(data).take(MAX_DECOMPRESSED_SIZE + 1);
     let mut decompressed = Vec::new();
     decoder.read_to_end(&mut decompressed)?;
+
+    if decompressed.len() as u64 > MAX_DECOMPRESSED_SIZE {
+        anyhow::bail!(
+            "decompressed data exceeds maximum size ({} bytes); possible decompression bomb",
+            MAX_DECOMPRESSED_SIZE
+        );
+    }
+
     Ok(decompressed)
 }
 

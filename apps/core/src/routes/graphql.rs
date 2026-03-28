@@ -18,12 +18,19 @@ use async_graphql::*;
 use chrono::{DateTime, Utc};
 use futures::Stream;
 use serde_json::Value as JsonValue;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use tokio_stream::wrappers::BroadcastStream;
 use tokio_stream::StreamExt;
 
 /// Default plugin ID for API-level data access (matches REST API).
 const CORE_PLUGIN_ID: &str = "core";
+
+/// Maximum number of concurrent WebSocket subscription connections.
+const MAX_SUBSCRIPTIONS: usize = 100;
+
+/// Global counter tracking active WebSocket subscription connections.
+static ACTIVE_SUBSCRIPTIONS: AtomicUsize = AtomicUsize::new(0);
 
 // ---------------------------------------------------------------------------
 // GraphQL enum types
@@ -529,6 +536,28 @@ pub struct FilterInput {
     /// Text search conditions.
     #[graphql(default)]
     pub text_search: Vec<TextSearchFilterInput>,
+}
+
+/// A single audit log entry.
+#[derive(SimpleObject, Clone)]
+pub struct GqlAuditEntry {
+    pub id: String,
+    pub timestamp: String,
+    pub event_type: String,
+    pub collection: Option<String>,
+    pub document_id: Option<String>,
+    pub identity_subject: Option<String>,
+    pub plugin_id: Option<String>,
+    pub details: Option<String>,
+}
+
+/// Paginated audit log result.
+#[derive(SimpleObject)]
+pub struct AuditConnection {
+    pub data: Vec<GqlAuditEntry>,
+    pub total: u64,
+    pub limit: u32,
+    pub offset: u32,
 }
 
 /// Paginated result wrapper for any collection.
@@ -1146,6 +1175,45 @@ impl QueryRoot {
     async fn credential(&self, ctx: &Context<'_>, id: String) -> Result<Option<GqlCredential>> {
         get_single(ctx, "credentials", &id, record_to_credential).await
     }
+
+    /// Query audit log entries with pagination (newest first).
+    async fn audit_entries(
+        &self,
+        ctx: &Context<'_>,
+        pagination: Option<PaginationInput>,
+    ) -> Result<AuditConnection> {
+        let storage = ctx
+            .data::<Arc<crate::sqlite_storage::SqliteStorage>>()
+            .map_err(|_| Error::new("storage not available"))?;
+
+        let pg = convert_pagination(&pagination.unwrap_or_default());
+
+        let (entries, total) = storage
+            .with_conn(|conn| {
+                crate::sqlite_storage::AuditLogger::query_entries(conn, pg.limit, pg.offset)
+            })
+            .await
+            .map_err(|e| Error::new(format!("audit query failed: {e}")))?;
+
+        Ok(AuditConnection {
+            data: entries
+                .into_iter()
+                .map(|e| GqlAuditEntry {
+                    id: e.id,
+                    timestamp: e.timestamp,
+                    event_type: e.event_type,
+                    collection: e.collection,
+                    document_id: e.document_id,
+                    identity_subject: e.identity_subject,
+                    plugin_id: e.plugin_id,
+                    details: e.details,
+                })
+                .collect(),
+            total,
+            limit: pg.limit,
+            offset: pg.offset,
+        })
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1292,22 +1360,48 @@ pub struct RecordChangeEvent {
     pub deleted_id: Option<String>,
 }
 
+/// RAII guard that decrements the active subscription counter on drop.
+struct SubscriptionGuard;
+
+impl Drop for SubscriptionGuard {
+    fn drop(&mut self) {
+        ACTIVE_SUBSCRIPTIONS.fetch_sub(1, Ordering::Relaxed);
+    }
+}
+
 #[Subscription]
 impl SubscriptionRoot {
     /// Subscribe to record changes, optionally filtered by collection.
+    ///
+    /// Enforces a global limit of `MAX_SUBSCRIPTIONS` concurrent connections
+    /// to prevent memory exhaustion from unbounded subscriptions.
     async fn record_changes(
         &self,
         ctx: &Context<'_>,
         collection: Option<String>,
     ) -> Result<impl Stream<Item = RecordChangeEvent>> {
+        let current = ACTIVE_SUBSCRIPTIONS.fetch_add(1, Ordering::Relaxed);
+        if current >= MAX_SUBSCRIPTIONS {
+            ACTIVE_SUBSCRIPTIONS.fetch_sub(1, Ordering::Relaxed);
+            return Err(Error::new(format!(
+                "subscription limit reached ({MAX_SUBSCRIPTIONS} concurrent connections)"
+            )));
+        }
+
         let bus = ctx
             .data::<Arc<MessageBus>>()
-            .map_err(|_| Error::new("message bus not available"))?;
+            .map_err(|_| {
+                ACTIVE_SUBSCRIPTIONS.fetch_sub(1, Ordering::Relaxed);
+                Error::new("message bus not available")
+            })?;
 
         let rx = bus.subscribe();
         let stream = BroadcastStream::new(rx);
 
-        Ok(stream.filter_map(move |result| {
+        // Wrap in a stream that decrements the counter when dropped.
+        let guard = SubscriptionGuard;
+        let stream = stream.filter_map(move |result| {
+            let _ = &guard; // ensure guard lives as long as the stream
             match result {
                 Ok(BusEvent::RecordChanged { record }) => {
                     if let Some(ref col) = collection
@@ -1350,7 +1444,9 @@ impl SubscriptionRoot {
                 }
                 _ => None,
             }
-        }))
+        });
+
+        Ok(stream)
     }
 }
 

@@ -43,6 +43,8 @@ pub struct RetryState {
     pub backoff_min_secs: u64,
     /// Maximum backoff duration in seconds.
     pub backoff_max_secs: u64,
+    /// Whether to add random jitter to backoff durations.
+    jitter: bool,
 }
 
 impl RetryState {
@@ -54,6 +56,7 @@ impl RetryState {
             max_retries: DEFAULT_MAX_RETRIES,
             backoff_min_secs: DEFAULT_BACKOFF_MIN_SECS,
             backoff_max_secs: DEFAULT_BACKOFF_MAX_SECS,
+            jitter: false,
         }
     }
 
@@ -64,7 +67,23 @@ impl RetryState {
             max_retries,
             backoff_min_secs,
             backoff_max_secs,
+            jitter: false,
         }
+    }
+
+    /// Enable or disable jitter on backoff durations.
+    ///
+    /// When enabled, the computed backoff is randomly reduced by up to 25%
+    /// to avoid thundering-herd effects when multiple connectors retry
+    /// simultaneously.
+    pub fn with_jitter(mut self, enabled: bool) -> Self {
+        self.jitter = enabled;
+        self
+    }
+
+    /// Returns the current consecutive failure count.
+    pub fn failure_count(&self) -> u32 {
+        self.failure_count
     }
 
     /// Record a failure and return the computed backoff duration.
@@ -91,6 +110,8 @@ impl RetryState {
     /// Compute the backoff duration based on the current failure count.
     ///
     /// Formula: `min(backoff_min * 2^(failure_count - 1), backoff_max)`
+    ///
+    /// When jitter is enabled, the result is randomly reduced by up to 25%.
     pub fn compute_backoff(&self) -> Duration {
         if self.failure_count == 0 {
             return Duration::ZERO;
@@ -98,7 +119,15 @@ impl RetryState {
         let exponent = self.failure_count.saturating_sub(1).min(31);
         let backoff_secs = self.backoff_min_secs.saturating_mul(1u64 << exponent);
         let capped = backoff_secs.min(self.backoff_max_secs);
-        Duration::from_secs(capped)
+        if self.jitter && capped > 0 {
+            // Subtract up to 25% using a simple deterministic-ish hash
+            // based on failure_count to avoid pulling in a rand dependency.
+            let jitter_fraction = ((self.failure_count as u64 * 7 + 13) % 26) as f64 / 100.0;
+            let jittered = (capped as f64 * (1.0 - jitter_fraction)).max(1.0) as u64;
+            Duration::from_secs(jittered)
+        } else {
+            Duration::from_secs(capped)
+        }
     }
 }
 

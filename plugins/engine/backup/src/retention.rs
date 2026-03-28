@@ -3,35 +3,45 @@
 use crate::backend::BackupBackend;
 use crate::types::{BackupManifest, RetentionPolicy};
 
-/// Apply retention policy: delete old backups beyond the max count.
+/// Apply retention policy: delete old backups by count and/or age.
 ///
-/// Keeps the most recent `policy.max_count` backups and deletes the rest.
+/// Keeps the most recent `policy.max_count` backups and also deletes any
+/// backups older than `policy.retention_days` (if set). A backup is
+/// deleted if it exceeds either threshold.
+///
 /// Returns the number of backups deleted.
 pub async fn enforce_retention(
     backend: &dyn BackupBackend,
     manifests: &[BackupManifest],
     policy: &RetentionPolicy,
 ) -> anyhow::Result<usize> {
-    if manifests.len() <= policy.max_count {
-        return Ok(0);
-    }
-
     // Sort manifests newest-first to ensure correct retention ordering.
     let mut sorted: Vec<&BackupManifest> = manifests.iter().collect();
     sorted.sort_by(|a, b| b.created_at.cmp(&a.created_at));
-    let to_delete = &sorted[policy.max_count..];
+
+    let age_cutoff = policy.retention_days.map(|days| {
+        chrono::Utc::now() - chrono::Duration::days(days as i64)
+    });
+
     let mut deleted = 0;
 
-    for manifest in to_delete {
-        // Delete the encrypted backup file.
-        let enc_key = format!("{}.enc", manifest.id);
-        backend.delete(&enc_key).await?;
+    for (i, manifest) in sorted.iter().enumerate() {
+        let exceeds_count = i >= policy.max_count;
+        let exceeds_age = age_cutoff
+            .map(|cutoff| manifest.created_at < cutoff)
+            .unwrap_or(false);
 
-        // Delete the manifest file.
-        let manifest_key = format!("{}.manifest.json", manifest.id);
-        backend.delete(&manifest_key).await?;
+        if exceeds_count || exceeds_age {
+            // Delete the encrypted backup file.
+            let enc_key = format!("{}.enc", manifest.id);
+            backend.delete(&enc_key).await?;
 
-        deleted += 1;
+            // Delete the manifest file.
+            let manifest_key = format!("{}.manifest.json", manifest.id);
+            backend.delete(&manifest_key).await?;
+
+            deleted += 1;
+        }
     }
 
     Ok(deleted)
@@ -87,7 +97,7 @@ mod tests {
         assert_eq!(manifests.len(), 5);
 
         // Keep only 2.
-        let policy = RetentionPolicy { max_count: 2 };
+        let policy = RetentionPolicy { max_count: 2, retention_days: None };
         let deleted = enforce_retention(&backend, &manifests, &policy)
             .await
             .unwrap();
@@ -109,7 +119,7 @@ mod tests {
             .unwrap();
 
         let manifests = list_backups(&backend).await.unwrap();
-        let policy = RetentionPolicy { max_count: 5 };
+        let policy = RetentionPolicy { max_count: 5, retention_days: None };
         let deleted = enforce_retention(&backend, &manifests, &policy)
             .await
             .unwrap();
@@ -132,7 +142,7 @@ mod tests {
         }
 
         let manifests = list_backups(&backend).await.unwrap();
-        let policy = RetentionPolicy { max_count: 2 };
+        let policy = RetentionPolicy { max_count: 2, retention_days: None };
         enforce_retention(&backend, &manifests, &policy)
             .await
             .unwrap();
@@ -151,7 +161,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let backend = LocalBackend::new(tmp.path());
 
-        let policy = RetentionPolicy { max_count: 5 };
+        let policy = RetentionPolicy { max_count: 5, retention_days: None };
         let deleted = enforce_retention(&backend, &[], &policy).await.unwrap();
         assert_eq!(deleted, 0);
     }
@@ -170,7 +180,7 @@ mod tests {
         }
 
         let manifests = list_backups(&backend).await.unwrap();
-        let policy = RetentionPolicy { max_count: 0 };
+        let policy = RetentionPolicy { max_count: 0, retention_days: None };
         let deleted = enforce_retention(&backend, &manifests, &policy)
             .await
             .unwrap();

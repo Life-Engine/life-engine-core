@@ -148,10 +148,18 @@ pub enum BackupSchedule {
 }
 
 /// Retention policy for backup cleanup.
+///
+/// Supports both count-based and age-based retention. When both are set,
+/// a backup is deleted if it exceeds *either* threshold (i.e., the
+/// policy enforces the stricter of the two).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RetentionPolicy {
     /// Maximum number of backups to keep.
     pub max_count: usize,
+    /// Maximum age of backups in days. Backups older than this are deleted
+    /// regardless of the count-based policy.
+    #[serde(default)]
+    pub retention_days: Option<u32>,
 }
 
 /// Metadata about a single backup.
@@ -306,10 +314,11 @@ mod tests {
 
     #[test]
     fn retention_policy_serialization() {
-        let policy = RetentionPolicy { max_count: 10 };
+        let policy = RetentionPolicy { max_count: 10, retention_days: Some(30) };
         let json = serde_json::to_string(&policy).unwrap();
         let restored: RetentionPolicy = serde_json::from_str(&json).unwrap();
         assert_eq!(restored.max_count, 10);
+        assert_eq!(restored.retention_days, Some(30));
     }
 
     #[test]

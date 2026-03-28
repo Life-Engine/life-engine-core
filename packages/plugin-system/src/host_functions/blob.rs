@@ -14,6 +14,9 @@ use tracing::{debug, warn};
 use crate::capability::ApprovedCapabilities;
 use crate::error::PluginError;
 
+/// Maximum blob size that a plugin can store (10 MiB).
+const MAX_BLOB_SIZE: usize = 10 * 1024 * 1024;
+
 /// Metadata about a stored blob.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BlobMeta {
@@ -136,6 +139,22 @@ pub async fn host_blob_store(
                 ctx.plugin_id
             ))
         })?;
+
+    if data.len() > MAX_BLOB_SIZE {
+        warn!(
+            plugin_id = %ctx.plugin_id,
+            key = %key,
+            size = data.len(),
+            max = MAX_BLOB_SIZE,
+            "blob exceeds size limit"
+        );
+        return Err(PluginError::ExecutionFailed(format!(
+            "blob from plugin '{}' exceeds maximum size ({} bytes > {} bytes)",
+            ctx.plugin_id,
+            data.len(),
+            MAX_BLOB_SIZE,
+        )));
+    }
 
     debug!(
         plugin_id = %ctx.plugin_id,
@@ -483,5 +502,20 @@ mod tests {
         let err = result.unwrap_err();
         assert!(matches!(err, PluginError::RuntimeCapabilityViolation(_)));
         assert!(err.to_string().contains("storage:blob:delete"));
+    }
+
+    #[tokio::test]
+    async fn store_rejects_oversized_blob() {
+        let storage = Arc::new(MockBlobStorage::new());
+        let ctx = make_context("test-plugin", &[Capability::StorageBlobWrite], storage);
+
+        // Create data exceeding MAX_BLOB_SIZE (10 MiB + 1 byte)
+        let oversized = vec![0u8; MAX_BLOB_SIZE + 1];
+        let input = make_store_bytes("huge-file.bin", &oversized);
+        let result = host_blob_store(&ctx, &input).await;
+
+        let err = result.unwrap_err();
+        assert!(matches!(err, PluginError::ExecutionFailed(_)));
+        assert!(err.to_string().contains("exceeds maximum size"));
     }
 }

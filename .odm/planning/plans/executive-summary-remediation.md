@@ -12,7 +12,7 @@ This plan addresses all findings from the QA executive summary report across thr
 
 Work packages are organized by domain area within each tier. Tier 2 WPs depend on their related Tier 1 WPs being complete first (where applicable). Tier 3 WPs depend on related Tier 2 WPs.
 
-**Progress:** 11 / 13 work packages complete
+**Progress:** 12 / 13 work packages complete
 
 ---
 
@@ -315,37 +315,37 @@ Work packages are organized by domain area within each tier. Tier 2 WPs depend o
 > depends: 2.1, 2.2
 > spec: .odm/qa/reports/EXECUTIVE-SUMMARY.md
 
-- [ ] Extract email connector `RetryState` into shared utility and apply to contacts, calendar, filesystem connectors [ga-readiness]
+- [x] Extract email connector `RetryState` into shared utility and apply to contacts, calendar, filesystem connectors [ga-readiness]
   <!-- file: plugins/engine/connector-email/src/lib.rs -->
   <!-- purpose: Add retry/backoff to all connectors, not just email -->
   <!-- requirements: Tier 3, item 28 -->
   <!-- leverage: existing RetryState in email connector -->
-- [ ] Add blob size limit enforcement in plugin system [ga-readiness]
+- [x] Add blob size limit enforcement in plugin system [ga-readiness]
   <!-- file: packages/plugin-system/src/host_functions/blob.rs -->
   <!-- purpose: Prevent plugins from storing arbitrarily large blobs -->
   <!-- requirements: Tier 3, item 29 -->
   <!-- leverage: existing blob.rs -->
-- [ ] Add WebSocket subscription connection limits to GraphQL [ga-readiness]
+- [x] Add WebSocket subscription connection limits to GraphQL [ga-readiness]
   <!-- file: apps/core/src/routes/graphql.rs -->
   <!-- purpose: Prevent memory exhaustion via unlimited subscriptions -->
   <!-- requirements: Tier 3, item 29 -->
   <!-- leverage: none -->
-- [ ] Add automatic job registry cleanup to workflow engine [ga-readiness]
+- [x] Add automatic job registry cleanup to workflow engine [ga-readiness]
   <!-- file: packages/workflow-engine/src/executor.rs -->
   <!-- purpose: Prevent unbounded memory growth from completed jobs -->
   <!-- requirements: Tier 3, item 29 -->
   <!-- leverage: existing cleanup_expired_jobs() function -->
-- [ ] Add decompression bomb protection to backup restore [ga-readiness]
+- [x] Add decompression bomb protection to backup restore [ga-readiness]
   <!-- file: plugins/engine/backup/src/lib.rs -->
   <!-- purpose: Prevent memory exhaustion from malicious backup archives -->
   <!-- requirements: Tier 3, item 29 -->
   <!-- leverage: none -->
-- [ ] Add audit query result pagination [ga-readiness]
+- [x] Add audit query result pagination [ga-readiness]
   <!-- file: apps/core/src/routes/graphql.rs -->
   <!-- purpose: Prevent unbounded audit log query results -->
   <!-- requirements: Tier 3, item 29 -->
   <!-- leverage: none -->
-- [ ] Fix backup `retention_days` mismatch — implement age-based retention or remove config option [ga-readiness]
+- [x] Fix backup `retention_days` mismatch — implement age-based retention or remove config option [ga-readiness]
   <!-- file: plugins/engine/backup/src/lib.rs -->
   <!-- purpose: Align backup behavior with documented configuration -->
   <!-- requirements: Tier 3, item 30 -->

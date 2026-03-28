@@ -187,6 +187,15 @@ impl SqliteStorage {
         self.conn.lock().await
     }
 
+    /// Run a closure with a reference to the database connection.
+    pub async fn with_conn<F, T>(&self, f: F) -> T
+    where
+        F: FnOnce(&Connection) -> T,
+    {
+        let conn = self.conn.lock().await;
+        f(&conn)
+    }
+
     // ── private ──────────────────────────────────────────────
 
     fn from_connection(conn: Connection) -> anyhow::Result<Self> {
@@ -761,6 +770,19 @@ fn json_value_to_sql(v: &Value) -> Box<dyn rusqlite::types::ToSql> {
 // AuditLogger
 // ──────────────────────────────────────────────────────────────
 
+/// A single audit log entry returned from queries.
+#[derive(Debug, Clone)]
+pub struct AuditEntry {
+    pub id: String,
+    pub timestamp: String,
+    pub event_type: String,
+    pub collection: Option<String>,
+    pub document_id: Option<String>,
+    pub identity_subject: Option<String>,
+    pub plugin_id: Option<String>,
+    pub details: Option<String>,
+}
+
 /// Records security-relevant events in the `audit_log` table.
 #[allow(dead_code)]
 pub struct AuditLogger;
@@ -801,6 +823,46 @@ impl AuditLogger {
             params![id, now, event_type, collection, document_id, identity_subject, plugin_id, details_str, now],
         )?;
         Ok(())
+    }
+
+    /// Query audit log entries with pagination.
+    ///
+    /// Returns entries ordered by timestamp descending (newest first).
+    /// Limit is capped at 1000 to prevent unbounded result sets.
+    pub fn query_entries(
+        conn: &Connection,
+        limit: u32,
+        offset: u32,
+    ) -> anyhow::Result<(Vec<AuditEntry>, u64)> {
+        let limit = limit.min(1000);
+        let total: u64 = conn.query_row(
+            "SELECT COUNT(*) FROM audit_log",
+            [],
+            |row| row.get(0),
+        )?;
+
+        let mut stmt = conn.prepare(
+            "SELECT id, timestamp, event_type, collection, document_id, \
+             identity_subject, plugin_id, details \
+             FROM audit_log ORDER BY timestamp DESC LIMIT ?1 OFFSET ?2",
+        )?;
+
+        let entries = stmt
+            .query_map(params![limit, offset], |row| {
+                Ok(AuditEntry {
+                    id: row.get(0)?,
+                    timestamp: row.get(1)?,
+                    event_type: row.get(2)?,
+                    collection: row.get(3)?,
+                    document_id: row.get(4)?,
+                    identity_subject: row.get(5)?,
+                    plugin_id: row.get(6)?,
+                    details: row.get::<_, Option<String>>(7)?,
+                })
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+
+        Ok((entries, total))
     }
 
     /// Delete audit entries older than the retention period.

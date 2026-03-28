@@ -27,6 +27,9 @@ const DEFAULT_CONCURRENCY_LIMIT: usize = 32;
 /// Default TTL for job entries (1 hour).
 const DEFAULT_JOB_TTL: std::time::Duration = std::time::Duration::from_secs(3600);
 
+/// Interval between automatic job cleanup runs (5 minutes).
+const CLEANUP_INTERVAL: std::time::Duration = std::time::Duration::from_secs(300);
+
 /// Overall execution status of a workflow run.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -339,6 +342,35 @@ impl PipelineExecutor {
         let before = jobs.len();
         jobs.retain(|_, entry| (now - entry.created_at) < ttl);
         before - jobs.len()
+    }
+
+    /// Spawn a background task that periodically cleans up expired jobs.
+    ///
+    /// The task runs every `CLEANUP_INTERVAL` (5 minutes) and removes job
+    /// entries whose `created_at` exceeds the configured TTL, preventing
+    /// unbounded memory growth from completed/failed jobs.
+    ///
+    /// Returns a `JoinHandle` that can be used to abort the task on shutdown.
+    pub fn spawn_cleanup_task(&self) -> tokio::task::JoinHandle<()> {
+        let jobs = Arc::clone(&self.jobs);
+        let job_ttl = self.job_ttl;
+
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(CLEANUP_INTERVAL);
+            loop {
+                interval.tick().await;
+                let now = Utc::now();
+                let ttl = chrono::Duration::from_std(job_ttl)
+                    .unwrap_or(chrono::Duration::hours(1));
+                let mut jobs = jobs.write().await;
+                let before = jobs.len();
+                jobs.retain(|_, entry| (now - entry.created_at) < ttl);
+                let removed = before - jobs.len();
+                if removed > 0 {
+                    info!(removed, remaining = jobs.len(), "cleaned up expired jobs");
+                }
+            }
+        })
     }
 
     /// Spawn an async workflow execution, returning its `JobId` immediately.

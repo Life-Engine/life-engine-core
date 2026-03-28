@@ -42,6 +42,9 @@ pub struct ShutdownHandles {
     pub transports: Vec<Box<dyn life_engine_traits::Transport>>,
     pub plugin_loader: Arc<Mutex<PluginLoader>>,
     pub storage: Option<Arc<SqliteStorage>>,
+    /// The workflow engine (owns the scheduler and event bus). Dropping it
+    /// cancels scheduled tasks and stops event processing.
+    pub workflow_engine: Option<life_engine_workflow_engine::WorkflowEngine>,
 }
 
 /// Creates a future that completes when a shutdown signal is received.
@@ -172,12 +175,16 @@ pub async fn graceful_shutdown(handles: ShutdownHandles, config: ShutdownConfig)
     }
 
     // ── Step 3/5: Stop workflow engine ───────────────────────────────
-    // The PipelineExecutor does not currently expose a shutdown method.
-    // This step is a placeholder that completes immediately. When the
-    // workflow engine gains background job tracking or an event bus
-    // drain, this step will call those methods.
+    // Dropping the WorkflowEngine cancels the cron scheduler tasks and
+    // releases the event bus. If no engine was started, this is a no-op.
+    let engine = handles.workflow_engine;
     let ok = run_step(3, "Stopping workflow engine", config.step_timeout, async {
-        info!("workflow engine has no active background tasks");
+        if let Some(engine) = engine {
+            drop(engine);
+            info!("workflow engine stopped (scheduler cancelled, event bus released)");
+        } else {
+            info!("no workflow engine to stop");
+        }
     })
     .await;
     if !ok {
@@ -245,6 +252,7 @@ mod tests {
             transports: vec![],
             plugin_loader: Arc::new(Mutex::new(PluginLoader::new())),
             storage: None,
+            workflow_engine: None,
         };
         graceful_shutdown(handles, ShutdownConfig::default()).await;
     }
@@ -300,6 +308,7 @@ mod tests {
             transports: vec![],
             plugin_loader: Arc::new(Mutex::new(loader)),
             storage: None,
+            workflow_engine: None,
         };
         graceful_shutdown(handles, ShutdownConfig::default()).await;
 

@@ -78,6 +78,12 @@ use tokio::sync::Mutex;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::EnvFilter;
 
+// New-architecture types for four-layer pipeline.
+use life_engine_storage_sqlite::blob_fs::FsBlobAdapter;
+use life_engine_storage_sqlite::document::SqliteDocumentAdapter;
+use life_engine_traits::storage_context::{AuditEvent, StorageContext};
+use life_engine_traits::storage_router::{StorageRouter, TimeoutConfig};
+
 /// Log a startup step completion with duration.
 macro_rules! log_step {
     ($step:expr, $total:expr, $name:expr, $start:expr) => {
@@ -324,6 +330,99 @@ async fn main() -> anyhow::Result<()> {
         tracing::info!("schema directory not found, using empty registry");
         Arc::new(SchemaRegistry::new())
     };
+    // New-architecture storage layer: create StorageRouter wrapping the SQLite
+    // document adapter and filesystem blob adapter, then build StorageContext
+    // as the enforcement layer above it.
+    let blob_dir = data_dir_path.join("blobs");
+    std::fs::create_dir_all(&blob_dir).unwrap_or_else(|e| {
+        fail_step!(4, TOTAL_STEPS, "Initialize storage", e);
+    });
+
+    // Open a second rusqlite connection for the new document adapter. SQLite WAL
+    // mode supports concurrent connections to the same database file.
+    let doc_conn = if config.storage.encryption {
+        if let Some(ref key) = derived_key {
+            let conn = rusqlite::Connection::open(&db_path).unwrap_or_else(|e| {
+                fail_step!(4, TOTAL_STEPS, "Initialize storage", e);
+            });
+            let hex_key: String = key.iter().map(|b| format!("{b:02x}")).collect();
+            let pragma = format!("PRAGMA key = \"x'{hex_key}'\";");
+            conn.execute_batch(&pragma).unwrap_or_else(|e| {
+                fail_step!(4, TOTAL_STEPS, "Initialize storage", e);
+            });
+            conn
+        } else {
+            rusqlite::Connection::open_in_memory().unwrap_or_else(|e| {
+                fail_step!(4, TOTAL_STEPS, "Initialize storage", e);
+            })
+        }
+    } else {
+        rusqlite::Connection::open(&db_path).unwrap_or_else(|e| {
+            fail_step!(4, TOTAL_STEPS, "Initialize storage", e);
+        })
+    };
+    doc_conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;").unwrap_or_else(|e| {
+        fail_step!(4, TOTAL_STEPS, "Initialize storage", e);
+    });
+
+    let doc_adapter = Arc::new(SqliteDocumentAdapter::new(
+        Arc::new(std::sync::Mutex::new(doc_conn)),
+        "system".to_string(),
+    ));
+    let blob_adapter = Arc::new(FsBlobAdapter::new(&blob_dir));
+    let storage_router = Arc::new(StorageRouter::new(
+        doc_adapter,
+        blob_adapter,
+        TimeoutConfig::default(),
+    ));
+
+    // Load CDM schemas into the new-architecture schema registry.
+    let traits_schema_registry = {
+        let mut reg = life_engine_traits::schema::SchemaRegistry::new();
+        if let Err(e) = reg.load_cdm_schemas() {
+            tracing::warn!(error = %e, "failed to load CDM schemas into traits registry");
+        }
+        Arc::new(reg)
+    };
+
+    // Audit event channel — StorageContext emits audit events for every
+    // write operation. A background task drains the channel and logs them.
+    let (audit_tx, mut audit_rx) = tokio::sync::mpsc::unbounded_channel::<AuditEvent>();
+    tokio::spawn(async move {
+        while let Some(event) = audit_rx.recv().await {
+            tracing::debug!(
+                event_type = %event.event_type,
+                origin = %event.origin,
+                "audit event"
+            );
+        }
+    });
+
+    let _storage_context = Arc::new(StorageContext::new(
+        Arc::clone(&storage_router),
+        Arc::clone(&traits_schema_registry),
+        audit_tx,
+    ));
+
+    // Run a health check on the storage router to verify adapters are operational.
+    match storage_router.health().await {
+        Ok(report) => {
+            tracing::info!(
+                status = ?report.status,
+                checks = report.checks.len(),
+                "storage router health check passed"
+            );
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, "storage router health check failed (non-fatal)");
+        }
+    }
+
+    tracing::info!(
+        blob_dir = %blob_dir.display(),
+        "new-architecture storage layer initialized (StorageRouter + StorageContext)"
+    );
+
     log_step!(4, TOTAL_STEPS, "Initialize storage", step_start);
 
     // ── Step 4b: Run canonical schema migrations ─────────────────────
@@ -535,39 +634,44 @@ async fn main() -> anyhow::Result<()> {
     }
     log_step!(5, TOTAL_STEPS, "Initialize auth", step_start);
 
-    // ── Step 6/10: Create workflow engine ─────────────────────────────
-    let step_start = Instant::now();
-    let _workflow_executor = life_engine_workflow_engine::PipelineExecutor::new(
-        Arc::new(NoOpPluginExecutor),
-    );
-    tracing::info!("workflow engine created");
-    log_step!(6, TOTAL_STEPS, "Create workflow engine", step_start);
-
-    // ── Step 7/10: Load workflows ────────────────────────────────────
+    // ── Step 6/10: Create workflow engine, load workflows, build triggers ──
     let step_start = Instant::now();
     let workflows_path = std::path::Path::new("workflows");
-    if workflows_path.is_dir() {
+    let workflow_engine = if workflows_path.is_dir() {
         let wf_config = life_engine_workflow_engine::WorkflowConfig {
             path: "workflows".to_string(),
         };
-        match life_engine_workflow_engine::load_workflows(&wf_config) {
-            Ok(workflows) => {
-                let count = workflows.len();
-                match life_engine_workflow_engine::TriggerRegistry::build(workflows) {
-                    Ok(_trigger_registry) => {
-                        tracing::info!(count, "workflows loaded and trigger registry built");
-                    }
-                    Err(e) => {
-                        tracing::warn!(error = %e, "failed to build trigger registry");
-                    }
-                }
+        match life_engine_workflow_engine::WorkflowEngine::new(
+            wf_config,
+            Arc::new(NoOpPluginExecutor),
+        )
+        .await
+        {
+            Ok(engine) => {
+                tracing::info!("workflow engine initialized with trigger registry, event bus, and scheduler");
+                Some(engine)
             }
             Err(e) => {
-                tracing::warn!(error = %e, "failed to load workflows (non-fatal)");
+                tracing::warn!(error = %e, "failed to initialize workflow engine (non-fatal)");
+                None
             }
         }
     } else {
-        tracing::info!("no workflows directory found, skipping workflow loading");
+        tracing::info!("no workflows directory found, skipping workflow engine initialization");
+        None
+    };
+    log_step!(6, TOTAL_STEPS, "Create workflow engine", step_start);
+
+    // Step 7 is folded into step 6 above — the WorkflowEngine constructor
+    // loads workflow YAML files, builds the TriggerRegistry, creates the
+    // EventBus, and starts the Scheduler in a single initialisation call.
+    let step_start = Instant::now();
+    if let Some(ref engine) = workflow_engine {
+        let schedules = engine.registry().get_schedules().len();
+        tracing::info!(
+            schedules,
+            "trigger registry summary"
+        );
     }
     log_step!(7, TOTAL_STEPS, "Load workflows", step_start);
 
@@ -716,6 +820,7 @@ async fn main() -> anyhow::Result<()> {
         transports: transport_handles,
         plugin_loader,
         storage: Some(Arc::clone(&storage)),
+        workflow_engine,
     };
     graceful_shutdown(handles, ShutdownConfig::default()).await;
 

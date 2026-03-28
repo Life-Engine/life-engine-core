@@ -70,7 +70,8 @@
     "dav-and-webhooks:1.6",
     "dav-and-webhooks:1.7",
     "storage-sqlite:1.1",
-    "api-plugins:1.7"
+    "api-plugins:1.7",
+    "backup-and-webhooks:1.2"
   ],
   "history": [
     {
@@ -322,6 +323,22 @@
       "title": "CardDAV Serializer Completeness",
       "timestamp": "2026-03-28T00:00:00Z",
       "tasks_completed": 12,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "1.1",
+      "plan": "storage-sqlite.md",
+      "title": "Fix SQL Injection Vectors",
+      "timestamp": "2026-03-28T00:00:00Z",
+      "tasks_completed": 3,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "1.2",
+      "plan": "backup-and-webhooks.md",
+      "title": "Implement Webhook Sender HTTP Delivery",
+      "timestamp": "2026-03-28T00:00:00Z",
+      "tasks_completed": 5,
       "tasks_deferred": 0
     }
   ]

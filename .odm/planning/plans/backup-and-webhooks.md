@@ -55,27 +55,27 @@ This plan addresses the 27 issues identified in the phase-3 QA review of the bac
 > depends: none
 > spec: .odm/qa/reports/phase-3/backup-and-webhooks.md
 
-- [ ] Implement HTTP POST dispatch in `handle_event` using `reqwest` [critical]
+- [x] Implement HTTP POST dispatch in `handle_event` using `reqwest` [critical]
   <!-- file: plugins/engine/webhook-sender/src/lib.rs -->
   <!-- purpose: The sender currently only logs matched subscriptions but never sends HTTP requests -->
   <!-- requirements: 2 -->
   <!-- leverage: existing subscription matching logic at lib.rs:261-271, reqwest already in Cargo.toml -->
-- [ ] Add HMAC-SHA256 signature generation for outbound payloads when `subscription.secret` is set [major]
+- [x] Add HMAC-SHA256 signature generation for outbound payloads when `subscription.secret` is set [major]
   <!-- file: plugins/engine/webhook-sender/src/lib.rs -->
   <!-- purpose: Subscribers need to verify payload authenticity; secret field exists but is unused -->
   <!-- requirements: 13 -->
   <!-- leverage: existing WebhookSubscription.secret field -->
-- [ ] Add `hmac` and `sha2` dependencies to webhook-sender Cargo.toml [major]
+- [x] Add `hmac` and `sha2` dependencies to webhook-sender Cargo.toml [major]
   <!-- file: plugins/engine/webhook-sender/Cargo.toml -->
   <!-- purpose: Required for HMAC-SHA256 signing of outbound payloads -->
   <!-- requirements: 13 -->
   <!-- leverage: webhook-receiver already uses these crates -->
-- [ ] Implement exponential backoff retry logic using existing `RetryState` [major]
+- [x] Implement exponential backoff retry logic using existing `RetryState` [major]
   <!-- file: plugins/engine/webhook-sender/src/lib.rs -->
   <!-- purpose: Failed deliveries should retry with backoff before marking exhausted -->
   <!-- requirements: 2 -->
   <!-- leverage: existing retry state tracking, record_delivery_success/failure methods -->
-- [ ] Wire `WebhookSenderConfig` to control `max_retries` and `max_delivery_log_size` [minor]
+- [x] Wire `WebhookSenderConfig` to control `max_retries` and `max_delivery_log_size` [minor]
   <!-- file: plugins/engine/webhook-sender/src/lib.rs, plugins/engine/webhook-sender/src/config.rs -->
   <!-- purpose: Config struct exists but is unused; delivery log hardcodes DEFAULT_MAX_CAPACITY -->
   <!-- requirements: 16 -->

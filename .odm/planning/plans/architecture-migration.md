@@ -204,60 +204,60 @@ Define the abstract storage contracts. These traits are implemented by concrete 
 
 ### 3.1 — Document Storage Error Types
 
-- [ ] Define `StorageError` enum in `packages/traits/src/storage.rs` with variants: `NotFound { collection, id }`, `Conflict { collection, id, expected_version, actual_version }`, `ValidationFailed { collection, errors: Vec<String> }`, `PermissionDenied { collection, capability }`, `AdapterError { source: Box<dyn Error> }`, `Timeout { operation, duration }`, `TransactionFailed { reason }`, `UnsupportedOperation { operation, adapter }`. Each variant maps to a `WorkflowStatus`: NotFound → NotFound, Conflict → Invalid, ValidationFailed → Invalid, PermissionDenied → Denied, AdapterError → Error, Timeout → Error, TransactionFailed → Error, UnsupportedOperation → Error. Include `is_retryable(&self) -> bool` method.
+- [x] Define `StorageError` enum in `packages/traits/src/storage.rs` with variants: `NotFound { collection, id }`, `Conflict { collection, id, expected_version, actual_version }`, `ValidationFailed { collection, errors: Vec<String> }`, `PermissionDenied { collection, capability }`, `AdapterError { source: Box<dyn Error> }`, `Timeout { operation, duration }`, `TransactionFailed { reason }`, `UnsupportedOperation { operation, adapter }`. Each variant maps to a `WorkflowStatus`: NotFound → NotFound, Conflict → Invalid, ValidationFailed → Invalid, PermissionDenied → Denied, AdapterError → Error, Timeout → Error, TransactionFailed → Error, UnsupportedOperation → Error. Include `is_retryable(&self) -> bool` method.
   <!-- files: packages/traits/src/storage.rs -->
   <!-- purpose: Define a comprehensive error model that maps cleanly to workflow statuses -->
   <!-- requirements: document-storage-adapter 10.1, 10.2, 10.3 -->
 
 ### 3.2 — Document Storage Query Types
 
-- [ ] Define `QueryDescriptor` struct with: `filters: Option<FilterNode>`, `sort: Vec<SortField>`, `pagination: Pagination`, `fields: Option<Vec<String>>` (projection), `text_search: Option<String>`. Define `FilterNode` enum with variants: `And(Vec<FilterNode>)`, `Or(Vec<FilterNode>)`, `Not(Box<FilterNode>)`, `Comparison { field: String, operator: FilterOperator, value: Value }`. Define `FilterOperator` enum: `Eq`, `Ne`, `Gt`, `Gte`, `Lt`, `Lte`, `In`, `Contains`, `StartsWith`, `Exists`. Define `SortField` with `field: String` and `direction: SortDirection` (Asc, Desc). Define `Pagination` with `offset: u64` and `limit: u64`.
+- [x] Define `QueryDescriptor` struct with: `filters: Option<FilterNode>`, `sort: Vec<SortField>`, `pagination: Pagination`, `fields: Option<Vec<String>>` (projection), `text_search: Option<String>`. Define `FilterNode` enum with variants: `And(Vec<FilterNode>)`, `Or(Vec<FilterNode>)`, `Not(Box<FilterNode>)`, `Comparison { field: String, operator: FilterOperator, value: Value }`. Define `FilterOperator` enum: `Eq`, `Ne`, `Gt`, `Gte`, `Lt`, `Lte`, `In`, `Contains`, `StartsWith`, `Exists`. Define `SortField` with `field: String` and `direction: SortDirection` (Asc, Desc). Define `Pagination` with `offset: u64` and `limit: u64`.
   <!-- files: packages/traits/src/storage.rs -->
   <!-- purpose: Establish a backend-agnostic query model -->
   <!-- requirements: document-storage-adapter 2.1, 3.1, 3.2 -->
 
-- [ ] Define `DocumentList` struct with: `items: Vec<Value>`, `total: u64`, `offset: u64`, `limit: u64`. This is the return type for list/query operations.
+- [x] Define `DocumentList` struct with: `items: Vec<Value>`, `total: u64`, `offset: u64`, `limit: u64`. This is the return type for list/query operations.
   <!-- files: packages/traits/src/storage.rs -->
   <!-- purpose: Standardise list operation return shape -->
   <!-- requirements: document-storage-adapter 2.2 -->
 
 ### 3.3 — Document Storage Adapter Trait
 
-- [ ] Define the `DocumentStorageAdapter` async trait with methods: `get(collection: &str, id: &str) -> Result<Value, StorageError>`, `create(collection: &str, document: Value) -> Result<Value, StorageError>`, `update(collection: &str, id: &str, document: Value) -> Result<Value, StorageError>`, `partial_update(collection: &str, id: &str, patch: Value) -> Result<Value, StorageError>`, `delete(collection: &str, id: &str) -> Result<(), StorageError>`, `list(collection: &str, query: QueryDescriptor) -> Result<DocumentList, StorageError>`, `count(collection: &str, filters: Option<FilterNode>) -> Result<u64, StorageError>`, `batch_create(collection: &str, documents: Vec<Value>) -> Result<Vec<Value>, StorageError>`, `batch_update(collection: &str, updates: Vec<(String, Value)>) -> Result<Vec<Value>, StorageError>`, `batch_delete(collection: &str, ids: Vec<String>) -> Result<u64, StorageError>`, `begin_transaction() -> Result<TransactionHandle, StorageError>`, `watch(collection: &str) -> Result<Receiver<ChangeEvent>, StorageError>`, `migrate(descriptor: CollectionDescriptor) -> Result<(), StorageError>`, `health() -> Result<HealthReport, StorageError>`, `capabilities() -> AdapterCapabilities`.
+- [x] Define the `DocumentStorageAdapter` async trait with methods: `get(collection: &str, id: &str) -> Result<Value, StorageError>`, `create(collection: &str, document: Value) -> Result<Value, StorageError>`, `update(collection: &str, id: &str, document: Value) -> Result<Value, StorageError>`, `partial_update(collection: &str, id: &str, patch: Value) -> Result<Value, StorageError>`, `delete(collection: &str, id: &str) -> Result<(), StorageError>`, `list(collection: &str, query: QueryDescriptor) -> Result<DocumentList, StorageError>`, `count(collection: &str, filters: Option<FilterNode>) -> Result<u64, StorageError>`, `batch_create(collection: &str, documents: Vec<Value>) -> Result<Vec<Value>, StorageError>`, `batch_update(collection: &str, updates: Vec<(String, Value)>) -> Result<Vec<Value>, StorageError>`, `batch_delete(collection: &str, ids: Vec<String>) -> Result<u64, StorageError>`, `begin_transaction() -> Result<TransactionHandle, StorageError>`, `watch(collection: &str) -> Result<Receiver<ChangeEvent>, StorageError>`, `migrate(descriptor: CollectionDescriptor) -> Result<(), StorageError>`, `health() -> Result<HealthReport, StorageError>`, `capabilities() -> AdapterCapabilities`.
   <!-- files: packages/traits/src/storage.rs -->
   <!-- purpose: Define the complete document storage contract that all adapters implement -->
   <!-- requirements: document-storage-adapter 1.1, 2.1, 4.1, 5.1, 6.1, 7.1, 8.1, 9.1 -->
 
-- [ ] Define supporting types: `TransactionHandle` trait with `commit()` and `rollback()` methods, `ChangeEvent` struct with `change_type: ChangeType` (Created, Updated, Deleted), `collection: String`, `document_id: String`, `document: Option<Value>`, `timestamp: DateTime<Utc>`. Define `CollectionDescriptor` with `name: String`, `fields: Vec<FieldDescriptor>`, `indexes: Vec<IndexDescriptor>`. Define `FieldDescriptor` with `name: String`, `field_type: FieldType`, `required: bool`. Define `FieldType` enum: `String`, `Integer`, `Float`, `Boolean`, `DateTime`, `Uuid`, `Json`, `Array`, `Object`. Define `HealthReport` with `status: HealthStatus` (Healthy, Degraded, Unhealthy), `checks: Vec<HealthCheck>`, `latency_ms: u64`. Define `AdapterCapabilities` with `transactions: bool`, `text_search: bool`, `change_watching: bool`, `batch_operations: bool`, `partial_update: bool`.
+- [x] Define supporting types: `TransactionHandle` trait with `commit()` and `rollback()` methods, `ChangeEvent` struct with `change_type: ChangeType` (Created, Updated, Deleted), `collection: String`, `document_id: String`, `document: Option<Value>`, `timestamp: DateTime<Utc>`. Define `CollectionDescriptor` with `name: String`, `fields: Vec<FieldDescriptor>`, `indexes: Vec<IndexDescriptor>`. Define `FieldDescriptor` with `name: String`, `field_type: FieldType`, `required: bool`. Define `FieldType` enum: `String`, `Integer`, `Float`, `Boolean`, `DateTime`, `Uuid`, `Json`, `Array`, `Object`. Define `HealthReport` with `status: HealthStatus` (Healthy, Degraded, Unhealthy), `checks: Vec<HealthCheck>`, `latency_ms: u64`. Define `AdapterCapabilities` with `transactions: bool`, `text_search: bool`, `change_watching: bool`, `batch_operations: bool`, `partial_update: bool`.
   <!-- files: packages/traits/src/storage.rs -->
   <!-- purpose: Define all supporting types for the document storage trait -->
   <!-- requirements: document-storage-adapter 5.1, 6.1, 7.1, 8.1, 9.1 -->
 
-- [ ] Write trait-level documentation with usage examples and implement a mock adapter for testing. The mock stores documents in a `HashMap<String, HashMap<String, Value>>` (collection → id → document) and implements all trait methods.
+- [x] Write trait-level documentation with usage examples and implement a mock adapter for testing. The mock stores documents in a `HashMap<String, HashMap<String, Value>>` (collection → id → document) and implements all trait methods.
   <!-- files: packages/test-utils/src/storage.rs -->
   <!-- purpose: Provide a test double for all modules that depend on document storage -->
   <!-- requirements: document-storage-adapter 1.1 -->
 
 ### 3.4 — Blob Storage Types
 
-- [ ] Define blob storage types in `packages/traits/src/blob.rs`: `ByteStream` (wrapping `tokio::io::AsyncRead + Send` for streaming without memory buffering), `BlobInput` struct with `key: String`, `data: ByteStream`, `content_type: String`, `metadata: HashMap<String, String>`, `BlobMeta` struct with `key: String`, `content_type: String`, `size_bytes: u64`, `checksum_sha256: String`, `created_at: DateTime<Utc>`, `metadata: HashMap<String, String>`. Define `BlobAdapterCapabilities` with `encryption: bool`, `server_side_copy: bool`, `streaming: bool`.
+- [x] Define blob storage types in `packages/traits/src/blob.rs`: `ByteStream` (wrapping `tokio::io::AsyncRead + Send` for streaming without memory buffering), `BlobInput` struct with `key: String`, `data: ByteStream`, `content_type: String`, `metadata: HashMap<String, String>`, `BlobMeta` struct with `key: String`, `content_type: String`, `size_bytes: u64`, `checksum_sha256: String`, `created_at: DateTime<Utc>`, `metadata: HashMap<String, String>`. Define `BlobAdapterCapabilities` with `encryption: bool`, `server_side_copy: bool`, `streaming: bool`.
   <!-- files: packages/traits/src/blob.rs -->
   <!-- purpose: Establish blob storage types that support streaming I/O -->
   <!-- requirements: blob-storage-adapter 1.1, 1.2 -->
 
 ### 3.5 — Blob Storage Adapter Trait
 
-- [ ] Define the `BlobStorageAdapter` async trait with methods: `store(input: BlobInput) -> Result<BlobMeta, StorageError>` (compute SHA-256 during streaming write, return metadata with checksum), `retrieve(key: &str) -> Result<(ByteStream, BlobMeta), StorageError>`, `delete(key: &str) -> Result<(), StorageError>`, `exists(key: &str) -> Result<bool, StorageError>`, `copy(source: &str, destination: &str) -> Result<BlobMeta, StorageError>`, `list(prefix: &str) -> Result<Vec<BlobMeta>, StorageError>`, `metadata(key: &str) -> Result<BlobMeta, StorageError>`, `health() -> Result<HealthReport, StorageError>`, `capabilities() -> BlobAdapterCapabilities`.
+- [x] Define the `BlobStorageAdapter` async trait with methods: `store(input: BlobInput) -> Result<BlobMeta, StorageError>` (compute SHA-256 during streaming write, return metadata with checksum), `retrieve(key: &str) -> Result<(ByteStream, BlobMeta), StorageError>`, `delete(key: &str) -> Result<(), StorageError>`, `exists(key: &str) -> Result<bool, StorageError>`, `copy(source: &str, destination: &str) -> Result<BlobMeta, StorageError>`, `list(prefix: &str) -> Result<Vec<BlobMeta>, StorageError>`, `metadata(key: &str) -> Result<BlobMeta, StorageError>`, `health() -> Result<HealthReport, StorageError>`, `capabilities() -> BlobAdapterCapabilities`.
   <!-- files: packages/traits/src/blob.rs -->
   <!-- purpose: Define the complete blob storage contract -->
   <!-- requirements: blob-storage-adapter 2.1, 3.1, 4.1, 5.1, 6.1, 7.1, 8.1, 9.1, 10.1 -->
 
-- [ ] Implement blob key format validation: keys must match pattern `{plugin_id}/{context}/{filename}`. Validate at the trait boundary (in StorageContext, not in the adapter). Keys with `..`, leading `/`, or empty segments are rejected.
+- [x] Implement blob key format validation: keys must match pattern `{plugin_id}/{context}/{filename}`. Validate at the trait boundary (in StorageContext, not in the adapter). Keys with `..`, leading `/`, or empty segments are rejected.
   <!-- files: packages/traits/src/blob.rs -->
   <!-- purpose: Enforce consistent and safe blob key naming -->
   <!-- requirements: blob-storage-adapter 11.1 -->
 
-- [ ] Implement a mock blob adapter for testing that stores blobs in memory using `HashMap<String, Vec<u8>>`.
+- [x] Implement a mock blob adapter for testing that stores blobs in memory using `HashMap<String, Vec<u8>>`.
   <!-- files: packages/test-utils/src/blob.rs -->
   <!-- purpose: Provide a test double for blob storage consumers -->
   <!-- requirements: blob-storage-adapter 2.1 -->

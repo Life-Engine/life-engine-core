@@ -15,3 +15,4 @@ toml = "0.8"
 jsonschema = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
+tokio = { workspace = true }

@@ -4,6 +4,7 @@
 //! `Transport`, `Plugin`, and `EngineError`, plus capability types for
 //! plugin access control.
 
+pub mod blob;
 pub mod capability;
 pub mod error;
 pub mod index_hints;
@@ -11,6 +12,8 @@ pub mod plugin;
 pub mod schema;
 pub mod schema_versioning;
 pub mod storage;
+pub mod storage_context;
+pub mod storage_router;
 pub mod transport;
 pub mod types;
 

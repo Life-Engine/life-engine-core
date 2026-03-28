@@ -132,7 +132,12 @@
     "backup-and-webhooks:1.9",
     "architecture-migration:2.1",
     "architecture-migration:2.2",
-    "architecture-migration:2.3"
+    "architecture-migration:2.3",
+    "architecture-migration:3.1",
+    "architecture-migration:3.2",
+    "architecture-migration:3.3",
+    "architecture-migration:3.4",
+    "architecture-migration:3.5"
   ],
   "history": [
     {
@@ -662,6 +667,46 @@
       "wp_id": "2.3",
       "plan": "architecture-migration.md",
       "title": "Schema Versioning Rules",
+      "timestamp": "2026-03-29T00:00:00Z",
+      "tasks_completed": 3,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "3.1",
+      "plan": "architecture-migration.md",
+      "title": "Document Storage Error Types",
+      "timestamp": "2026-03-29T00:00:00Z",
+      "tasks_completed": 1,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "3.2",
+      "plan": "architecture-migration.md",
+      "title": "Document Storage Query Types",
+      "timestamp": "2026-03-29T00:00:00Z",
+      "tasks_completed": 2,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "3.3",
+      "plan": "architecture-migration.md",
+      "title": "Document Storage Adapter Trait",
+      "timestamp": "2026-03-29T00:00:00Z",
+      "tasks_completed": 3,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "3.4",
+      "plan": "architecture-migration.md",
+      "title": "Blob Storage Types",
+      "timestamp": "2026-03-29T00:00:00Z",
+      "tasks_completed": 1,
+      "tasks_deferred": 0
+    },
+    {
+      "wp_id": "3.5",
+      "plan": "architecture-migration.md",
+      "title": "Blob Storage Adapter Trait",
       "timestamp": "2026-03-29T00:00:00Z",
       "tasks_completed": 3,
       "tasks_deferred": 0

@@ -2,6 +2,10 @@
 
 ## 2026-03-28
 
+- QA phase-3 remediation — api-plugins WP 1.3: add RFC 6764 well-known endpoint support with 301 redirect builders and PROPFIND route registration on /.well-known/{caldav,carddav}. Add OPTIONS route handlers advertising DAV compliance headers (calendar-access for CalDAV, addressbook for CardDAV) per RFC 4791/6352. Add tests for redirect responses, DAV headers, Allow headers, and route registration for both plugins.
+
+- QA phase-3 remediation — core-application WP 1.5: implement PgSslMode::Prefer with actual TLS fallback behavior in pg_storage.rs. Separate Prefer from Require so it tries TLS first and falls back to plaintext on failure, matching expected PostgreSQL ssl_mode=prefer semantics. Verify rekey::derive_key() zeroed-salt fallback already guarded by #[cfg(test)].
+
 - Architecture implementation across all packages: expand plugin manifest parsing with collections, events, trust levels, and resource limits. Extend audit logging with storage write events and security events. Add new trait modules (index_hints, schema, schema_versioning, blob, storage_context, storage_router). Restructure transport-rest with config, middleware, and router modules. Expand workflow engine with concurrency limits, job registry, condition operators, and trigger system. Add blob storage, health checks, and migration executor to storage-sqlite. Add identity and workflow types. Add schema documentation and QA reports. Update Cargo dependencies across workspace.
 
 ## 2026-03-27

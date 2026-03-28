@@ -80,27 +80,27 @@ This plan addresses the 29 issues identified in the phase-3 QA review of the Cal
 > depends: 1.1
 > spec: .odm/qa/reports/phase-3/api-plugins.md
 
-- [ ] Implement 301 redirect from `/.well-known/caldav` to principal URL in `api-caldav` [major]
+- [x] Implement 301 redirect from `/.well-known/caldav` to principal URL in `api-caldav` [major]
   <!-- file: plugins/engine/api-caldav/src/lib.rs, plugins/engine/api-caldav/src/discovery.rs -->
   <!-- purpose: Enable RFC 6764 service discovery — clients must receive a redirect to find the server -->
   <!-- requirements: 3 -->
   <!-- leverage: existing CALDAV_PRINCIPAL_URL constant in discovery.rs -->
-- [ ] Implement 301 redirect from `/.well-known/carddav` to principal URL in `api-carddav` [major]
+- [x] Implement 301 redirect from `/.well-known/carddav` to principal URL in `api-carddav` [major]
   <!-- file: plugins/engine/api-carddav/src/lib.rs, plugins/engine/api-carddav/src/discovery.rs -->
   <!-- purpose: Enable RFC 6764 service discovery for CardDAV clients -->
   <!-- requirements: 3 -->
   <!-- leverage: existing CARDDAV_PRINCIPAL_URL constant in discovery.rs -->
-- [ ] Handle both GET and PROPFIND methods on well-known endpoints [major]
+- [x] Handle both GET and PROPFIND methods on well-known endpoints [major]
   <!-- file: plugins/engine/api-caldav/src/lib.rs, plugins/engine/api-carddav/src/lib.rs -->
   <!-- purpose: RFC 6764 allows any method on well-known URIs; clients commonly use PROPFIND -->
   <!-- requirements: 3 -->
   <!-- leverage: none -->
-- [ ] Add OPTIONS route handler to `api-caldav` returning `DAV: 1, calendar-access` header [major]
+- [x] Add OPTIONS route handler to `api-caldav` returning `DAV: 1, calendar-access` header [major]
   <!-- file: plugins/engine/api-caldav/src/lib.rs -->
   <!-- purpose: CalDAV clients use OPTIONS to detect protocol support (RFC 4791 Section 5.1) -->
   <!-- requirements: 4 -->
   <!-- leverage: none -->
-- [ ] Add OPTIONS route handler to `api-carddav` returning `DAV: 1, addressbook` header [major]
+- [x] Add OPTIONS route handler to `api-carddav` returning `DAV: 1, addressbook` header [major]
   <!-- file: plugins/engine/api-carddav/src/lib.rs -->
   <!-- purpose: CardDAV clients use OPTIONS to detect protocol support (RFC 6352 Section 6.1) -->
   <!-- requirements: 4 -->

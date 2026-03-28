@@ -91,9 +91,13 @@ impl CorePlugin for CalDavApiPlugin {
                 method: HttpMethod::Delete,
                 path: "/calendars/default/{uid}.ics".into(),
             },
-            // Service discovery
+            // Service discovery — RFC 6764 well-known redirect
             PluginRoute {
                 method: HttpMethod::Get,
+                path: "/.well-known/caldav".into(),
+            },
+            PluginRoute {
+                method: HttpMethod::Propfind,
                 path: "/.well-known/caldav".into(),
             },
             // WebDAV/CalDAV protocol methods
@@ -103,6 +107,11 @@ impl CorePlugin for CalDavApiPlugin {
             },
             PluginRoute {
                 method: HttpMethod::Report,
+                path: "/calendars/default".into(),
+            },
+            // OPTIONS — advertise DAV: 1, calendar-access (RFC 4791 Section 5.1)
+            PluginRoute {
+                method: HttpMethod::Options,
                 path: "/calendars/default".into(),
             },
         ]
@@ -153,6 +162,26 @@ mod tests {
         let paths: Vec<&str> = routes.iter().map(|r| r.path.as_str()).collect();
         assert!(paths.contains(&"/calendars/default"));
         assert!(paths.contains(&"/.well-known/caldav"));
+    }
+
+    #[test]
+    fn well_known_propfind_route_registered() {
+        let plugin = CalDavApiPlugin::new();
+        let routes = plugin.routes();
+        let has_propfind_wellknown = routes.iter().any(|r| {
+            matches!(r.method, HttpMethod::Propfind) && r.path == "/.well-known/caldav"
+        });
+        assert!(has_propfind_wellknown, "PROPFIND on /.well-known/caldav must be registered");
+    }
+
+    #[test]
+    fn options_route_registered() {
+        let plugin = CalDavApiPlugin::new();
+        let routes = plugin.routes();
+        let has_options = routes.iter().any(|r| {
+            matches!(r.method, HttpMethod::Options) && r.path == "/calendars/default"
+        });
+        assert!(has_options, "OPTIONS on /calendars/default must be registered");
     }
 
     #[tokio::test]

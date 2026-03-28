@@ -90,8 +90,13 @@ impl CorePlugin for CardDavApiPlugin {
                 method: HttpMethod::Delete,
                 path: "/addressbooks/default/{uid}.vcf".into(),
             },
+            // Service discovery — RFC 6764 well-known redirect
             PluginRoute {
                 method: HttpMethod::Get,
+                path: "/.well-known/carddav".into(),
+            },
+            PluginRoute {
+                method: HttpMethod::Propfind,
                 path: "/.well-known/carddav".into(),
             },
             // WebDAV/CardDAV protocol methods
@@ -101,6 +106,11 @@ impl CorePlugin for CardDavApiPlugin {
             },
             PluginRoute {
                 method: HttpMethod::Report,
+                path: "/addressbooks/default".into(),
+            },
+            // OPTIONS — advertise DAV: 1, addressbook (RFC 6352 Section 6.1)
+            PluginRoute {
+                method: HttpMethod::Options,
                 path: "/addressbooks/default".into(),
             },
         ]
@@ -151,6 +161,26 @@ mod tests {
         let paths: Vec<&str> = routes.iter().map(|r| r.path.as_str()).collect();
         assert!(paths.contains(&"/addressbooks/default"));
         assert!(paths.contains(&"/.well-known/carddav"));
+    }
+
+    #[test]
+    fn well_known_propfind_route_registered() {
+        let plugin = CardDavApiPlugin::new();
+        let routes = plugin.routes();
+        let has_propfind_wellknown = routes.iter().any(|r| {
+            matches!(r.method, HttpMethod::Propfind) && r.path == "/.well-known/carddav"
+        });
+        assert!(has_propfind_wellknown, "PROPFIND on /.well-known/carddav must be registered");
+    }
+
+    #[test]
+    fn options_route_registered() {
+        let plugin = CardDavApiPlugin::new();
+        let routes = plugin.routes();
+        let has_options = routes.iter().any(|r| {
+            matches!(r.method, HttpMethod::Options) && r.path == "/addressbooks/default"
+        });
+        assert!(has_options, "OPTIONS on /addressbooks/default must be registered");
     }
 
     #[tokio::test]

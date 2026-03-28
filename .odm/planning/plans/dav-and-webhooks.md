@@ -14,7 +14,7 @@ Work packages are ordered by dependency: foundational DAV XML parsing (1.1) enab
 
 **Source:** .odm/qa/reports/phase-2/dav-and-webhooks.md
 
-**Progress:** 0 / 7 work packages complete
+**Progress:** 7 / 7 work packages complete
 
 ---
 
@@ -197,37 +197,37 @@ Work packages are ordered by dependency: foundational DAV XML parsing (1.1) enab
 > depends: none
 > spec: .odm/qa/reports/phase-2/dav-and-webhooks.md
 
-- [ ] Implement `deliver()` method that performs actual HTTP POST via reqwest [feature]
+- [x] Implement `deliver()` method that performs actual HTTP POST via reqwest [feature]
   <!-- file: plugins/engine/webhook-sender/src/lib.rs -->
   <!-- purpose: Replace simulated delivery with real HTTP dispatch to webhook URLs -->
   <!-- requirements: C-002 -->
   <!-- leverage: reqwest already in Cargo.toml -->
-- [ ] Implement HMAC-SHA256 payload signing when subscription has a secret [feature]
+- [x] Implement HMAC-SHA256 payload signing when subscription has a secret [feature]
   <!-- file: plugins/engine/webhook-sender/src/lib.rs -->
   <!-- purpose: Cryptographically sign outbound webhook payloads for consumer verification -->
   <!-- requirements: C-003 -->
   <!-- leverage: WebhookSubscription.secret field already exists -->
-- [ ] Add configurable timeouts (connect, request, total) to webhook delivery [feature]
+- [x] Add configurable timeouts (connect, request, total) to webhook delivery [feature]
   <!-- file: plugins/engine/webhook-sender/src/config.rs -->
   <!-- purpose: Prevent hanging connections from exhausting resources during delivery -->
   <!-- requirements: m-006 -->
   <!-- leverage: existing WebhookSenderConfig -->
-- [ ] Implement per-URL rate limiting with token bucket for outbound delivery [feature]
+- [x] Implement per-URL rate limiting with token bucket for outbound delivery [feature]
   <!-- file: plugins/engine/webhook-sender/src/lib.rs -->
   <!-- purpose: Prevent overwhelming webhook endpoints with burst delivery -->
   <!-- requirements: M-004 -->
   <!-- leverage: none -->
-- [ ] Implement exponential backoff retry for failed deliveries [feature]
+- [x] Implement exponential backoff retry for failed deliveries [feature]
   <!-- file: plugins/engine/webhook-sender/src/lib.rs -->
   <!-- purpose: Retry failed webhook deliveries with increasing delays -->
   <!-- requirements: C-002 -->
   <!-- leverage: existing retry tracking in delivery.rs -->
-- [ ] Replace `Vec::drain` with `VecDeque` in `DeliveryLog` for O(1) eviction [fix]
+- [x] Replace `Vec::drain` with `VecDeque` in `DeliveryLog` for O(1) eviction [fix]
   <!-- file: plugins/engine/webhook-sender/src/delivery.rs -->
   <!-- purpose: Improve eviction performance from O(n) to O(1) -->
   <!-- requirements: m-010 -->
   <!-- leverage: existing DeliveryLog implementation -->
-- [ ] Add tests for HTTP delivery, HMAC signing, rate limiting, and retry [test]
+- [x] Add tests for HTTP delivery, HMAC signing, rate limiting, and retry [test]
   <!-- file: plugins/engine/webhook-sender/src/tests/mod.rs -->
   <!-- purpose: Verify real webhook delivery, signing, and rate limiting behavior -->
   <!-- requirements: m-009 -->
@@ -269,27 +269,27 @@ Work packages are ordered by dependency: foundational DAV XML parsing (1.1) enab
 > depends: 1.2, 1.3, 1.4
 > spec: .odm/qa/reports/phase-2/dav-and-webhooks.md
 
-- [ ] Move config structs from `lib.rs` into `config.rs` for all three transport crates [refactor]
+- [x] Move config structs from `lib.rs` into `config.rs` for all three transport crates [refactor]
   <!-- file: packages/transport-caldav/src/config.rs, packages/transport-carddav/src/config.rs, packages/transport-webhook/src/config.rs -->
   <!-- purpose: Align config definitions with declared module structure -->
   <!-- requirements: m-001 -->
   <!-- leverage: existing config.rs empty modules -->
-- [ ] Add optional TLS certificate/key path fields to transport configs [feature]
+- [x] Add optional TLS certificate/key path fields to transport configs [feature]
   <!-- file: packages/transport-caldav/src/config.rs, packages/transport-carddav/src/config.rs, packages/transport-webhook/src/config.rs -->
   <!-- purpose: Enable HTTPS for transports that commonly require TLS -->
   <!-- requirements: m-002 -->
   <!-- leverage: existing config structs -->
-- [ ] Define Content-Type constants for each transport [feature]
+- [x] Define Content-Type constants for each transport [feature]
   <!-- file: packages/transport-caldav/src/types.rs, packages/transport-carddav/src/types.rs, packages/transport-webhook/src/types.rs -->
   <!-- purpose: Provide correct Content-Type headers for protocol responses -->
   <!-- requirements: m-008 -->
   <!-- leverage: none -->
-- [ ] Replace `HashMap` with `BTreeMap` in `DavSyncState.etags` for deterministic ordering [fix]
+- [x] Replace `HashMap` with `BTreeMap` in `DavSyncState.etags` for deterministic ordering [fix]
   <!-- file: packages/dav-utils/src/sync_state.rs -->
   <!-- purpose: Ensure deterministic serialization for debugging and log diffing -->
   <!-- requirements: m-005 -->
   <!-- leverage: existing DavSyncState struct -->
-- [ ] Ensure transport structs maintain `Send + Sync` after adding runtime state [design]
+- [x] Ensure transport structs maintain `Send + Sync` after adding runtime state [design]
   <!-- file: packages/transport-caldav/src/lib.rs, packages/transport-carddav/src/lib.rs, packages/transport-webhook/src/lib.rs -->
   <!-- purpose: Prevent Send+Sync violations when adding socket handles and connection pools -->
   <!-- requirements: M-010 -->

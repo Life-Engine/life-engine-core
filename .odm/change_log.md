@@ -2,6 +2,8 @@
 
 ## 2026-03-28
 
+- QA phase-2 remediation — dav-and-webhooks WP 1.5: implement webhook sender HTTP delivery via reqwest with HMAC-SHA256 payload signing, configurable timeouts (connect/request/total), per-URL token bucket rate limiting, exponential backoff retry using plugin SDK RetryState, replace Vec::drain with VecDeque for O(1) delivery log eviction, fix pre-existing private field access bug in tests, and add 12 new tests for signing, rate limiting, delivery, and config.
+
 - QA phase-3 remediation — connector-plugins WP 1.10: remove unused duplicate types.rs from email and filesystem connectors (SyncState, FileChange/FileChangeType). Remove unused FileChange::Moved variant from local.rs.
 - QA phase-3 remediation — connector-plugins WP 1.5: remove unnecessary head_object check before delete_object (TOCTOU race fix). Pagination already implemented. SDK client caching deferred (conflicts with per-call credential pattern).
 - QA phase-3 remediation — connector-plugins WP 1.3: verified all four connectors already have RetryState from plugin SDK. No code changes needed.

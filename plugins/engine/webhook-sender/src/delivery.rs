@@ -3,6 +3,8 @@
 //! Records every delivery attempt with status code, success/failure,
 //! and retry count for audit and debugging purposes.
 
+use std::collections::VecDeque;
+
 use crate::models::{DeliveryRecord, DeliveryStatus};
 
 /// Maximum number of delivery records kept in memory before oldest entries
@@ -16,17 +18,17 @@ const DEFAULT_MAX_CAPACITY: usize = 10_000;
 /// storage-backed persistence during plugin loading.
 ///
 /// The log is bounded to `max_capacity` entries; when exceeded the oldest
-/// entries are evicted to stay within the limit.
+/// entries are evicted via O(1) `pop_front` on the `VecDeque`.
 #[derive(Debug)]
 pub struct DeliveryLog {
-    records: Vec<DeliveryRecord>,
+    records: VecDeque<DeliveryRecord>,
     max_capacity: usize,
 }
 
 impl Default for DeliveryLog {
     fn default() -> Self {
         Self {
-            records: Vec::new(),
+            records: VecDeque::new(),
             max_capacity: DEFAULT_MAX_CAPACITY,
         }
     }
@@ -40,24 +42,23 @@ impl DeliveryLog {
     /// Create a delivery log with a custom maximum capacity.
     pub fn with_max_capacity(max_capacity: usize) -> Self {
         Self {
-            records: Vec::new(),
+            records: VecDeque::new(),
             max_capacity,
         }
     }
 
     /// Record a delivery attempt. If the log exceeds its maximum capacity,
-    /// the oldest entries are evicted.
+    /// the oldest entries are evicted via O(1) pop_front.
     pub fn record(&mut self, record: DeliveryRecord) {
-        self.records.push(record);
-        if self.records.len() > self.max_capacity {
-            let excess = self.records.len() - self.max_capacity;
-            self.records.drain(..excess);
+        self.records.push_back(record);
+        while self.records.len() > self.max_capacity {
+            self.records.pop_front();
         }
     }
 
-    /// Returns all delivery records.
-    pub fn all(&self) -> &[DeliveryRecord] {
-        &self.records
+    /// Returns all delivery records as a slice pair (VecDeque may not be contiguous).
+    pub fn all(&self) -> Vec<&DeliveryRecord> {
+        self.records.iter().collect()
     }
 
     /// Returns delivery records for a specific subscription.

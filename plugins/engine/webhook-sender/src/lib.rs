@@ -1,14 +1,16 @@
 //! Webhook sender plugin for Life Engine Core.
 //!
 //! Subscribes to Core event bus events and dispatches webhook POST
-//! requests to configured external URLs. Supports exponential backoff
-//! retry (max 5 attempts) and maintains a delivery log with status codes.
+//! requests to configured external URLs. Supports HMAC-SHA256 payload
+//! signing, configurable timeouts, per-URL rate limiting with token
+//! bucket, and exponential backoff retry.
 //!
 //! # Architecture
 //!
 //! - `models` — Webhook subscription and delivery record types
 //! - `retry` — Exponential backoff retry state tracker
 //! - `delivery` — Delivery log for tracking send attempts
+//! - `config` — Configuration with timeout and retry settings
 
 pub mod config;
 pub mod delivery;
@@ -18,17 +20,125 @@ pub mod steps;
 pub mod transform;
 pub mod types;
 
+#[cfg(test)]
+#[path = "tests/mod.rs"]
+mod delivery_tests;
+
 /// Re-export the shared retry module from the plugin SDK.
 pub use life_engine_plugin_sdk::retry;
+
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use async_trait::async_trait;
 use life_engine_plugin_sdk::prelude::*;
 use life_engine_plugin_sdk::retry::RetryState;
 use life_engine_plugin_sdk::types::Capability;
+use tokio::sync::Mutex;
 
+use crate::config::WebhookSenderConfig;
 use crate::delivery::DeliveryLog;
 use crate::models::{DeliveryRecord, WebhookSubscription};
+
+/// Per-URL token bucket rate limiter.
+///
+/// Each URL gets its own bucket with a configurable rate (tokens per second)
+/// and burst capacity. Tokens are refilled lazily on each `acquire` call.
+#[derive(Debug, Clone)]
+pub struct RateLimiter {
+    buckets: Arc<Mutex<HashMap<String, TokenBucket>>>,
+    tokens_per_sec: f64,
+    burst: u32,
+}
+
+#[derive(Debug, Clone)]
+struct TokenBucket {
+    tokens: f64,
+    last_refill: Instant,
+}
+
+impl RateLimiter {
+    /// Create a new rate limiter.
+    ///
+    /// - `tokens_per_sec` — steady-state rate (e.g. 10.0 = 10 requests/sec)
+    /// - `burst` — maximum tokens that can accumulate
+    pub fn new(tokens_per_sec: f64, burst: u32) -> Self {
+        Self {
+            buckets: Arc::new(Mutex::new(HashMap::new())),
+            tokens_per_sec,
+            burst,
+        }
+    }
+
+    /// Try to acquire a token for the given URL.
+    /// Returns `true` if a token was available, `false` if rate-limited.
+    pub async fn acquire(&self, url: &str) -> bool {
+        let mut buckets = self.buckets.lock().await;
+        let now = Instant::now();
+        let bucket = buckets.entry(url.to_string()).or_insert(TokenBucket {
+            tokens: self.burst as f64,
+            last_refill: now,
+        });
+
+        // Refill tokens based on elapsed time
+        let elapsed = now.duration_since(bucket.last_refill).as_secs_f64();
+        bucket.tokens = (bucket.tokens + elapsed * self.tokens_per_sec).min(self.burst as f64);
+        bucket.last_refill = now;
+
+        if bucket.tokens >= 1.0 {
+            bucket.tokens -= 1.0;
+            true
+        } else {
+            false
+        }
+    }
+}
+
+/// Sign a payload with HMAC-SHA256 and return the `sha256=<hex>` signature string.
+pub fn sign_payload(secret: &str, body: &[u8]) -> String {
+    use hmac::{Hmac, Mac};
+    type HmacSha256 = Hmac<sha2::Sha256>;
+
+    let mut mac =
+        <HmacSha256 as Mac>::new_from_slice(secret.as_bytes()).expect("HMAC accepts any key size");
+    mac.update(body);
+    format!("sha256={}", hex::encode(mac.finalize().into_bytes()))
+}
+
+/// Deliver a webhook payload to a single subscription URL.
+///
+/// Performs an HTTP POST with optional HMAC-SHA256 signing, respecting
+/// the configured connect and request timeouts. Returns the HTTP status
+/// code on success or an error string on failure.
+pub async fn deliver(
+    client: &reqwest::Client,
+    sub: &WebhookSubscription,
+    body: &[u8],
+) -> std::result::Result<u16, String> {
+    let mut request = client
+        .post(&sub.url)
+        .header("Content-Type", "application/json")
+        .header("User-Agent", "LifeEngine-Webhook/1.0");
+
+    if let Some(ref secret) = sub.secret {
+        let sig = sign_payload(secret, body);
+        request = request.header("X-Webhook-Signature", sig);
+    }
+
+    match request.body(body.to_vec()).send().await {
+        Ok(resp) => {
+            let status = resp.status().as_u16();
+            if resp.status().is_success() {
+                Ok(status)
+            } else {
+                Err(format!("HTTP {status}"))
+            }
+        }
+        Err(e) => Err(e.to_string()),
+    }
+}
 
 /// The webhook sender plugin.
 ///
@@ -41,6 +151,8 @@ pub struct WebhookSenderPlugin {
     delivery_log: DeliveryLog,
     /// Retry state per subscription (keyed by index for simplicity).
     retry_states: Vec<RetryState>,
+    /// Plugin configuration.
+    config: WebhookSenderConfig,
 }
 
 impl WebhookSenderPlugin {
@@ -49,6 +161,17 @@ impl WebhookSenderPlugin {
             subscriptions: Vec::new(),
             delivery_log: DeliveryLog::new(),
             retry_states: Vec::new(),
+            config: WebhookSenderConfig::default(),
+        }
+    }
+
+    /// Create a plugin with custom configuration.
+    pub fn with_config(config: WebhookSenderConfig) -> Self {
+        Self {
+            subscriptions: Vec::new(),
+            delivery_log: DeliveryLog::new(),
+            retry_states: Vec::new(),
+            config,
         }
     }
 
@@ -160,6 +283,18 @@ impl Default for WebhookSenderPlugin {
     }
 }
 
+/// Return a plugin config suitable for tests: very short timeouts, no retries.
+#[cfg(test)]
+fn test_config() -> WebhookSenderConfig {
+    WebhookSenderConfig {
+        max_retries: 0,
+        max_delivery_log_size: 100,
+        connect_timeout_secs: 1,
+        request_timeout_secs: 1,
+        total_timeout_secs: 2,
+    }
+}
+
 impl Plugin for WebhookSenderPlugin {
     fn id(&self) -> &str {
         "com.life-engine.webhook-sender"
@@ -260,13 +395,100 @@ impl CorePlugin for WebhookSenderPlugin {
 
     async fn handle_event(&self, event: &CoreEvent) -> Result<()> {
         let matching = self.matching_subscriptions(&event.event_type);
-        if !matching.is_empty() {
-            tracing::info!(
-                event_type = %event.event_type,
-                subscription_count = matching.len(),
-                "webhook sender matched event to subscriptions"
-            );
+        if matching.is_empty() {
+            return Ok(());
         }
+
+        tracing::info!(
+            event_type = %event.event_type,
+            subscription_count = matching.len(),
+            "webhook sender matched event to subscriptions"
+        );
+
+        let client = reqwest::Client::builder()
+            .connect_timeout(Duration::from_secs(self.config.connect_timeout_secs))
+            .timeout(Duration::from_secs(self.config.request_timeout_secs))
+            .build()
+            .unwrap_or_default();
+
+        let payload = serde_json::json!({
+            "event_type": event.event_type,
+            "payload": event.payload,
+            "timestamp": chrono::Utc::now().to_rfc3339(),
+        });
+        let body = serde_json::to_vec(&payload)?;
+
+        let rate_limiter = RateLimiter::new(10.0, 20);
+        let total_deadline = Instant::now() + Duration::from_secs(self.config.total_timeout_secs);
+
+        for sub in &matching {
+            // Rate limit check
+            if !rate_limiter.acquire(&sub.url).await {
+                tracing::warn!(
+                    subscription_id = %sub.id,
+                    url = %sub.url,
+                    "webhook delivery rate-limited, skipping"
+                );
+                continue;
+            }
+
+            let mut attempt = 0u32;
+            let mut retry_state = RetryState::with_config(
+                self.config.max_retries,
+                1, // 1-second minimum backoff for webhook delivery
+                60, // 60-second maximum backoff
+            );
+
+            loop {
+                attempt += 1;
+
+                if Instant::now() >= total_deadline {
+                    tracing::error!(
+                        subscription_id = %sub.id,
+                        url = %sub.url,
+                        "webhook delivery exceeded total timeout"
+                    );
+                    break;
+                }
+
+                match deliver(&client, sub, &body).await {
+                    Ok(status) => {
+                        tracing::info!(
+                            subscription_id = %sub.id,
+                            url = %sub.url,
+                            status = status,
+                            attempt = attempt,
+                            "webhook delivered successfully"
+                        );
+                        break;
+                    }
+                    Err(err) => {
+                        let backoff = retry_state.record_failure();
+                        if retry_state.can_retry() {
+                            tracing::warn!(
+                                subscription_id = %sub.id,
+                                url = %sub.url,
+                                attempt = attempt,
+                                backoff_ms = backoff.as_millis() as u64,
+                                error = %err,
+                                "webhook delivery failed, will retry"
+                            );
+                            tokio::time::sleep(backoff).await;
+                        } else {
+                            tracing::error!(
+                                subscription_id = %sub.id,
+                                url = %sub.url,
+                                attempt = attempt,
+                                error = %err,
+                                "webhook delivery failed, retries exhausted"
+                            );
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
         Ok(())
     }
 }
@@ -528,13 +750,13 @@ mod tests {
         plugin.record_delivery_failure("sub-1", "record.created", serde_json::json!({}), 500, 2, "err");
 
         let retry = plugin.retry_state("sub-1").unwrap();
-        assert_eq!(retry.failure_count, 2);
+        assert_eq!(retry.failure_count(), 2);
 
         // Succeed
         plugin.record_delivery_success("sub-1", "record.created", serde_json::json!({}), 200, 3);
 
         let retry = plugin.retry_state("sub-1").unwrap();
-        assert_eq!(retry.failure_count, 0);
+        assert_eq!(retry.failure_count(), 0);
     }
 
     #[test]
@@ -556,7 +778,7 @@ mod tests {
 
     #[tokio::test]
     async fn handle_event_with_matching_subscription() {
-        let mut plugin = WebhookSenderPlugin::new();
+        let mut plugin = WebhookSenderPlugin::with_config(test_config());
         plugin.subscribe(test_subscription());
 
         let event = CoreEvent {
@@ -566,6 +788,7 @@ mod tests {
             timestamp: chrono::Utc::now(),
         };
 
+        // Delivery will fail (no real server) but handle_event should still return Ok
         let result = plugin.handle_event(&event).await;
         assert!(result.is_ok());
     }

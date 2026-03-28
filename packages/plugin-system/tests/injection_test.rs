@@ -56,7 +56,7 @@ impl MockEventBus {
 
 #[async_trait]
 impl WorkflowEventEmitter for MockEventBus {
-    async fn emit(&self, event_name: &str, payload: serde_json::Value, _depth: u32) {
+    async fn emit(&self, event_name: &str, payload: serde_json::Value) {
         self.emit_calls
             .lock()
             .unwrap()

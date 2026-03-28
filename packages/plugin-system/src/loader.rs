@@ -14,6 +14,7 @@ use tracing::{info, warn};
 use crate::capability::{check_capability_approval, ApprovedCapabilities};
 use crate::discovery::scan_plugins_directory;
 use crate::error::PluginError;
+use crate::host_functions::blob::BlobBackend;
 use crate::host_functions::logging::LogRateLimiter;
 use crate::injection::{build_host_functions, InjectionDeps};
 use crate::manifest::{parse_manifest, PluginManifest};
@@ -57,6 +58,7 @@ pub fn load_plugins(
     storage: Arc<dyn StorageBackend>,
     event_bus: Arc<dyn WorkflowEventEmitter>,
     log_rate_limiter: Arc<LogRateLimiter>,
+    blob_storage: Option<Arc<dyn BlobBackend>>,
 ) -> Result<Vec<PluginHandle>, PluginError> {
     let discovered = scan_plugins_directory(plugins_dir)?;
 
@@ -76,6 +78,7 @@ pub fn load_plugins(
             &storage,
             &event_bus,
             &log_rate_limiter,
+            &blob_storage,
         ) {
             Ok(handle) => {
                 let plugin_id = &handle.manifest.plugin.id;
@@ -126,6 +129,7 @@ fn load_single_plugin(
     storage: &Arc<dyn StorageBackend>,
     event_bus: &Arc<dyn WorkflowEventEmitter>,
     log_rate_limiter: &Arc<LogRateLimiter>,
+    blob_storage: &Option<Arc<dyn BlobBackend>>,
 ) -> Result<PluginHandle, PluginError> {
     // Step 1: Parse manifest
     let manifest = parse_manifest(&plugin.manifest_path)?;
@@ -161,7 +165,7 @@ fn load_single_plugin(
         event_bus: Arc::clone(event_bus),
         log_rate_limiter: Arc::clone(log_rate_limiter),
         plugin_config: config.plugin_configs.get(plugin_id).cloned(),
-        blob_storage: None, // TODO: wire blob backend when available
+        blob_storage: blob_storage.clone(),
         allowed_domains: None, // TODO: extract from manifest when schema supports it
         declared_emit_events: declared_emit,
         declared_subscribe_events: declared_subscribe,
@@ -275,7 +279,7 @@ mod tests {
 
     #[async_trait]
     impl WorkflowEventEmitter for MockEventBus {
-        async fn emit(&self, event_name: &str, payload: serde_json::Value, _depth: u32) {
+        async fn emit(&self, event_name: &str, payload: serde_json::Value) {
             self.emit_calls
                 .lock()
                 .unwrap()
@@ -375,6 +379,7 @@ required = [{caps_str}]
             mock_storage(),
             mock_event_bus(),
             log_limiter(),
+            None,
         );
 
         let handles = result.unwrap();
@@ -406,6 +411,7 @@ required = [{caps_str}]
             mock_storage(),
             mock_event_bus(),
             log_limiter(),
+            None,
         );
 
         let handles = result.unwrap();
@@ -445,6 +451,7 @@ required = [{caps_str}]
             mock_storage(),
             mock_event_bus(),
             log_limiter(),
+            None,
         );
 
         let handles = result.unwrap();
@@ -476,6 +483,7 @@ required = [{caps_str}]
             mock_storage(),
             mock_event_bus(),
             log_limiter(),
+            None,
         );
 
         let handles = result.unwrap();
@@ -503,6 +511,7 @@ required = [{caps_str}]
             mock_storage(),
             mock_event_bus(),
             log_limiter(),
+            None,
         );
 
         let handles = result.unwrap();
@@ -540,6 +549,7 @@ required = [{caps_str}]
             mock_storage(),
             mock_event_bus(),
             log_limiter(),
+            None,
         );
 
         let handles = result.unwrap();
@@ -566,6 +576,7 @@ required = [{caps_str}]
             mock_storage(),
             mock_event_bus(),
             log_limiter(),
+            None,
         );
 
         let handles = result.unwrap();
@@ -607,6 +618,7 @@ required = [{caps_str}]
             mock_storage(),
             mock_event_bus(),
             log_limiter(),
+            None,
         );
 
         let handles = result.unwrap();
@@ -655,6 +667,7 @@ required = [{caps_str}]
             mock_storage(),
             mock_event_bus(),
             log_limiter(),
+            None,
         );
 
         let handles = result.unwrap();

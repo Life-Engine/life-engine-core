@@ -530,7 +530,7 @@ fn build_events_emit_function(
     capabilities: &ApprovedCapabilities,
     event_bus: &Arc<dyn WorkflowEventEmitter>,
     declared_emit_events: &Option<Vec<String>>,
-    declared_subscribe_events: &Option<Vec<String>>,
+    _declared_subscribe_events: &Option<Vec<String>>,
     execution_depth: u32,
 ) -> Function {
     let ctx = EventsHostContext {
@@ -538,7 +538,6 @@ fn build_events_emit_function(
         capabilities: capabilities.clone(),
         event_bus: Arc::clone(event_bus),
         declared_emit_events: declared_emit_events.clone(),
-        declared_subscribe_events: declared_subscribe_events.clone(),
         execution_depth,
     };
 
@@ -576,7 +575,7 @@ fn build_events_subscribe_function(
     capabilities: &ApprovedCapabilities,
     event_bus: &Arc<dyn WorkflowEventEmitter>,
     declared_emit_events: &Option<Vec<String>>,
-    declared_subscribe_events: &Option<Vec<String>>,
+    _declared_subscribe_events: &Option<Vec<String>>,
     execution_depth: u32,
 ) -> Function {
     let ctx = EventsHostContext {
@@ -584,7 +583,6 @@ fn build_events_subscribe_function(
         capabilities: capabilities.clone(),
         event_bus: Arc::clone(event_bus),
         declared_emit_events: declared_emit_events.clone(),
-        declared_subscribe_events: declared_subscribe_events.clone(),
         execution_depth,
     };
 

@@ -2,6 +2,8 @@
 
 ## 2026-03-29
 
+- Executive Summary WP 2.2 — Fix Plugin System Execution and Host Functions: wire BlobBackend through load_plugins and load_single_plugin into InjectionDeps (previously hardcoded to None), replacing TODO comment. Replace single global Mutex<HashMap<String, PluginHandle>> in PluginSystemExecutor with per-plugin HashMap<String, Mutex<PluginHandle>> to allow parallel execution of different plugins. Fix pre-existing EventsHostContext declared_subscribe_events field mismatch and WorkflowEventEmitter::emit signature drift in test mocks. Propfind/Report HttpMethod variants already present from prior WP.
+
 - Backup & Webhooks WP 1.9 — Minor Cleanup and Hardening: use HashSet for incremental backup collection deduplication in engine.rs, replace sync path.exists() with tokio::fs::try_exists() in local backend, delete orphan types.rs (WebhookSenderStatus not declared as module), refactor process_webhook to parse JSON from raw_body internally eliminating signature/payload mismatch risk. URL validation and payload hash storage were already implemented by prior agents.
 
 - Executive Summary WP 2.1 — Fix REST Transport Auth and Identity: replace middleware-local Identity struct in packages/transport-rest/src/middleware/auth.rs with life_engine_types::identity::Identity, converting AuthIdentity fields (user_id→subject, provider→issuer, scopes→claims). Fix public route bypass to use MatchedPath instead of raw URI path so parameterized routes are correctly recognized. Add DefaultBodyLimit (2 MB) layer to apps/core/src/main.rs router to prevent unbounded request body consumption. Update middleware tests accordingly.

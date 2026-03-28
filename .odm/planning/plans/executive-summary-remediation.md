@@ -12,7 +12,7 @@ This plan addresses all findings from the QA executive summary report across thr
 
 Work packages are organized by domain area within each tier. Tier 2 WPs depend on their related Tier 1 WPs being complete first (where applicable). Tier 3 WPs depend on related Tier 2 WPs.
 
-**Progress:** 6 / 13 work packages complete
+**Progress:** 7 / 13 work packages complete
 
 ---
 
@@ -160,17 +160,17 @@ Work packages are organized by domain area within each tier. Tier 2 WPs depend o
 > depends: 1.3
 > spec: .odm/qa/reports/EXECUTIVE-SUMMARY.md
 
-- [ ] Add blob builders to `injection.rs` and pass `BlobBackend` through `InjectionDeps` [functional]
+- [x] Add blob builders to `injection.rs` and pass `BlobBackend` through `InjectionDeps` [functional]
   <!-- file: packages/plugin-system/src/injection.rs -->
   <!-- purpose: Wire blob host functions so blob storage works via plugin system -->
   <!-- requirements: Tier 2, item 10 -->
   <!-- leverage: existing injection.rs build_host_functions -->
-- [ ] Replace single global mutex with per-plugin locks or extract handles before WASM calls [functional]
+- [x] Replace single global mutex with per-plugin locks or extract handles before WASM calls [functional]
   <!-- file: packages/plugin-system/src/execute.rs -->
   <!-- purpose: Allow parallel plugin execution system-wide -->
   <!-- requirements: Tier 2, item 11 -->
   <!-- leverage: existing execute.rs:79 -->
-- [ ] Add `Propfind` and `Report` variants to `HttpMethod` enum in plugin SDK [functional]
+- [x] Add `Propfind` and `Report` variants to `HttpMethod` enum in plugin SDK [functional]
   <!-- file: packages/plugin-sdk-rs/src/types.rs -->
   <!-- purpose: Unblock CalDAV and CardDAV plugin development -->
   <!-- requirements: Tier 2, item 14 -->

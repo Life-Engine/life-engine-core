@@ -219,6 +219,7 @@ fn community_plugin_discovered_in_same_plugins_directory() {
         mock_storage(),
         mock_event_bus(),
         log_limiter(),
+        None,
     )
     .unwrap();
 
@@ -264,6 +265,7 @@ fn community_plugin_rejected_without_explicit_approval() {
         mock_storage(),
         mock_event_bus(),
         log_limiter(),
+        None,
     )
     .unwrap();
 
@@ -305,6 +307,7 @@ fn approved_community_plugin_gets_same_host_functions_as_first_party() {
         mock_storage(),
         mock_event_bus(),
         log_limiter(),
+        None,
     )
     .unwrap();
 
@@ -337,6 +340,7 @@ fn approved_community_plugin_gets_same_host_functions_as_first_party() {
         mock_storage(),
         mock_event_bus(),
         log_limiter(),
+        None,
     )
     .unwrap();
 
@@ -407,6 +411,7 @@ fn community_and_first_party_plugins_coexist() {
         mock_storage(),
         mock_event_bus(),
         log_limiter(),
+        None,
     )
     .unwrap();
 
@@ -460,6 +465,7 @@ fn community_plugin_partial_approval_rejects_entirely() {
         mock_storage(),
         mock_event_bus(),
         log_limiter(),
+        None,
     )
     .unwrap();
 
@@ -514,6 +520,7 @@ fn community_plugin_approval_enables_full_loading() {
         mock_storage(),
         mock_event_bus(),
         log_limiter(),
+        None,
     )
     .unwrap();
 

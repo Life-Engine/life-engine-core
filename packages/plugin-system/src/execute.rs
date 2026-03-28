@@ -28,8 +28,9 @@ use crate::loader::PluginHandle;
 /// 5. Calls the WASM export with the serialized input
 /// 6. Deserializes the output back into a `PipelineMessage`
 pub struct PluginSystemExecutor {
-    /// Loaded plugin handles keyed by plugin ID.
-    handles: Mutex<HashMap<String, PluginHandle>>,
+    /// Loaded plugin handles keyed by plugin ID, each with its own lock to
+    /// allow parallel execution of different plugins.
+    handles: HashMap<String, Mutex<PluginHandle>>,
     /// Lifecycle manager tracking plugin states.
     lifecycle: Mutex<LifecycleManager>,
 }
@@ -37,13 +38,13 @@ pub struct PluginSystemExecutor {
 impl PluginSystemExecutor {
     /// Creates a new executor from loaded plugin handles and a lifecycle manager.
     pub fn new(handles: Vec<PluginHandle>, lifecycle: LifecycleManager) -> Self {
-        let map: HashMap<String, PluginHandle> = handles
+        let map: HashMap<String, Mutex<PluginHandle>> = handles
             .into_iter()
-            .map(|h| (h.manifest.plugin.id.clone(), h))
+            .map(|h| (h.manifest.plugin.id.clone(), Mutex::new(h)))
             .collect();
 
         Self {
-            handles: Mutex::new(map),
+            handles: map,
             lifecycle: Mutex::new(lifecycle),
         }
     }
@@ -76,12 +77,12 @@ impl PluginExecutor for PluginSystemExecutor {
         }
 
         // 2. Verify action exists in manifest and call WASM
-        let mut handles = self.handles.lock().unwrap();
-        let handle = handles.get_mut(plugin_id).ok_or_else(|| {
+        let handle_lock = self.handles.get(plugin_id).ok_or_else(|| {
             Box::new(PluginError::ExecutionFailed(format!(
                 "plugin '{plugin_id}' not found"
             ))) as Box<dyn EngineError>
         })?;
+        let mut handle = handle_lock.lock().unwrap();
 
         if !handle.manifest.actions.contains_key(action) {
             return Err(Box::new(PluginError::ExecutionFailed(format!(

@@ -210,6 +210,7 @@ fn first_party_plugin_auto_granted_all_declared_capabilities() {
         mock_storage(),
         mock_event_bus(),
         log_limiter(),
+        None,
     )
     .unwrap();
 
@@ -269,6 +270,7 @@ fn third_party_approved_capabilities_load_successfully() {
         mock_storage(),
         mock_event_bus(),
         log_limiter(),
+        None,
     )
     .unwrap();
 
@@ -319,6 +321,7 @@ fn third_party_plugin_lacks_unapproved_capabilities() {
         mock_storage(),
         mock_event_bus(),
         log_limiter(),
+        None,
     )
     .unwrap();
 
@@ -385,6 +388,7 @@ fn third_party_unapproved_manifest_capability_refuses_to_load_with_cap_001() {
         mock_storage(),
         mock_event_bus(),
         log_limiter(),
+        None,
     )
     .unwrap();
 
@@ -476,6 +480,7 @@ fn approving_capability_in_config_allows_plugin_to_load() {
         mock_storage(),
         mock_event_bus(),
         log_limiter(),
+        None,
     )
     .unwrap();
 
@@ -500,6 +505,7 @@ fn approving_capability_in_config_allows_plugin_to_load() {
         mock_storage(),
         mock_event_bus(),
         log_limiter(),
+        None,
     )
     .unwrap();
 

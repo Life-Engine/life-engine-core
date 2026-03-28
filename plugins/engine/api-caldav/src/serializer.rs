@@ -4,7 +4,7 @@
 //! format and to parse incoming PUT requests from calendar clients.
 
 use chrono::Utc;
-use dav_utils::ical::{is_date_only, parse_ical_datetime};
+use dav_utils::ical::{escape_ical_value, is_date_only, parse_ical_datetime};
 use life_engine_types::CalendarEvent;
 use life_engine_types::events::{Attendee, Recurrence};
 use uuid::Uuid;
@@ -15,12 +15,22 @@ use uuid::Uuid;
 /// suitable for serving via CalDAV GET responses.
 pub fn event_to_ical(event: &CalendarEvent) -> String {
     let uid = &event.source_id;
-    let summary = &event.title;
-    let dtstart = event.start.format("%Y%m%dT%H%M%SZ").to_string();
-    let dtend = event.end.unwrap_or(event.start).format("%Y%m%dT%H%M%SZ").to_string();
+    let summary = escape_ical_value(&event.title);
     let dtstamp = event.updated_at.format("%Y%m%dT%H%M%SZ").to_string();
     let created = event.created_at.format("%Y%m%dT%H%M%SZ").to_string();
     let last_modified = event.updated_at.format("%Y%m%dT%H%M%SZ").to_string();
+
+    let is_all_day = event.all_day == Some(true);
+
+    let (dtstart, dtend) = if is_all_day {
+        let start = event.start.format("%Y%m%d").to_string();
+        let end = event.end.unwrap_or(event.start).format("%Y%m%d").to_string();
+        (format!("DTSTART;VALUE=DATE:{start}"), format!("DTEND;VALUE=DATE:{end}"))
+    } else {
+        let start = event.start.format("%Y%m%dT%H%M%SZ").to_string();
+        let end = event.end.unwrap_or(event.start).format("%Y%m%dT%H%M%SZ").to_string();
+        (format!("DTSTART:{start}"), format!("DTEND:{end}"))
+    };
 
     let mut lines = vec![
         "BEGIN:VCALENDAR".to_string(),
@@ -29,18 +39,18 @@ pub fn event_to_ical(event: &CalendarEvent) -> String {
         "BEGIN:VEVENT".to_string(),
         format!("UID:{uid}"),
         format!("DTSTAMP:{dtstamp}"),
-        format!("DTSTART:{dtstart}"),
-        format!("DTEND:{dtend}"),
+        dtstart,
+        dtend,
         format!("SUMMARY:{summary}"),
         format!("CREATED:{created}"),
         format!("LAST-MODIFIED:{last_modified}"),
     ];
 
     if let Some(ref loc) = event.location {
-        lines.push(format!("LOCATION:{loc}"));
+        lines.push(format!("LOCATION:{}", escape_ical_value(loc)));
     }
     if let Some(ref desc) = event.description {
-        lines.push(format!("DESCRIPTION:{desc}"));
+        lines.push(format!("DESCRIPTION:{}", escape_ical_value(desc)));
     }
     if let Some(ref recurrence) = event.recurrence {
         lines.push(format!("RRULE:{}", recurrence.to_rrule()));
@@ -65,29 +75,38 @@ pub fn event_to_ical(event: &CalendarEvent) -> String {
 ///
 /// Lines longer than 75 octets are split: the first chunk is 75 octets,
 /// continuation chunks are 74 octets (because the leading space counts).
+/// Fold points never split multi-byte UTF-8 characters.
 fn fold_line(line: &str) -> String {
-    let bytes = line.as_bytes();
-    if bytes.len() <= 75 {
+    if line.len() <= 75 {
         return line.to_string();
     }
 
-    let mut result = String::with_capacity(bytes.len() + bytes.len() / 74 * 3);
-    let mut pos = 0;
+    let mut result = String::with_capacity(line.len() + line.len() / 74 * 3);
+    let mut chunk_start = 0;
+    let mut chunk_byte_len = 0;
     let mut first = true;
 
-    while pos < bytes.len() {
-        let chunk_len = if first { 75 } else { 74 };
-        first = false;
+    for (idx, ch) in line.char_indices() {
+        let char_len = ch.len_utf8();
+        let limit = if first { 75 } else { 74 };
 
-        let end = std::cmp::min(pos + chunk_len, bytes.len());
-        // Safety: iCalendar property values should be ASCII-safe for
-        // standard properties; non-ASCII values may need UTF-8 aware
-        // splitting in the future.
-        if !result.is_empty() {
+        if chunk_byte_len + char_len > limit {
+            if !first {
+                result.push_str("\r\n ");
+            }
+            result.push_str(&line[chunk_start..idx]);
+            chunk_start = idx;
+            chunk_byte_len = 0;
+            first = false;
+        }
+        chunk_byte_len += char_len;
+    }
+
+    if chunk_start < line.len() {
+        if !first {
             result.push_str("\r\n ");
         }
-        result.push_str(&String::from_utf8_lossy(&bytes[pos..end]));
-        pos = end;
+        result.push_str(&line[chunk_start..]);
     }
 
     result
@@ -441,5 +460,57 @@ END:VCALENDAR\r\n";
         assert!(restored.description.is_none());
         assert!(restored.recurrence.is_none());
         assert!(restored.attendees.is_empty());
+    }
+
+    #[test]
+    fn fold_line_preserves_multibyte_utf8() {
+        // CJK characters are 3 bytes each. Build a line that would split
+        // a character if folding on byte boundaries.
+        let cjk = "会".repeat(30); // 90 bytes, 30 chars
+        let line = format!("SUMMARY:{cjk}");
+        let folded = fold_line(&line);
+
+        // Verify no replacement characters appear (from_utf8_lossy would insert U+FFFD)
+        assert!(
+            !folded.contains('\u{FFFD}'),
+            "fold_line must not split multi-byte characters"
+        );
+
+        // Verify the unfolded content round-trips correctly
+        let unfolded: String = folded
+            .replace("\r\n ", "")
+            .to_string();
+        assert_eq!(unfolded, line);
+    }
+
+    #[test]
+    fn fold_line_preserves_emoji() {
+        // Emoji are 4 bytes each
+        let emoji_line = format!("SUMMARY:{}", "🎉".repeat(20)); // 8 + 80 = 88 bytes
+        let folded = fold_line(&emoji_line);
+
+        assert!(
+            !folded.contains('\u{FFFD}'),
+            "fold_line must not split emoji characters"
+        );
+
+        let unfolded: String = folded.replace("\r\n ", "");
+        assert_eq!(unfolded, emoji_line);
+    }
+
+    #[test]
+    fn fold_line_preserves_accented_names() {
+        // Mix of 1-byte ASCII and 2-byte accented characters
+        let name = "Ñoño García López Ñoño García López Ñoño García López Ñoño García López";
+        let line = format!("SUMMARY:{name}");
+        let folded = fold_line(&line);
+
+        assert!(
+            !folded.contains('\u{FFFD}'),
+            "fold_line must not split accented characters"
+        );
+
+        let unfolded: String = folded.replace("\r\n ", "");
+        assert_eq!(unfolded, line);
     }
 }

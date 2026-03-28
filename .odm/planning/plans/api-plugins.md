@@ -60,17 +60,17 @@ This plan addresses the 29 issues identified in the phase-3 QA review of the Cal
 > depends: none
 > spec: .odm/qa/reports/phase-3/api-plugins.md
 
-- [ ] Rewrite `fold_line` in `api-caldav/src/serializer.rs` to use `char_indices()` instead of byte offsets [critical]
+- [x] Rewrite `fold_line` in `api-caldav/src/serializer.rs` to use `char_indices()` instead of byte offsets [critical]
   <!-- file: plugins/engine/api-caldav/src/serializer.rs -->
   <!-- purpose: Prevent silent data corruption of non-ASCII text (names, locations, descriptions) during iCal serialization -->
   <!-- requirements: 2 -->
   <!-- leverage: existing fold_line function at line 68 -->
-- [ ] Rewrite `fold_line` in `api-carddav/src/serializer.rs` to use `char_indices()` instead of byte offsets [critical]
+- [x] Rewrite `fold_line` in `api-carddav/src/serializer.rs` to use `char_indices()` instead of byte offsets [critical]
   <!-- file: plugins/engine/api-carddav/src/serializer.rs -->
   <!-- purpose: Prevent silent data corruption of non-ASCII contact names during vCard serialization -->
   <!-- requirements: 2 -->
   <!-- leverage: existing fold_line function -->
-- [ ] Add tests with multi-byte UTF-8 characters (CJK, emoji, accented names) for both serializers [critical]
+- [x] Add tests with multi-byte UTF-8 characters (CJK, emoji, accented names) for both serializers [critical]
   <!-- file: plugins/engine/api-caldav/src/serializer.rs, plugins/engine/api-carddav/src/serializer.rs -->
   <!-- purpose: Verify fold_line never splits multi-byte characters -->
   <!-- requirements: 2 -->

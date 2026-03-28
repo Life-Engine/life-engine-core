@@ -135,26 +135,38 @@ pub fn contact_to_vcard(contact: &Contact) -> String {
 ///
 /// Lines longer than 75 octets are split: the first chunk is 75 octets,
 /// continuation chunks are 74 octets (the leading space counts as one).
+/// Fold points never split multi-byte UTF-8 characters.
 fn fold_line(line: &str) -> String {
-    let bytes = line.as_bytes();
-    if bytes.len() <= 75 {
+    if line.len() <= 75 {
         return line.to_string();
     }
 
-    let mut result = String::with_capacity(bytes.len() + bytes.len() / 74 * 3);
-    let mut pos = 0;
+    let mut result = String::with_capacity(line.len() + line.len() / 74 * 3);
+    let mut chunk_start = 0;
+    let mut chunk_byte_len = 0;
     let mut first = true;
 
-    while pos < bytes.len() {
-        let chunk_len = if first { 75 } else { 74 };
-        first = false;
+    for (idx, ch) in line.char_indices() {
+        let char_len = ch.len_utf8();
+        let limit = if first { 75 } else { 74 };
 
-        let end = std::cmp::min(pos + chunk_len, bytes.len());
-        if !result.is_empty() {
+        if chunk_byte_len + char_len > limit {
+            if !first {
+                result.push_str("\r\n ");
+            }
+            result.push_str(&line[chunk_start..idx]);
+            chunk_start = idx;
+            chunk_byte_len = 0;
+            first = false;
+        }
+        chunk_byte_len += char_len;
+    }
+
+    if chunk_start < line.len() {
+        if !first {
             result.push_str("\r\n ");
         }
-        result.push_str(&String::from_utf8_lossy(&bytes[pos..end]));
-        pos = end;
+        result.push_str(&line[chunk_start..]);
     }
 
     result
@@ -326,6 +338,7 @@ pub fn vcard_to_contact(vcard_data: &str) -> anyhow::Result<Contact> {
         name: ContactName {
             given,
             family,
+            display: None,
             prefix,
             suffix,
             middle,
@@ -392,6 +405,7 @@ mod tests {
             name: ContactName {
                 given: "Jane".into(),
                 family: "Doe".into(),
+                display: None,
                 prefix: None,
                 suffix: None,
                 middle: None,
@@ -491,6 +505,7 @@ mod tests {
             name: ContactName {
                 given: "Min".into(),
                 family: "Contact".into(),
+                display: None,
                 prefix: None,
                 suffix: None,
                 middle: None,
@@ -531,6 +546,7 @@ mod tests {
             name: ContactName {
                 given: "Test".into(),
                 family: "User".into(),
+                display: None,
                 prefix: None,
                 suffix: Some("Jr.".into()),
                 middle: None,
@@ -640,6 +656,7 @@ END:VCARD\r\n";
             name: ContactName {
                 given: "Solo".into(),
                 family: "Person".into(),
+                display: None,
                 prefix: None,
                 suffix: None,
                 middle: None,
@@ -669,5 +686,51 @@ END:VCARD\r\n";
         assert!(restored.phones.is_empty());
         assert!(restored.addresses.is_empty());
         assert!(restored.organization.is_none());
+    }
+
+    #[test]
+    fn fold_line_preserves_multibyte_utf8() {
+        // CJK characters are 3 bytes each — common in contact names
+        let cjk = "田中太郎".repeat(8); // 96 bytes, 32 chars
+        let line = format!("FN:{cjk}");
+        let folded = fold_line(&line);
+
+        assert!(
+            !folded.contains('\u{FFFD}'),
+            "fold_line must not split multi-byte characters"
+        );
+
+        let unfolded: String = folded.replace("\r\n ", "");
+        assert_eq!(unfolded, line);
+    }
+
+    #[test]
+    fn fold_line_preserves_emoji() {
+        let emoji_line = format!("NOTE:{}", "🎉".repeat(20)); // 5 + 80 = 85 bytes
+        let folded = fold_line(&emoji_line);
+
+        assert!(
+            !folded.contains('\u{FFFD}'),
+            "fold_line must not split emoji characters"
+        );
+
+        let unfolded: String = folded.replace("\r\n ", "");
+        assert_eq!(unfolded, emoji_line);
+    }
+
+    #[test]
+    fn fold_line_preserves_accented_names() {
+        // European accented names are extremely common in contact data
+        let name = "José María García López José María García López José María García López";
+        let line = format!("FN:{name}");
+        let folded = fold_line(&line);
+
+        assert!(
+            !folded.contains('\u{FFFD}'),
+            "fold_line must not split accented characters"
+        );
+
+        let unfolded: String = folded.replace("\r\n ", "");
+        assert_eq!(unfolded, line);
     }
 }

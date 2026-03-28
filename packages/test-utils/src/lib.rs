@@ -7,6 +7,8 @@
 pub mod assert_macros;
 pub mod connectors;
 pub mod docker;
+pub mod mock_blob;
+pub mod mock_storage;
 pub mod plugin_test_helpers;
 
 pub use life_engine_types;
@@ -58,6 +60,7 @@ pub fn create_test_event() -> CalendarEvent {
         reminders: vec![],
         timezone: None,
         status: None,
+        sequence: None,
         location: Some("Conference Room A".into()),
         description: Some("Weekly team sync-up".into()),
         source: "test".into(),
@@ -76,6 +79,7 @@ pub fn create_test_contact() -> Contact {
         name: ContactName {
             given: "Alice".into(),
             family: "Johnson".into(),
+            display: None,
             prefix: None,
             suffix: None,
             middle: None,
@@ -157,7 +161,7 @@ pub fn create_test_file() -> FileMetadata {
         path: "/documents/reports/quarterly-report.pdf".into(),
         mime_type: "application/pdf".into(),
         size_bytes: 245_760,
-        checksum: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855".into(),
+        checksum: "aabbccdd00112233445566778899aabbccddeeff00112233445566778899aabb".into(),
         storage_backend: None,
         source: "test".into(),
         source_id: "test-file-001".into(),

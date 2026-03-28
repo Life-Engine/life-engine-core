@@ -12,7 +12,7 @@ This plan addresses the 29 issues identified in the phase-3 QA review of the Cal
 
 **Source:** .odm/qa/reports/phase-3/api-plugins.md
 
-**Progress:** 0 / 8 work packages complete
+**Progress:** 6 / 8 work packages complete
 
 ---
 
@@ -145,42 +145,42 @@ This plan addresses the 29 issues identified in the phase-3 QA review of the Cal
 > depends: 1.1
 > spec: .odm/qa/reports/phase-3/api-plugins.md
 
-- [ ] Replace timestamp-based ETag generation with hash-based approach (e.g., hash of id + updated_at + version) in `api-caldav/src/protocol.rs` [major]
+- [x] Replace timestamp-based ETag generation with hash-based approach (e.g., hash of id + updated_at + version) in `api-caldav/src/protocol.rs` [major]
   <!-- file: plugins/engine/api-caldav/src/protocol.rs -->
   <!-- purpose: Prevent ETag collisions for rapid updates within the same second (RFC 7232 violation) -->
   <!-- requirements: 6 -->
   <!-- leverage: existing generate_etag function at line 118 -->
-- [ ] Replace timestamp-based ETag generation with hash-based approach in `api-carddav/src/protocol.rs` [major]
+- [x] Replace timestamp-based ETag generation with hash-based approach in `api-carddav/src/protocol.rs` [major]
   <!-- file: plugins/engine/api-carddav/src/protocol.rs -->
   <!-- purpose: Same ETag collision fix for CardDAV -->
   <!-- requirements: 6 -->
   <!-- leverage: existing generate_etag function -->
-- [ ] Add 404 response entries in `build_report_xml` for missing resources in `api-caldav/src/protocol.rs` [major]
+- [x] Add 404 response entries in `build_report_xml` for missing resources in `api-caldav/src/protocol.rs` [major]
   <!-- file: plugins/engine/api-caldav/src/protocol.rs -->
   <!-- purpose: RFC 4791 Section 7.9 requires 404 entries so clients can distinguish deletion from error -->
   <!-- requirements: 7 -->
   <!-- leverage: existing build_report_xml function at line 92 -->
-- [ ] Add 404 response entries in `build_report_xml` for missing resources in `api-carddav/src/protocol.rs` [major]
+- [x] Add 404 response entries in `build_report_xml` for missing resources in `api-carddav/src/protocol.rs` [major]
   <!-- file: plugins/engine/api-carddav/src/protocol.rs -->
   <!-- purpose: RFC 6352 Section 8.7 same requirement for CardDAV -->
   <!-- requirements: 7 -->
   <!-- leverage: existing build_report_xml function -->
-- [ ] Implement calendar-query REPORT support with time-range filtering in `api-caldav/src/protocol.rs` [major]
+- [x] Implement calendar-query REPORT support with time-range filtering in `api-caldav/src/protocol.rs` [major]
   <!-- file: plugins/engine/api-caldav/src/protocol.rs -->
   <!-- purpose: RFC 4791 Section 7.8 — many clients use calendar-query for initial sync with time range -->
   <!-- requirements: 9 -->
   <!-- leverage: none -->
-- [ ] Implement addressbook-query REPORT support with property filtering in `api-carddav/src/protocol.rs` [major]
+- [x] Implement addressbook-query REPORT support with property filtering in `api-carddav/src/protocol.rs` [major]
   <!-- file: plugins/engine/api-carddav/src/protocol.rs -->
   <!-- purpose: RFC 6352 Section 8.6 — required for efficient search and initial sync -->
   <!-- requirements: 9 -->
   <!-- leverage: none -->
-- [ ] Derive collection href from `PropfindResponse` struct instead of hardcoding in both plugins [minor]
+- [x] Derive collection href from `PropfindResponse` struct instead of hardcoding in both plugins [minor]
   <!-- file: plugins/engine/api-caldav/src/protocol.rs, plugins/engine/api-carddav/src/protocol.rs -->
   <!-- purpose: Eliminate maintenance risk if URL patterns change -->
   <!-- requirements: 22 -->
   <!-- leverage: existing PropfindResponse struct -->
-- [ ] Add URL-decoding to `uid_from_href` in both plugins [minor]
+- [x] Add URL-decoding to `uid_from_href` in both plugins [minor]
   <!-- file: plugins/engine/api-caldav/src/protocol.rs, plugins/engine/api-carddav/src/protocol.rs -->
   <!-- purpose: Handle UIDs with encoded characters (e.g., %40 for @) -->
   <!-- requirements: 23 -->
@@ -190,37 +190,37 @@ This plan addresses the 29 issues identified in the phase-3 QA review of the Cal
 > depends: 1.2
 > spec: .odm/qa/reports/phase-3/api-plugins.md
 
-- [ ] Implement all-day event serialization with `VALUE=DATE` format in `event_to_ical` [major]
+- [x] Implement all-day event serialization with `VALUE=DATE` format in `event_to_ical` [major]
   <!-- file: plugins/engine/api-caldav/src/serializer.rs -->
   <!-- purpose: All-day events currently render as timed events spanning midnight-to-midnight in clients -->
   <!-- requirements: 10 -->
   <!-- leverage: existing event_to_ical function, all_day field on CalendarEvent -->
-- [ ] Add VALARM serialization for reminders [minor]
+- [x] Add VALARM serialization for reminders [minor]
   <!-- file: plugins/engine/api-caldav/src/serializer.rs -->
   <!-- purpose: Prevent silent loss of reminders on CalDAV round-trip -->
   <!-- requirements: 12 -->
   <!-- leverage: existing reminders field on CalendarEvent -->
-- [ ] Add STATUS property serialization [minor]
+- [x] Add STATUS property serialization [minor]
   <!-- file: plugins/engine/api-caldav/src/serializer.rs -->
   <!-- purpose: Serialize Confirmed/Tentative/Cancelled status for clients -->
   <!-- requirements: 13 -->
   <!-- leverage: existing status field on CalendarEvent -->
-- [ ] Add SEQUENCE property serialization [minor]
+- [x] Add SEQUENCE property serialization [minor]
   <!-- file: plugins/engine/api-caldav/src/serializer.rs -->
   <!-- purpose: Track event revisions per RFC 5545 Section 3.8.7.4 -->
   <!-- requirements: 14 -->
   <!-- leverage: none -->
-- [ ] Expand ATTENDEE serialization to include CN, PARTSTAT, and ROLE parameters [minor]
+- [x] Expand ATTENDEE serialization to include CN, PARTSTAT, and ROLE parameters [minor]
   <!-- file: plugins/engine/api-caldav/src/serializer.rs -->
   <!-- purpose: Provide full attendee information to clients per RFC 5545 -->
   <!-- requirements: 15 -->
   <!-- leverage: existing ATTENDEE emission -->
-- [ ] Add VTIMEZONE component when `event.timezone` is set [minor]
+- [x] Add VTIMEZONE component when `event.timezone` is set [minor]
   <!-- file: plugins/engine/api-caldav/src/serializer.rs -->
   <!-- purpose: Ensure timezone-aware events serialize correctly instead of forcing UTC -->
   <!-- requirements: 16 -->
   <!-- leverage: existing timezone field on CalendarEvent -->
-- [ ] Ensure iCal output ends with trailing CRLF [minor]
+- [x] Ensure iCal output ends with trailing CRLF [minor]
   <!-- file: plugins/engine/api-caldav/src/serializer.rs -->
   <!-- purpose: RFC 5545 Section 3.1 compliance -->
   <!-- requirements: 26 -->

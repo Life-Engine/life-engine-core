@@ -984,6 +984,7 @@ impl GoogleCalendarClient {
             reminders: vec![],
             timezone: None,
             status: None,
+            sequence: None,
         })
     }
 }

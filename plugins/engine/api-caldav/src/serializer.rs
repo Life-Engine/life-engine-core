@@ -55,20 +55,92 @@ pub fn event_to_ical(event: &CalendarEvent) -> String {
     if let Some(ref recurrence) = event.recurrence {
         lines.push(format!("RRULE:{}", recurrence.to_rrule()));
     }
+    if let Some(seq) = event.sequence {
+        lines.push(format!("SEQUENCE:{seq}"));
+    }
+    if let Some(ref status) = event.status {
+        let status_str = match status {
+            life_engine_types::events::EventStatus::Confirmed => "CONFIRMED",
+            life_engine_types::events::EventStatus::Tentative => "TENTATIVE",
+            life_engine_types::events::EventStatus::Cancelled => "CANCELLED",
+        };
+        lines.push(format!("STATUS:{status_str}"));
+    }
     for attendee in &event.attendees {
-        lines.push(format!("ATTENDEE:mailto:{}", attendee.email));
+        let mut params = Vec::new();
+        if let Some(ref name) = attendee.name {
+            params.push(format!("CN={name}"));
+        }
+        if let Some(ref status) = attendee.status {
+            let partstat = match status {
+                life_engine_types::events::AttendeeStatus::Accepted => "ACCEPTED",
+                life_engine_types::events::AttendeeStatus::Declined => "DECLINED",
+                life_engine_types::events::AttendeeStatus::Tentative => "TENTATIVE",
+                life_engine_types::events::AttendeeStatus::NeedsAction => "NEEDS-ACTION",
+            };
+            params.push(format!("PARTSTAT={partstat}"));
+        }
+        if let Some(ref role) = attendee.role {
+            let role_str = match role {
+                life_engine_types::events::AttendeeRole::Chair => "CHAIR",
+                life_engine_types::events::AttendeeRole::ReqParticipant => "REQ-PARTICIPANT",
+                life_engine_types::events::AttendeeRole::OptParticipant => "OPT-PARTICIPANT",
+                life_engine_types::events::AttendeeRole::NonParticipant => "NON-PARTICIPANT",
+            };
+            params.push(format!("ROLE={role_str}"));
+        }
+        if params.is_empty() {
+            lines.push(format!("ATTENDEE:mailto:{}", attendee.email));
+        } else {
+            lines.push(format!("ATTENDEE;{}:mailto:{}", params.join(";"), attendee.email));
+        }
+    }
+    for reminder in &event.reminders {
+        let action = match reminder.method {
+            life_engine_types::events::ReminderMethod::Email => "EMAIL",
+            life_engine_types::events::ReminderMethod::Notification => "DISPLAY",
+        };
+        lines.push("BEGIN:VALARM".to_string());
+        lines.push(format!("ACTION:{action}"));
+        lines.push(format!("TRIGGER:-PT{}M", reminder.minutes_before));
+        lines.push("DESCRIPTION:Reminder".to_string());
+        lines.push("END:VALARM".to_string());
     }
 
     lines.push("END:VEVENT".to_string());
+
+    if let Some(ref tz) = event.timezone {
+        // Insert a minimal VTIMEZONE component before the VEVENT.
+        // Full VTIMEZONE with STANDARD/DAYLIGHT sub-components is not
+        // yet supported — this placeholder satisfies clients that require
+        // the component to be present.
+        let vtimezone = vec![
+            "BEGIN:VTIMEZONE".to_string(),
+            format!("TZID:{tz}"),
+            "BEGIN:STANDARD".to_string(),
+            "DTSTART:19700101T000000".to_string(),
+            "TZOFFSETFROM:+0000".to_string(),
+            "TZOFFSETTO:+0000".to_string(),
+            "END:STANDARD".to_string(),
+            "END:VTIMEZONE".to_string(),
+        ];
+        // Insert VTIMEZONE right after PRODID (index 3 = BEGIN:VEVENT)
+        for (i, line) in vtimezone.into_iter().enumerate() {
+            lines.insert(3 + i, line);
+        }
+    }
+
     lines.push("END:VCALENDAR".to_string());
 
     // RFC 5545 §3.1: Lines longer than 75 octets SHOULD be folded with
     // CRLF followed by a single space (linear white space).
-    lines
+    let mut output: String = lines
         .iter()
         .map(|line| fold_line(line))
         .collect::<Vec<_>>()
-        .join("\r\n")
+        .join("\r\n");
+    output.push_str("\r\n");
+    output
 }
 
 /// Fold a content line per RFC 5545 §3.1.
@@ -175,6 +247,29 @@ fn parse_vevent(event: &ical::parser::ical::component::IcalEvent) -> anyhow::Res
         .and_then(|v| parse_ical_datetime(&v, &None).ok())
         .unwrap_or_else(Utc::now);
 
+    let all_day = if is_date_only(&dtstart_raw) {
+        Some(true)
+    } else {
+        None
+    };
+
+    let status = get_property(event, "STATUS").and_then(|s| match s.as_str() {
+        "CONFIRMED" => Some(life_engine_types::events::EventStatus::Confirmed),
+        "TENTATIVE" => Some(life_engine_types::events::EventStatus::Tentative),
+        "CANCELLED" => Some(life_engine_types::events::EventStatus::Cancelled),
+        _ => None,
+    });
+
+    let reminders = extract_valarms(event);
+
+    let timezone = get_property_params(event, "DTSTART")
+        .as_ref()
+        .and_then(|params| {
+            params.iter().find(|(k, _)| k == "TZID").and_then(|(_, v)| v.first().cloned())
+        });
+
+    let sequence = get_property(event, "SEQUENCE").and_then(|s| s.parse::<u32>().ok());
+
     Ok(CalendarEvent {
         id: Uuid::new_v4(),
         title,
@@ -184,10 +279,11 @@ fn parse_vevent(event: &ical::parser::ical::component::IcalEvent) -> anyhow::Res
         attendees,
         location,
         description,
-        all_day: None,
-        reminders: vec![],
-        timezone: None,
-        status: None,
+        all_day,
+        reminders,
+        timezone,
+        status,
+        sequence,
         source: "caldav-api".into(),
         source_id,
         extensions: None,
@@ -230,10 +326,101 @@ fn extract_attendees(event: &ical::parser::ical::component::IcalEvent) -> Vec<At
                     .or_else(|| v.trim().strip_prefix("MAILTO:"))
                     .unwrap_or(v.trim())
                     .to_string();
-                Attendee::from_email(email)
+                let mut name = None;
+                let mut status = None;
+                let mut role = None;
+                if let Some(ref params) = p.params {
+                    for (key, values) in params {
+                        match key.as_str() {
+                            "CN" => name = values.first().cloned(),
+                            "PARTSTAT" => {
+                                status = values.first().and_then(|s| match s.as_str() {
+                                    "ACCEPTED" => Some(life_engine_types::events::AttendeeStatus::Accepted),
+                                    "DECLINED" => Some(life_engine_types::events::AttendeeStatus::Declined),
+                                    "TENTATIVE" => Some(life_engine_types::events::AttendeeStatus::Tentative),
+                                    "NEEDS-ACTION" => Some(life_engine_types::events::AttendeeStatus::NeedsAction),
+                                    _ => None,
+                                });
+                            }
+                            "ROLE" => {
+                                role = values.first().and_then(|s| match s.as_str() {
+                                    "CHAIR" => Some(life_engine_types::events::AttendeeRole::Chair),
+                                    "REQ-PARTICIPANT" => Some(life_engine_types::events::AttendeeRole::ReqParticipant),
+                                    "OPT-PARTICIPANT" => Some(life_engine_types::events::AttendeeRole::OptParticipant),
+                                    "NON-PARTICIPANT" => Some(life_engine_types::events::AttendeeRole::NonParticipant),
+                                    _ => None,
+                                });
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                Attendee { name, email, status, role }
             })
         })
         .collect()
+}
+
+fn extract_valarms(event: &ical::parser::ical::component::IcalEvent) -> Vec<life_engine_types::events::Reminder> {
+    use life_engine_types::events::{Reminder, ReminderMethod};
+
+    event.alarms.iter().filter_map(|alarm| {
+        let action = alarm.properties.iter()
+            .find(|p| p.name == "ACTION")
+            .and_then(|p| p.value.as_ref())
+            .map(|v| v.to_uppercase());
+        let trigger = alarm.properties.iter()
+            .find(|p| p.name == "TRIGGER")
+            .and_then(|p| p.value.as_ref());
+
+        let minutes_before = trigger.and_then(|t| parse_trigger_minutes(t))?;
+        let method = match action.as_deref() {
+            Some("EMAIL") => ReminderMethod::Email,
+            _ => ReminderMethod::Notification,
+        };
+        Some(Reminder { minutes_before, method })
+    }).collect()
+}
+
+fn parse_trigger_minutes(trigger: &str) -> Option<u32> {
+    // Parse duration like "-PT15M", "-PT1H", "-PT1H30M", "-P1D"
+    let s = trigger.strip_prefix('-')?;
+    let s = s.strip_prefix('P')?;
+    let mut total_minutes = 0u32;
+
+    if let Some(rest) = s.strip_prefix('T') {
+        let mut num_buf = String::new();
+        for ch in rest.chars() {
+            if ch.is_ascii_digit() {
+                num_buf.push(ch);
+            } else {
+                let n: u32 = num_buf.parse().ok()?;
+                num_buf.clear();
+                match ch {
+                    'H' => total_minutes += n * 60,
+                    'M' => total_minutes += n,
+                    'S' => total_minutes += n / 60,
+                    _ => {}
+                }
+            }
+        }
+    } else {
+        // Handle "-P1D" etc.
+        let mut num_buf = String::new();
+        for ch in s.chars() {
+            if ch.is_ascii_digit() {
+                num_buf.push(ch);
+            } else if ch == 'D' {
+                let n: u32 = num_buf.parse().ok()?;
+                num_buf.clear();
+                total_minutes += n * 24 * 60;
+            } else if ch == 'T' {
+                break;
+            }
+        }
+    }
+
+    if total_minutes > 0 { Some(total_minutes) } else { None }
 }
 
 #[cfg(test)]
@@ -255,6 +442,7 @@ mod tests {
             reminders: vec![],
             timezone: None,
             status: None,
+            sequence: None,
             source: "local".into(),
             source_id: "evt-round-trip@example.com".into(),
             extensions: None,
@@ -313,6 +501,7 @@ mod tests {
             reminders: vec![],
             timezone: None,
             status: None,
+            sequence: None,
             source: "local".into(),
             source_id: "simple-001".into(),
             extensions: None,
@@ -445,6 +634,7 @@ END:VCALENDAR\r\n";
             reminders: vec![],
             timezone: None,
             status: None,
+            sequence: None,
             source: "local".into(),
             source_id: "min-001".into(),
             extensions: None,

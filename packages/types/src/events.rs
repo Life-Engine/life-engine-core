@@ -113,6 +113,11 @@ impl Recurrence {
 }
 
 /// Attendee response status.
+///
+/// Note: `NeedsAction` is serialized as `"needs-action"` (hyphenated) to
+/// match the iCalendar (RFC 5545) `PARTSTAT` value convention, which is
+/// the authoritative format for calendar interop. This intentionally
+/// diverges from the project-wide `snake_case` convention.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum AttendeeStatus {
@@ -123,6 +128,19 @@ pub enum AttendeeStatus {
     NeedsAction,
 }
 
+/// Attendee role per RFC 5545 Section 3.2.16.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "SCREAMING-KEBAB-CASE")]
+pub enum AttendeeRole {
+    Chair,
+    #[serde(rename = "REQ-PARTICIPANT")]
+    ReqParticipant,
+    #[serde(rename = "OPT-PARTICIPANT")]
+    OptParticipant,
+    #[serde(rename = "NON-PARTICIPANT")]
+    NonParticipant,
+}
+
 /// An event attendee.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Attendee {
@@ -131,6 +149,8 @@ pub struct Attendee {
     pub email: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<AttendeeStatus>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub role: Option<AttendeeRole>,
 }
 
 impl Attendee {
@@ -140,6 +160,7 @@ impl Attendee {
             name: None,
             email: email.into(),
             status: None,
+            role: None,
         }
     }
 }
@@ -192,6 +213,9 @@ pub struct CalendarEvent {
     pub timezone: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<EventStatus>,
+    /// iCalendar SEQUENCE number tracking event revisions (RFC 5545 Section 3.8.7.4).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sequence: Option<u32>,
     pub source: String,
     pub source_id: String,
     /// Plugin-specific extension data, namespaced by plugin ID (reverse-domain format).

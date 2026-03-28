@@ -40,6 +40,8 @@ pub use storage::{
     FilterOp, QueryFilter, SortDirection, SortField, StorageMutation, StorageQuery,
 };
 pub use tasks::{Task, TaskPriority, TaskStatus};
+pub use identity::Identity;
+pub use workflow::{RequestMeta, ResponseMeta, WorkflowError, WorkflowRequest, WorkflowResponse, WorkflowStatus};
 
 #[cfg(test)]
 mod tests {
@@ -88,6 +90,7 @@ mod tests {
             reminders: vec![],
             timezone: None,
             status: None,
+            sequence: None,
             source: "test".into(),
             source_id: "event-001".into(),
             extensions: None,
@@ -107,6 +110,7 @@ mod tests {
             name: ContactName {
                 given: "Jane".into(),
                 family: "Doe".into(),
+                display: None,
                 prefix: None,
                 suffix: None,
                 middle: None,

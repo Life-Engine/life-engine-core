@@ -6,19 +6,18 @@
 use chrono::Utc;
 use dav_utils::ical::{is_date_only, parse_ical_datetime};
 use ical::parser::ical::component::IcalEvent;
-use life_engine_types::CalendarEvent;
 use life_engine_types::events::{Attendee, Recurrence};
+use life_engine_types::CalendarEvent;
 use uuid::Uuid;
 
 /// Normalize a parsed iCal VEVENT into the Life Engine CDM `CalendarEvent` type.
 ///
 /// `source` identifies the connector that produced this event (e.g. "caldav").
 pub fn normalize_vevent(event: &IcalEvent, source: &str) -> anyhow::Result<CalendarEvent> {
-    let title = get_property(event, "SUMMARY")
-        .unwrap_or_else(|| "(no title)".to_string());
+    let title = get_property(event, "SUMMARY").unwrap_or_else(|| "(no title)".to_string());
 
-    let dtstart_raw = get_property(event, "DTSTART")
-        .ok_or_else(|| anyhow::anyhow!("VEVENT missing DTSTART"))?;
+    let dtstart_raw =
+        get_property(event, "DTSTART").ok_or_else(|| anyhow::anyhow!("VEVENT missing DTSTART"))?;
 
     let dtstart_params = get_property_params(event, "DTSTART");
     let dtend_params = get_property_params(event, "DTEND");
@@ -43,8 +42,7 @@ pub fn normalize_vevent(event: &IcalEvent, source: &str) -> anyhow::Result<Calen
     let description = get_property(event, "DESCRIPTION");
     let attendees = extract_attendees(event);
 
-    let source_id = get_property(event, "UID")
-        .unwrap_or_else(|| Uuid::new_v4().to_string());
+    let source_id = get_property(event, "UID").unwrap_or_else(|| Uuid::new_v4().to_string());
 
     let created_at = get_property(event, "CREATED")
         .and_then(|v| parse_ical_datetime(&v, &None).ok())
@@ -72,6 +70,7 @@ pub fn normalize_vevent(event: &IcalEvent, source: &str) -> anyhow::Result<Calen
         reminders: vec![],
         timezone: None,
         status: None,
+        sequence: None,
     })
 }
 
@@ -118,10 +117,7 @@ fn get_property(event: &IcalEvent, name: &str) -> Option<String> {
 }
 
 /// Get the parameters for a property from a VEVENT by name.
-fn get_property_params(
-    event: &IcalEvent,
-    name: &str,
-) -> Option<Vec<(String, Vec<String>)>> {
+fn get_property_params(event: &IcalEvent, name: &str) -> Option<Vec<(String, Vec<String>)>> {
     event
         .properties
         .iter()
@@ -140,7 +136,8 @@ fn extract_attendees(event: &IcalEvent) -> Vec<Attendee> {
         .filter(|p| p.name == "ATTENDEE")
         .filter_map(|p| {
             p.value.as_ref().map(|v| {
-                let email = v.trim()
+                let email = v
+                    .trim()
                     .strip_prefix("mailto:")
                     .or_else(|| v.trim().strip_prefix("MAILTO:"))
                     .unwrap_or(v.trim())
@@ -207,7 +204,10 @@ mod tests {
         ]);
 
         let event = normalize_vevent(&vevent, "caldav").expect("should normalize");
-        assert_eq!(event.recurrence.as_ref().map(|r| r.to_rrule()).as_deref(), Some("FREQ=DAILY;COUNT=10"));
+        assert_eq!(
+            event.recurrence.as_ref().map(|r| r.to_rrule()).as_deref(),
+            Some("FREQ=DAILY;COUNT=10")
+        );
     }
 
     #[test]
@@ -244,9 +244,10 @@ mod tests {
 
     #[test]
     fn normalize_event_with_timezone() {
-        let tz_params = Some(vec![
-            ("TZID".to_string(), vec!["America/New_York".to_string()]),
-        ]);
+        let tz_params = Some(vec![(
+            "TZID".to_string(),
+            vec!["America/New_York".to_string()],
+        )]);
         let vevent = make_vevent(vec![
             ("SUMMARY", "NYC Meeting", tz_params.clone()),
             ("DTSTART", "20260321T100000", tz_params.clone()),
@@ -279,9 +280,7 @@ mod tests {
 
     #[test]
     fn normalize_all_day_event_date_only() {
-        let date_params = Some(vec![
-            ("VALUE".to_string(), vec!["DATE".to_string()]),
-        ]);
+        let date_params = Some(vec![("VALUE".to_string(), vec!["DATE".to_string()])]);
         let vevent = make_vevent(vec![
             ("SUMMARY", "Holiday", None),
             ("DTSTART", "20260325", date_params.clone()),
@@ -298,9 +297,7 @@ mod tests {
 
     #[test]
     fn normalize_all_day_event_no_dtend() {
-        let date_params = Some(vec![
-            ("VALUE".to_string(), vec!["DATE".to_string()]),
-        ]);
+        let date_params = Some(vec![("VALUE".to_string(), vec!["DATE".to_string()])]);
         let vevent = make_vevent(vec![
             ("SUMMARY", "Birthday", None),
             ("DTSTART", "20260401", date_params),
@@ -430,8 +427,7 @@ END:VCALENDAR\r\n";
 
         let event = normalize_vevent(&vevent, "caldav").expect("should normalize");
         let json = serde_json::to_string(&event).expect("should serialize");
-        let restored: CalendarEvent =
-            serde_json::from_str(&json).expect("should deserialize");
+        let restored: CalendarEvent = serde_json::from_str(&json).expect("should deserialize");
         assert_eq!(restored.title, event.title);
         assert_eq!(restored.source_id, event.source_id);
     }
@@ -517,7 +513,11 @@ END:VCALENDAR\r\n";
             ("DTSTART", "20260323T090000Z", None),
             ("DTEND", "20260323T091500Z", None),
             ("UID", "rrule-full@example.com", None),
-            ("RRULE", "FREQ=WEEKLY;BYDAY=MO,WE,FR;UNTIL=20261231T000000Z", None),
+            (
+                "RRULE",
+                "FREQ=WEEKLY;BYDAY=MO,WE,FR;UNTIL=20261231T000000Z",
+                None,
+            ),
         ]);
 
         let event = normalize_vevent(&vevent, "caldav").expect("should normalize");
@@ -550,9 +550,15 @@ END:VCALENDAR\r\n";
         assert_eq!(events.len(), 1);
         let event = &events[0];
         assert_eq!(event.title, "Recurring Meeting");
-        assert_eq!(event.recurrence.as_ref().map(|r| r.to_rrule()).as_deref(), Some("FREQ=WEEKLY;BYDAY=MO"));
+        assert_eq!(
+            event.recurrence.as_ref().map(|r| r.to_rrule()).as_deref(),
+            Some("FREQ=WEEKLY;BYDAY=MO")
+        );
         assert_eq!(event.attendees.len(), 2);
         assert_eq!(event.location.as_deref(), Some("Board Room"));
-        assert_eq!(event.description.as_deref(), Some("Weekly planning session"));
+        assert_eq!(
+            event.description.as_deref(),
+            Some("Weekly planning session")
+        );
     }
 }

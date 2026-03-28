@@ -467,7 +467,7 @@ mod req3_tasks {
 
     // Req 3.3: "low" must deserialise.
     #[test]
-    fn req3_3_priority_none_deserialises() {
+    fn req3_3_priority_low_deserialises() {
         let result = serde_json::from_value::<TaskPriority>(json!("low"));
         assert!(
             result.is_ok(),
@@ -478,7 +478,7 @@ mod req3_tasks {
 
     // Req 3.3: "urgent" must deserialise.
     #[test]
-    fn req3_3_priority_critical_deserialises() {
+    fn req3_3_priority_urgent_deserialises() {
         let result = serde_json::from_value::<TaskPriority>(json!("urgent"));
         assert!(
             result.is_ok(),
@@ -488,7 +488,7 @@ mod req3_tasks {
     }
 
     #[test]
-    fn req3_3_priority_none_round_trips() {
+    fn req3_3_priority_low_round_trips() {
         let mut v = sample_task();
         v["priority"] = json!("low");
         let result = serde_json::from_value::<Task>(v);
@@ -503,7 +503,7 @@ mod req3_tasks {
     }
 
     #[test]
-    fn req3_3_priority_critical_round_trips() {
+    fn req3_3_priority_urgent_round_trips() {
         let mut v = sample_task();
         v["priority"] = json!("urgent");
         let result = serde_json::from_value::<Task>(v);
@@ -1419,6 +1419,7 @@ mod nested_types {
             name: Some("Alice".into()),
             email: "alice@example.com".into(),
             status: Some(AttendeeStatus::Accepted),
+            role: None,
         };
         let v = serde_json::to_value(&att).unwrap();
         assert_eq!(v["status"], "accepted");

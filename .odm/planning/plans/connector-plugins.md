@@ -100,17 +100,18 @@ This plan addresses the issues identified in the phase-3 QA review of the four c
 > depends: none
 > spec: .odm/qa/reports/phase-3/connector-plugins.md
 
-- [ ] Cache the AWS SDK client in `S3Client` struct, create once in constructor [major]
+- [-] Cache the AWS SDK client in `S3Client` struct, create once in constructor [major]
   <!-- file: plugins/engine/connector-filesystem/src/s3.rs -->
   <!-- purpose: build_sdk_client() is called per operation, wasting connection pooling and TLS setup -->
   <!-- requirements: 6 -->
   <!-- leverage: existing build_sdk_client at s3.rs:148-164 -->
-- [ ] Add S3 list pagination using continuation tokens until `is_truncated` is false [major]
+  <!-- deferred: conflicts with per-call credential pattern from WP 1.1; AWS SDK manages connection pooling internally -->
+- [x] Add S3 list pagination using continuation tokens until `is_truncated` is false [major]
   <!-- file: plugins/engine/connector-filesystem/src/s3.rs -->
   <!-- purpose: Only first 1000 objects returned; larger buckets silently truncated -->
   <!-- requirements: 4 -->
   <!-- leverage: existing list_objects at s3.rs:170-213 -->
-- [ ] Remove unnecessary `head_object` check before `delete_object` [minor]
+- [x] Remove unnecessary `head_object` check before `delete_object` [minor]
   <!-- file: plugins/engine/connector-filesystem/src/s3.rs -->
   <!-- purpose: TOCTOU race; S3 delete on non-existent key is a no-op -->
   <!-- requirements: 8 -->

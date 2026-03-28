@@ -283,25 +283,16 @@ impl CloudStorageConnector for S3Client {
         let client = self.build_sdk_client(credentials);
         let full_key = self.full_key(key);
 
-        // Check if object exists first
-        let exists = client
-            .head_object()
+        // S3 delete on a non-existent key is a no-op, so we skip the
+        // head_object check to avoid a TOCTOU race condition.
+        client
+            .delete_object()
             .bucket(&self.config.bucket)
             .key(&full_key)
             .send()
-            .await
-            .is_ok();
+            .await?;
 
-        if exists {
-            client
-                .delete_object()
-                .bucket(&self.config.bucket)
-                .key(&full_key)
-                .send()
-                .await?;
-        }
-
-        Ok(exists)
+        Ok(true)
     }
 }
 

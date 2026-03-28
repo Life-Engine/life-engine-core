@@ -147,17 +147,18 @@ This plan addresses the issues identified in the phase-3 QA review of the four c
 > depends: none
 > spec: .odm/qa/reports/phase-3/connector-plugins.md
 
-- [ ] Cache SMTP transport in `SmtpClient` struct instead of creating per-send [major]
+- [x] Cache SMTP transport in `SmtpClient` struct instead of creating per-send [major]
   <!-- file: plugins/engine/connector-email/src/smtp.rs -->
   <!-- purpose: New TLS connection per email sent is very inefficient for batch operations -->
   <!-- requirements: 7 -->
   <!-- leverage: existing send at smtp.rs:84-95 -->
-- [ ] Add retry logic for SMTP send failures [minor]
+- [-] Add retry logic for SMTP send failures [minor]
   <!-- file: plugins/engine/connector-email/src/smtp.rs -->
   <!-- purpose: No retry on transient SMTP failures -->
   <!-- requirements: 7 -->
   <!-- leverage: shared RetryState from WP 1.3 -->
-- [ ] Reduce log level for email subject from info to debug [minor]
+  <!-- deferred: retry should be at the plugin handle_event level, not individual transport calls -->
+- [x] Reduce log level for email subject from info to debug [minor]
   <!-- file: plugins/engine/connector-email/src/smtp.rs -->
   <!-- purpose: Info-level subject logging could leak sensitive information in production -->
   <!-- requirements: 7 -->

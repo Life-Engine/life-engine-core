@@ -118,6 +118,11 @@ impl EmailConnectorPlugin {
         self.smtp.as_ref()
     }
 
+    /// Returns a mutable reference to the SMTP client, if configured.
+    pub fn smtp_client_mut(&mut self) -> Option<&mut SmtpClient> {
+        self.smtp.as_mut()
+    }
+
     /// Returns the number of consecutive sync failures.
     pub fn failure_count(&self) -> u32 {
         self.retry.failure_count()

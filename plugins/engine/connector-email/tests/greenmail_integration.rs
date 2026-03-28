@@ -216,7 +216,7 @@ async fn test_incremental_sync() -> anyhow::Result<()> {
 
     let unique_id = Uuid::new_v4();
     let (smtp_config, smtp_pass) = test_smtp_config();
-    let smtp = SmtpClient::new(smtp_config);
+    let mut smtp = SmtpClient::new(smtp_config);
 
     // Send first batch (2 emails).
     for i in 0..2 {
@@ -429,7 +429,7 @@ async fn test_send_via_smtp() -> anyhow::Result<()> {
 
     // Send via SmtpClient.
     let (smtp_config, smtp_pass) = test_smtp_config();
-    let smtp = SmtpClient::new(smtp_config);
+    let mut smtp = SmtpClient::new(smtp_config);
     smtp.send(
         "test@life-engine.local",
         &["test@life-engine.local".to_string()],

@@ -36,15 +36,52 @@ fn default_smtp_credential_key() -> String {
 }
 
 /// SMTP client for sending email messages.
+///
+/// Caches the SMTP transport for connection pooling across multiple
+/// sends. The transport is lazily created on the first `send()` call.
 pub struct SmtpClient {
     /// Connection configuration.
     config: SmtpConfig,
+    /// Cached SMTP transport for connection reuse.
+    transport: Option<AsyncSmtpTransport<Tokio1Executor>>,
 }
 
 impl SmtpClient {
     /// Create a new SMTP client with the given configuration.
     pub fn new(config: SmtpConfig) -> Self {
-        Self { config }
+        Self {
+            config,
+            transport: None,
+        }
+    }
+
+    /// Build or return the cached SMTP transport.
+    fn get_or_create_transport(
+        &mut self,
+        password: &str,
+    ) -> Result<&AsyncSmtpTransport<Tokio1Executor>> {
+        if self.transport.is_none() {
+            let creds =
+                Credentials::new(self.config.username.clone(), password.to_string());
+            let smtp_timeout = std::time::Duration::from_secs(30);
+
+            let transport = if self.config.use_tls {
+                AsyncSmtpTransport::<Tokio1Executor>::relay(&self.config.host)
+                    .context("failed to create SMTP relay")?
+                    .port(self.config.port)
+                    .credentials(creds)
+                    .timeout(Some(smtp_timeout))
+                    .build()
+            } else {
+                AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(&self.config.host)
+                    .port(self.config.port)
+                    .credentials(creds)
+                    .timeout(Some(smtp_timeout))
+                    .build()
+            };
+            self.transport = Some(transport);
+        }
+        Ok(self.transport.as_ref().expect("just created"))
     }
 
     /// Send an email message.
@@ -52,9 +89,10 @@ impl SmtpClient {
     /// Builds an RFC 5322 message from the provided parameters and
     /// sends it through the configured SMTP server. The `password`
     /// parameter should be retrieved from the credential store using
-    /// the config's `credential_key`.
+    /// the config's `credential_key`. The SMTP transport is cached
+    /// for connection pooling across multiple sends.
     pub async fn send(
-        &self,
+        &mut self,
         from: &str,
         to: &[String],
         subject: &str,
@@ -79,31 +117,14 @@ impl SmtpClient {
             .body(body.to_string())
             .context("failed to build email message")?;
 
-        let creds = Credentials::new(self.config.username.clone(), password.to_string());
-
-        let smtp_timeout = std::time::Duration::from_secs(30);
-
-        let transport = if self.config.use_tls {
-            AsyncSmtpTransport::<Tokio1Executor>::relay(&self.config.host)
-                .context("failed to create SMTP relay")?
-                .port(self.config.port)
-                .credentials(creds)
-                .timeout(Some(smtp_timeout))
-                .build()
-        } else {
-            AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(&self.config.host)
-                .port(self.config.port)
-                .credentials(creds)
-                .timeout(Some(smtp_timeout))
-                .build()
-        };
+        let transport = self.get_or_create_transport(password)?;
 
         transport
             .send(message)
             .await
             .context("failed to send email")?;
 
-        tracing::info!(
+        tracing::debug!(
             from = from,
             to_count = to.len(),
             subject = subject,

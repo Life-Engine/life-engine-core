@@ -38,6 +38,47 @@ impl fmt::Display for ExtensionError {
 
 impl std::error::Error for ExtensionError {}
 
+/// Read a single field from a plugin's extension namespace.
+///
+/// Returns `None` if `extensions` is absent, is not an object, the plugin namespace
+/// does not exist, or the field does not exist within the namespace.
+pub fn get_ext(extensions: &Option<Value>, plugin_id: &str, field: &str) -> Option<Value> {
+    extensions
+        .as_ref()?
+        .get(plugin_id)?
+        .get(field)
+        .cloned()
+}
+
+/// Set a single field within a plugin's extension namespace, using merge-not-replace
+/// semantics. If the extensions object or plugin namespace does not exist yet, they
+/// are created. Other plugin namespaces are preserved unchanged.
+///
+/// Returns the updated extensions value (always `Some`).
+pub fn set_ext(
+    extensions: &Option<Value>,
+    plugin_id: &str,
+    field: &str,
+    value: Value,
+) -> Value {
+    let mut root = match extensions {
+        Some(Value::Object(map)) => Value::Object(map.clone()),
+        _ => Value::Object(serde_json::Map::new()),
+    };
+
+    let ns = root
+        .as_object_mut()
+        .unwrap()
+        .entry(plugin_id)
+        .or_insert_with(|| Value::Object(serde_json::Map::new()));
+
+    if let Value::Object(ns_map) = ns {
+        ns_map.insert(field.to_string(), value);
+    }
+
+    root
+}
+
 /// Validate that all top-level keys in `extensions` match the writing plugin's ID.
 ///
 /// On write, every key in the extensions object must equal `plugin_id`.
@@ -124,6 +165,92 @@ mod tests {
     fn null_extensions_passes() {
         let extensions = Value::Null;
         assert!(validate_extension_namespace("com.life-engine.github", &extensions).is_ok());
+    }
+
+    #[test]
+    fn get_ext_returns_field_value() {
+        let extensions = Some(json!({
+            "com.life-engine.github": {
+                "repo": "life-engine/core",
+                "pr_number": 456
+            }
+        }));
+        let result = super::get_ext(&extensions, "com.life-engine.github", "repo");
+        assert_eq!(result, Some(json!("life-engine/core")));
+    }
+
+    #[test]
+    fn get_ext_returns_none_for_missing_plugin() {
+        let extensions = Some(json!({
+            "com.life-engine.github": { "repo": "core" }
+        }));
+        assert_eq!(
+            super::get_ext(&extensions, "com.example.other", "repo"),
+            None
+        );
+    }
+
+    #[test]
+    fn get_ext_returns_none_for_missing_field() {
+        let extensions = Some(json!({
+            "com.life-engine.github": { "repo": "core" }
+        }));
+        assert_eq!(
+            super::get_ext(&extensions, "com.life-engine.github", "missing"),
+            None
+        );
+    }
+
+    #[test]
+    fn get_ext_returns_none_when_extensions_is_none() {
+        assert_eq!(
+            super::get_ext(&None, "com.life-engine.github", "repo"),
+            None
+        );
+    }
+
+    #[test]
+    fn set_ext_creates_namespace_and_field() {
+        let result = super::set_ext(&None, "com.example.plugin", "count", json!(42));
+        assert_eq!(result, json!({ "com.example.plugin": { "count": 42 } }));
+    }
+
+    #[test]
+    fn set_ext_preserves_other_namespaces() {
+        let extensions = Some(json!({
+            "com.life-engine.github": { "repo": "core" }
+        }));
+        let result = super::set_ext(&extensions, "com.example.plugin", "count", json!(42));
+        assert_eq!(
+            result,
+            json!({
+                "com.life-engine.github": { "repo": "core" },
+                "com.example.plugin": { "count": 42 }
+            })
+        );
+    }
+
+    #[test]
+    fn set_ext_preserves_other_fields_in_namespace() {
+        let extensions = Some(json!({
+            "com.example.plugin": { "existing": "value" }
+        }));
+        let result = super::set_ext(&extensions, "com.example.plugin", "new_field", json!(true));
+        assert_eq!(
+            result,
+            json!({
+                "com.example.plugin": { "existing": "value", "new_field": true }
+            })
+        );
+    }
+
+    #[test]
+    fn set_ext_overwrites_existing_field() {
+        let extensions = Some(json!({
+            "com.example.plugin": { "count": 1 }
+        }));
+        let result = super::set_ext(&extensions, "com.example.plugin", "count", json!(2));
+        assert_eq!(result, json!({ "com.example.plugin": { "count": 2 } }));
     }
 
     #[test]

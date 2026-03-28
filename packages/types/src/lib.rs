@@ -29,7 +29,7 @@ pub use events::{
     Attendee, AttendeeStatus, CalendarEvent, EventStatus, Recurrence, RecurrenceFrequency,
     Reminder, ReminderMethod,
 };
-pub use extensions::{validate_extension_namespace, ExtensionError};
+pub use extensions::{get_ext, set_ext, validate_extension_namespace, ExtensionError};
 pub use files::FileMetadata;
 pub use notes::{Note, NoteFormat};
 pub use pipeline::{

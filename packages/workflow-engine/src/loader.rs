@@ -225,6 +225,10 @@ pub enum HttpMethod {
     Put,
     Patch,
     Delete,
+    Propfind,
+    Report,
+    Mkcalendar,
+    Mkcol,
 }
 
 impl HttpMethod {
@@ -236,6 +240,10 @@ impl HttpMethod {
             "PUT" => Some(Self::Put),
             "PATCH" => Some(Self::Patch),
             "DELETE" => Some(Self::Delete),
+            "PROPFIND" => Some(Self::Propfind),
+            "REPORT" => Some(Self::Report),
+            "MKCALENDAR" => Some(Self::Mkcalendar),
+            "MKCOL" => Some(Self::Mkcol),
             _ => None,
         }
     }
@@ -278,13 +286,12 @@ impl TriggerRegistry {
             }
 
             if let Some(ref cron_expr) = workflow.trigger.schedule {
-                let schedule: Schedule =
-                    cron_expr.parse().map_err(|e: cron::error::Error| {
-                        WorkflowError::InvalidDefinition {
-                            workflow_id: workflow.id.clone(),
-                            reason: format!("invalid cron expression '{}': {}", cron_expr, e),
-                        }
-                    })?;
+                let schedule: Schedule = cron_expr.parse().map_err(|e: cron::error::Error| {
+                    WorkflowError::InvalidDefinition {
+                        workflow_id: workflow.id.clone(),
+                        reason: format!("invalid cron expression '{}': {}", cron_expr, e),
+                    }
+                })?;
                 schedules.push((schedule, workflow.clone()));
             }
         }
@@ -330,10 +337,11 @@ impl TriggerRegistry {
                 ),
             });
         }
-        let method = HttpMethod::parse(parts[0]).ok_or_else(|| WorkflowError::InvalidDefinition {
-            workflow_id: workflow_id.to_string(),
-            reason: format!("unsupported HTTP method '{}' in endpoint trigger", parts[0]),
-        })?;
+        let method =
+            HttpMethod::parse(parts[0]).ok_or_else(|| WorkflowError::InvalidDefinition {
+                workflow_id: workflow_id.to_string(),
+                reason: format!("unsupported HTTP method '{}' in endpoint trigger", parts[0]),
+            })?;
         Ok((method, parts[1].to_string()))
     }
 }
@@ -896,7 +904,10 @@ workflows:
 
         let wf = &workflows[0];
         assert_eq!(wf.id, "typed-wf");
-        assert_eq!(wf.description.as_deref(), Some("A workflow with all definition fields"));
+        assert_eq!(
+            wf.description.as_deref(),
+            Some("A workflow with all definition fields")
+        );
         assert_eq!(wf.mode, ExecutionMode::Async);
         assert!(wf.steps[0].on_error.is_some());
 

@@ -94,15 +94,15 @@ impl CorePlugin for CardDavApiPlugin {
                 method: HttpMethod::Get,
                 path: "/.well-known/carddav".into(),
             },
-            // TODO(F-092): Register PROPFIND /addressbooks/default route.
-            // The plugin SDK's HttpMethod enum does not yet include PROPFIND
-            // (WebDAV extension method). Add HttpMethod::Propfind to the SDK,
-            // then register the route here.
-            //
-            // TODO(F-092): Register REPORT /addressbooks/default route.
-            // The plugin SDK's HttpMethod enum does not yet include REPORT
-            // (CardDAV extension method for addressbook-query / addressbook-multiget).
-            // Add HttpMethod::Report to the SDK, then register the route here.
+            // WebDAV/CardDAV protocol methods
+            PluginRoute {
+                method: HttpMethod::Propfind,
+                path: "/addressbooks/default".into(),
+            },
+            PluginRoute {
+                method: HttpMethod::Report,
+                path: "/addressbooks/default".into(),
+            },
         ]
     }
 

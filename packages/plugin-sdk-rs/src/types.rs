@@ -8,41 +8,9 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::sync::Arc;
 
-/// Permissions a plugin can request. Core enforces these at runtime --
-/// any operation outside the granted capabilities returns an error.
-///
-/// All capabilities are scoped to the requesting plugin's namespace.
-/// For example, `StorageRead` grants read access only to the plugin's
-/// own storage partition, not the entire data store.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum Capability {
-    /// Read access to the plugin's document storage partition.
-    StorageRead,
-    /// Write access to the plugin's document storage partition.
-    StorageWrite,
-    /// Delete access to the plugin's document storage partition.
-    StorageDelete,
-    /// Read access to the plugin's blob storage.
-    StorageBlobRead,
-    /// Write access to the plugin's blob storage.
-    StorageBlobWrite,
-    /// Delete access to the plugin's blob storage.
-    StorageBlobDelete,
-    /// Permission to make outbound HTTP requests.
-    HttpOutbound,
-    /// Read access to the plugin's credential store.
-    CredentialsRead,
-    /// Write access to the plugin's credential store.
-    CredentialsWrite,
-    /// Subscribe to events on the Core event bus.
-    EventsSubscribe,
-    /// Emit events on the Core event bus.
-    EventsEmit,
-    /// Read plugin configuration values.
-    ConfigRead,
-    /// Structured logging through Core's logging subsystem.
-    Logging,
-}
+// Capability is now defined in life-engine-traits and re-exported here
+// to provide a single source of truth across the SDK and runtime.
+pub use life_engine_traits::Capability;
 
 /// HTTP methods for plugin route registration and outbound requests.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -62,6 +30,15 @@ pub enum HttpMethod {
     Head,
     /// HTTP OPTIONS
     Options,
+    /// WebDAV PROPFIND (RFC 4918) — used by CalDAV/CardDAV for collection discovery.
+    Propfind,
+    /// WebDAV/CalDAV/CardDAV REPORT (RFC 3253) — used for calendar-query,
+    /// calendar-multiget, addressbook-query, and addressbook-multiget.
+    Report,
+    /// CalDAV MKCALENDAR (RFC 4791) — creates a calendar collection.
+    Mkcalendar,
+    /// WebDAV MKCOL (RFC 4918) — creates a collection (e.g. addressbook).
+    Mkcol,
 }
 
 impl fmt::Display for HttpMethod {
@@ -74,6 +51,10 @@ impl fmt::Display for HttpMethod {
             HttpMethod::Patch => "PATCH",
             HttpMethod::Head => "HEAD",
             HttpMethod::Options => "OPTIONS",
+            HttpMethod::Propfind => "PROPFIND",
+            HttpMethod::Report => "REPORT",
+            HttpMethod::Mkcalendar => "MKCALENDAR",
+            HttpMethod::Mkcol => "MKCOL",
         };
         f.write_str(s)
     }
@@ -91,8 +72,6 @@ pub struct PluginRoute {
     pub method: HttpMethod,
     /// The path relative to the plugin's namespace.
     pub path: String,
-    // Handler will be defined more concretely in Phase 1
-    // when the WASM host function interface is finalised.
 }
 
 /// An event dispatched through the Core event bus.

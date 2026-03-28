@@ -3,7 +3,7 @@
   "current_wp_title": null,
   "current_wp_plan": null,
   "current_wp_tasks": null,
-  "completed_wps": ["api-contracts:1.1"],
+  "completed_wps": ["api-contracts:1.1", "api-plugins:1.1"],
   "history": [
     {
       "wp_id": "1.1",
@@ -14,6 +14,16 @@
       "tasks_completed": 6,
       "tasks_deferred": 0,
       "notes": "All 6 tasks were already implemented by prior work. Removed stale WasmCapability comment. Pre-existing compilation error in life-engine-types blocks cargo check but is unrelated to this WP."
+    },
+    {
+      "wp_id": "1.1",
+      "plan": "api-plugins.md",
+      "title": "Add Missing HTTP Method Variants to Plugin SDK",
+      "timestamp": "2026-03-28T22:45:00Z",
+      "commit_hash": null,
+      "tasks_completed": 7,
+      "tasks_deferred": 0,
+      "notes": "Added Propfind, Report, Mkcalendar, Mkcol to HttpMethod enum in plugin-sdk and workflow-engine. Registered PROPFIND/REPORT routes in api-caldav and api-carddav. Pre-existing compilation error in life-engine-types blocks full cargo check."
     }
   ]
 }

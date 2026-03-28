@@ -33,7 +33,8 @@ pub use extensions::{validate_extension_namespace, ExtensionError};
 pub use files::FileMetadata;
 pub use notes::{Note, NoteFormat};
 pub use pipeline::{
-    CdmType, MessageMetadata, PipelineMessage, SchemaValidated, SchemaValidationError,
+    CdmType, IdentitySummary, MessageMetadata, PipelineEnvelope, PipelineMessage,
+    PipelineMetadata, SchemaValidated, SchemaValidationError, StepOutcome, StepTrace,
     TypedPayload,
 };
 pub use storage::{
@@ -110,7 +111,6 @@ mod tests {
             name: ContactName {
                 given: "Jane".into(),
                 family: "Doe".into(),
-                display: None,
                 prefix: None,
                 suffix: None,
                 middle: None,

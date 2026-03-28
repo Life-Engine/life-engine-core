@@ -9,6 +9,9 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use std::collections::HashMap;
+
+use crate::workflow::WorkflowStatus;
 use crate::{
     CalendarEvent, Contact, Credential, Email, FileMetadata, Note, Task,
 };
@@ -123,6 +126,124 @@ impl std::fmt::Display for SchemaValidationError {
 
 impl std::error::Error for SchemaValidationError {}
 
+// ---------------------------------------------------------------------------
+// New architecture types (pipeline-message spec)
+// ---------------------------------------------------------------------------
+
+/// Universal data envelope for the new pipeline architecture.
+///
+/// All data flowing through the workflow engine is wrapped in this struct.
+/// The `payload` is a free-form JSON value that steps read and modify.
+/// The `metadata` carries contextual information that the executor manages.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PipelineEnvelope {
+    /// The step's primary data — steps read, modify, or replace this.
+    pub payload: serde_json::Value,
+    /// Contextual information about the request, identity, and execution trace.
+    pub metadata: PipelineMetadata,
+}
+
+/// Metadata propagated through every pipeline step.
+///
+/// Fields are divided into executor-owned (read-only to plugins) and
+/// plugin-writable categories. The executor enforces this boundary via
+/// snapshot-and-restore after each plugin invocation.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PipelineMetadata {
+    /// Unique identifier for this pipeline execution (UUID v4).
+    pub request_id: String,
+    /// How the pipeline was triggered: `"endpoint"`, `"event"`, or `"schedule"`.
+    pub trigger_type: String,
+    /// The authenticated caller, if any. `None` for unauthenticated triggers.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub identity: Option<IdentitySummary>,
+    /// Path parameters extracted by the transport handler.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub params: HashMap<String, String>,
+    /// Query string parameters or flattened GraphQL arguments.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub query: HashMap<String, String>,
+    /// Execution traces appended by the executor after each step.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub traces: Vec<StepTrace>,
+    /// Optional status hint set by a plugin to influence the response status.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status_hint: Option<WorkflowStatus>,
+    /// Non-fatal warnings appended by pipeline steps.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
+    /// Plugin-writable arbitrary key-value data.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub extra: HashMap<String, serde_json::Value>,
+}
+
+/// Execution trace for a single pipeline step, appended by the executor.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct StepTrace {
+    /// The plugin or step that executed.
+    pub step_name: String,
+    /// How long the step took in milliseconds.
+    pub duration_ms: u64,
+    /// Whether the step succeeded or failed.
+    pub outcome: StepOutcome,
+}
+
+/// Outcome of a pipeline step execution.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum StepOutcome {
+    /// The step completed successfully.
+    Success,
+    /// The step failed with an error message.
+    Error(String),
+}
+
+/// Minimal identity projection carried in pipeline metadata.
+///
+/// This is not the full `Identity` from auth middleware — just enough
+/// for plugins to know who initiated the request.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct IdentitySummary {
+    /// The authenticated user's identifier (user ID or email).
+    pub subject: String,
+    /// The identity provider that issued the token.
+    pub issuer: String,
+}
+
+impl IdentitySummary {
+    /// Create an `IdentitySummary` from a full `Identity`.
+    pub fn from_identity(identity: &crate::identity::Identity) -> Self {
+        Self {
+            subject: identity.subject.clone(),
+            issuer: identity.issuer.clone(),
+        }
+    }
+}
+
+impl PipelineMetadata {
+    /// Create a new `PipelineMetadata` with the given request ID and trigger type.
+    /// All other fields are set to their defaults.
+    pub fn new(request_id: String, trigger_type: String) -> Self {
+        Self {
+            request_id,
+            trigger_type,
+            identity: None,
+            params: HashMap::new(),
+            query: HashMap::new(),
+            traces: Vec::new(),
+            status_hint: None,
+            warnings: Vec::new(),
+            extra: HashMap::new(),
+        }
+    }
+}
+
+impl PipelineEnvelope {
+    /// Create a new `PipelineEnvelope` with the given payload and metadata.
+    pub fn new(payload: serde_json::Value, metadata: PipelineMetadata) -> Self {
+        Self { payload, metadata }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -199,5 +320,165 @@ mod tests {
         let json = serde_json::to_string(&batch).expect("serialize");
         let restored: CdmType = serde_json::from_str(&json).expect("deserialize");
         matches!(restored, CdmType::TaskBatch(v) if v.is_empty());
+    }
+
+    // -----------------------------------------------------------------------
+    // PipelineEnvelope / PipelineMetadata tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn pipeline_envelope_round_trip_all_fields() {
+        let envelope = PipelineEnvelope {
+            payload: serde_json::json!({
+                "title": "Test task",
+                "status": "pending",
+                "nested": { "key": [1, 2, 3] }
+            }),
+            metadata: PipelineMetadata {
+                request_id: Uuid::new_v4().to_string(),
+                trigger_type: "endpoint".into(),
+                identity: Some(IdentitySummary {
+                    subject: "user-123".into(),
+                    issuer: "life-engine".into(),
+                }),
+                params: HashMap::from([
+                    ("collection".into(), "tasks".into()),
+                    ("id".into(), "task-456".into()),
+                ]),
+                query: HashMap::from([
+                    ("limit".into(), "10".into()),
+                ]),
+                traces: vec![
+                    StepTrace {
+                        step_name: "validate".into(),
+                        duration_ms: 5,
+                        outcome: StepOutcome::Success,
+                    },
+                    StepTrace {
+                        step_name: "transform".into(),
+                        duration_ms: 12,
+                        outcome: StepOutcome::Error("plugin crashed".into()),
+                    },
+                ],
+                status_hint: Some(crate::workflow::WorkflowStatus::Ok),
+                warnings: vec!["deprecated field used".into()],
+                extra: HashMap::from([
+                    ("plugin_hint".into(), serde_json::json!("value")),
+                ]),
+            },
+        };
+
+        let json = serde_json::to_string(&envelope).expect("serialize");
+        let restored: PipelineEnvelope =
+            serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(envelope, restored);
+    }
+
+    #[test]
+    fn pipeline_envelope_empty_payload() {
+        let envelope = PipelineEnvelope::new(
+            serde_json::Value::Null,
+            PipelineMetadata::new("req-1".into(), "schedule".into()),
+        );
+        let json = serde_json::to_string(&envelope).expect("serialize");
+        let restored: PipelineEnvelope =
+            serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(envelope, restored);
+        assert!(restored.payload.is_null());
+    }
+
+    #[test]
+    fn pipeline_envelope_nested_payload() {
+        let large_array: Vec<serde_json::Value> =
+            (0..100).map(|i| serde_json::json!({ "index": i })).collect();
+        let envelope = PipelineEnvelope::new(
+            serde_json::json!({ "items": large_array }),
+            PipelineMetadata::new("req-big".into(), "endpoint".into()),
+        );
+        let json = serde_json::to_string(&envelope).expect("serialize");
+        let restored: PipelineEnvelope =
+            serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(envelope, restored);
+    }
+
+    #[test]
+    fn pipeline_envelope_large_payload() {
+        // 1MB+ JSON payload
+        let big_string = "x".repeat(1_100_000);
+        let envelope = PipelineEnvelope::new(
+            serde_json::json!({ "data": big_string }),
+            PipelineMetadata::new("req-large".into(), "event".into()),
+        );
+        let json = serde_json::to_string(&envelope).expect("serialize");
+        let restored: PipelineEnvelope =
+            serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(envelope, restored);
+    }
+
+    #[test]
+    fn step_trace_accumulation() {
+        let mut metadata = PipelineMetadata::new("req-trace".into(), "endpoint".into());
+        assert!(metadata.traces.is_empty());
+
+        metadata.traces.push(StepTrace {
+            step_name: "step-1".into(),
+            duration_ms: 10,
+            outcome: StepOutcome::Success,
+        });
+        metadata.traces.push(StepTrace {
+            step_name: "step-2".into(),
+            duration_ms: 20,
+            outcome: StepOutcome::Success,
+        });
+        metadata.traces.push(StepTrace {
+            step_name: "step-3".into(),
+            duration_ms: 5,
+            outcome: StepOutcome::Error("timeout".into()),
+        });
+
+        assert_eq!(metadata.traces.len(), 3);
+        assert_eq!(metadata.traces[0].step_name, "step-1");
+        assert_eq!(metadata.traces[2].outcome, StepOutcome::Error("timeout".into()));
+    }
+
+    #[test]
+    fn identity_summary_from_identity() {
+        let identity = crate::identity::Identity {
+            subject: "user-abc".into(),
+            issuer: "oidc-provider".into(),
+            claims: HashMap::from([
+                ("role".into(), serde_json::json!("admin")),
+            ]),
+        };
+        let summary = IdentitySummary::from_identity(&identity);
+        assert_eq!(summary.subject, "user-abc");
+        assert_eq!(summary.issuer, "oidc-provider");
+    }
+
+    #[test]
+    fn pipeline_metadata_defaults() {
+        let meta = PipelineMetadata::new("req-1".into(), "endpoint".into());
+        assert_eq!(meta.request_id, "req-1");
+        assert_eq!(meta.trigger_type, "endpoint");
+        assert!(meta.identity.is_none());
+        assert!(meta.params.is_empty());
+        assert!(meta.query.is_empty());
+        assert!(meta.traces.is_empty());
+        assert!(meta.status_hint.is_none());
+        assert!(meta.warnings.is_empty());
+        assert!(meta.extra.is_empty());
+    }
+
+    #[test]
+    fn step_outcome_serialisation() {
+        let success = StepOutcome::Success;
+        let json = serde_json::to_string(&success).expect("serialize");
+        let restored: StepOutcome = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(success, restored);
+
+        let error = StepOutcome::Error("something broke".into());
+        let json = serde_json::to_string(&error).expect("serialize");
+        let restored: StepOutcome = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(error, restored);
     }
 }

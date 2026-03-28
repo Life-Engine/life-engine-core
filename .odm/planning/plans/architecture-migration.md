@@ -42,32 +42,32 @@ Establish the shared type definitions that every other layer depends on. These t
 
 ### 1.1 — PipelineMessage Core Types
 
-- [ ] Define `PipelineMessage` struct with `payload: serde_json::Value` and `metadata: PipelineMetadata` in `packages/types/src/pipeline.rs`. The payload is the step's primary data. Metadata carries contextual information about the request, identity, execution trace, and plugin-writable hints. Implement `Clone`, `Debug`, `Serialize`, `Deserialize`.
+- [x] Define `PipelineMessage` struct with `payload: serde_json::Value` and `metadata: PipelineMetadata` in `packages/types/src/pipeline.rs`. The payload is the step's primary data. Metadata carries contextual information about the request, identity, execution trace, and plugin-writable hints. Implement `Clone`, `Debug`, `Serialize`, `Deserialize`.
   <!-- files: packages/types/src/pipeline.rs -->
   <!-- purpose: Establish the universal data envelope that all workflow steps consume and produce -->
   <!-- requirements: pipeline-message 1.1, 1.2 -->
 
-- [ ] Define `PipelineMetadata` struct with fields: `request_id: String`, `trigger_type: TriggerType` enum (Endpoint, Event, Schedule), `identity: Option<IdentitySummary>`, `params: HashMap<String, String>`, `query: HashMap<String, String>`, `traces: Vec<StepTrace>`, `status_hint: Option<WorkflowStatus>`, `warnings: Vec<String>`, `extra: HashMap<String, Value>`. Enforce write-permission boundaries: plugins may modify `payload`, `status_hint`, `warnings`, `extra`; all other fields are read-only (enforced by SDK, not by the struct itself).
+- [x] Define `PipelineMetadata` struct with fields: `request_id: String`, `trigger_type: TriggerType` enum (Endpoint, Event, Schedule), `identity: Option<IdentitySummary>`, `params: HashMap<String, String>`, `query: HashMap<String, String>`, `traces: Vec<StepTrace>`, `status_hint: Option<WorkflowStatus>`, `warnings: Vec<String>`, `extra: HashMap<String, Value>`. Enforce write-permission boundaries: plugins may modify `payload`, `status_hint`, `warnings`, `extra`; all other fields are read-only (enforced by SDK, not by the struct itself).
   <!-- files: packages/types/src/pipeline.rs -->
   <!-- purpose: Carry full execution context without requiring plugins to manage it -->
   <!-- requirements: pipeline-message 1.2, 2.1, 2.2, 3.1 -->
 
-- [ ] Define `StepTrace` struct with `plugin_id: String`, `action: String`, `duration_ms: u64`, `status: StepStatus` enum (Completed, Skipped, Failed). The executor appends a trace after every step. The final WorkflowResponse includes the full trace list.
+- [x] Define `StepTrace` struct with `plugin_id: String`, `action: String`, `duration_ms: u64`, `status: StepStatus` enum (Completed, Skipped, Failed). The executor appends a trace after every step. The final WorkflowResponse includes the full trace list.
   <!-- files: packages/types/src/pipeline.rs -->
   <!-- purpose: Enable execution tracing and debugging across workflow steps -->
   <!-- requirements: pipeline-message 4.1, 4.2 -->
 
-- [ ] Define `IdentitySummary` struct with `subject: String` and `issuer: String`. This is the minimal identity projection carried in PipelineMetadata — not the full Identity from auth middleware, just enough for plugins to know who initiated the request.
+- [x] Define `IdentitySummary` struct with `subject: String` and `issuer: String`. This is the minimal identity projection carried in PipelineMetadata — not the full Identity from auth middleware, just enough for plugins to know who initiated the request.
   <!-- files: packages/types/src/pipeline.rs -->
   <!-- purpose: Provide identity context to plugins without leaking auth implementation details -->
   <!-- requirements: pipeline-message 2.3 -->
 
-- [ ] Implement JSON serialisation round-trip for PipelineMessage. Verify that serialising to JSON and deserialising back produces an identical struct. This is critical because PipelineMessage crosses the WASM boundary as JSON bytes.
+- [x] Implement JSON serialisation round-trip for PipelineMessage. Verify that serialising to JSON and deserialising back produces an identical struct. This is critical because PipelineMessage crosses the WASM boundary as JSON bytes.
   <!-- files: packages/types/src/pipeline.rs, packages/types/tests/pipeline_tests.rs -->
   <!-- purpose: Guarantee lossless serialisation at the WASM boundary -->
   <!-- requirements: pipeline-message 5.1, 5.2 -->
 
-- [ ] Write unit tests: construct a PipelineMessage with all fields populated, serialise to JSON, deserialise back, assert equality. Test with empty payload, nested payload, and large payload (1MB+ JSON). Test that StepTrace accumulation works correctly across multiple appends.
+- [x] Write unit tests: construct a PipelineMessage with all fields populated, serialise to JSON, deserialise back, assert equality. Test with empty payload, nested payload, and large payload (1MB+ JSON). Test that StepTrace accumulation works correctly across multiple appends.
   <!-- files: packages/types/tests/pipeline_tests.rs -->
   <!-- purpose: Validate PipelineMessage contract stability -->
   <!-- requirements: pipeline-message 1.1, 1.2, 4.1, 5.1 -->

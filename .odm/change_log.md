@@ -2,6 +2,8 @@
 
 ## 2026-03-29
 
+- Architecture Migration WP 1.1 — PipelineMessage Core Types: add PipelineEnvelope, PipelineMetadata, StepTrace, StepOutcome, and IdentitySummary types to packages/types/src/pipeline.rs. These implement the new pipeline architecture spec alongside existing types for incremental migration. Add 8 tests covering full-field round-trip, empty/nested/large (1MB+) payloads, trace accumulation, identity projection, and outcome serialisation. Fix pre-existing ContactName test referencing removed display field.
+
 - DevOps WP 3.2 — Config Code Cleanup: change PostgreSQL password field from String (empty default) to Option<String> (None default) in PostgresSettings, update pg_storage and storage_migration usages, add passphrase minimum-length guidance to .env.example.
 
 ## 2026-03-28

@@ -12,7 +12,7 @@ This plan addresses all findings from the QA executive summary report across thr
 
 Work packages are organized by domain area within each tier. Tier 2 WPs depend on their related Tier 1 WPs being complete first (where applicable). Tier 3 WPs depend on related Tier 2 WPs.
 
-**Progress:** 9 / 13 work packages complete
+**Progress:** 10 / 13 work packages complete
 
 ---
 
@@ -255,27 +255,27 @@ Work packages are organized by domain area within each tier. Tier 2 WPs depend o
 > depends: 2.3
 > spec: .odm/qa/reports/EXECUTIVE-SUMMARY.md
 
-- [ ] Add `user_id`/`household_id` filtering to search queries [ga-readiness]
+- [x] Add `user_id`/`household_id` filtering to search queries [ga-readiness]
   <!-- file: apps/core/src/search.rs -->
   <!-- purpose: Prevent cross-user/cross-tenant search result leakage -->
   <!-- requirements: Tier 3, item 21 -->
   <!-- leverage: existing search.rs:144-227 -->
-- [ ] Implement batched Tantivy commits using existing `commit_threshold` config [ga-readiness]
+- [x] Implement batched Tantivy commits using existing `commit_threshold` config [ga-readiness]
   <!-- file: apps/core/src/search.rs -->
   <!-- purpose: Eliminate per-document write amplification -->
   <!-- requirements: Tier 3, item 22 -->
   <!-- leverage: existing commit_threshold config -->
-- [ ] Add SQLite tables for federation peer registrations and sync cursors [ga-readiness]
+- [x] Add SQLite tables for federation peer registrations and sync cursors [ga-readiness]
   <!-- file: apps/core/src/federation.rs -->
   <!-- purpose: Persist federation state across restarts -->
   <!-- requirements: Tier 3, item 23 -->
   <!-- leverage: existing in-memory federation.rs -->
-- [ ] Add SQLite tables for households and invites [ga-readiness]
+- [x] Add SQLite tables for households and invites [ga-readiness]
   <!-- file: apps/core/src/household.rs -->
   <!-- purpose: Persist household state across restarts -->
   <!-- requirements: Tier 3, item 23 -->
   <!-- leverage: existing in-memory household.rs -->
-- [ ] Switch search index from `create_in_ram()` to `Index::create_in_dir()` [ga-readiness]
+- [x] Switch search index from `create_in_ram()` to `Index::create_in_dir()` [ga-readiness]
   <!-- file: apps/core/src/search.rs -->
   <!-- purpose: Persist search index across restarts -->
   <!-- requirements: Tier 3, item 24 -->

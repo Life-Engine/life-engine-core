@@ -110,6 +110,11 @@ pub fn spawn_with_shutdown(
             }
         }
 
+        // Flush any buffered documents that haven't reached the commit threshold.
+        if let Err(e) = engine.flush().await {
+            warn!(error = %e, "failed to flush search index on shutdown");
+        }
+
         info!("search processor shut down cleanly");
     })
 }
@@ -138,7 +143,7 @@ mod tests {
     #[tokio::test]
     async fn indexes_record_on_record_changed_event() {
         let bus = Arc::new(MessageBus::new());
-        let engine = Arc::new(SearchEngine::new().unwrap());
+        let engine = Arc::new(SearchEngine::with_commit_threshold(1).unwrap());
 
         let _handle = spawn(&bus, Arc::clone(&engine));
 
@@ -149,13 +154,13 @@ mod tests {
 
         // Retry loop: the background task may need time to process the event,
         // especially on slow CI runners. Retry for up to 2 seconds.
-        let mut results = engine.search("Test r1", None, 10, 0).unwrap();
+        let mut results = engine.search("Test r1", None, None, None, 10, 0).unwrap();
         for _ in 0..20 {
             if results.total >= 1 {
                 break;
             }
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-            results = engine.search("Test r1", None, 10, 0).unwrap();
+            results = engine.search("Test r1", None, None, None, 10, 0).unwrap();
         }
         assert_eq!(results.total, 1);
         assert_eq!(results.hits[0].id, "r1");
@@ -164,7 +169,7 @@ mod tests {
     #[tokio::test]
     async fn removes_record_on_record_deleted_event() {
         let bus = Arc::new(MessageBus::new());
-        let engine = Arc::new(SearchEngine::new().unwrap());
+        let engine = Arc::new(SearchEngine::with_commit_threshold(1).unwrap());
 
         // Index a record first.
         let record = test_record("r2", "tasks");
@@ -178,13 +183,13 @@ mod tests {
         });
 
         // Retry loop: wait for the background task to process the deletion.
-        let mut results = engine.search("Test r2", None, 10, 0).unwrap();
+        let mut results = engine.search("Test r2", None, None, None, 10, 0).unwrap();
         for _ in 0..20 {
             if results.total == 0 {
                 break;
             }
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-            results = engine.search("Test r2", None, 10, 0).unwrap();
+            results = engine.search("Test r2", None, None, None, 10, 0).unwrap();
         }
         assert_eq!(results.total, 0);
     }
@@ -192,7 +197,7 @@ mod tests {
     #[tokio::test]
     async fn re_indexes_on_update() {
         let bus = Arc::new(MessageBus::new());
-        let engine = Arc::new(SearchEngine::new().unwrap());
+        let engine = Arc::new(SearchEngine::with_commit_threshold(1).unwrap());
 
         // Index original record.
         let record = test_record("r3", "notes");
@@ -207,26 +212,26 @@ mod tests {
         bus.publish(BusEvent::RecordChanged { record: updated });
 
         // Retry loop: wait for the background task to re-index.
-        let mut results = engine.search("Updated title", None, 10, 0).unwrap();
+        let mut results = engine.search("Updated title", None, None, None, 10, 0).unwrap();
         for _ in 0..20 {
             if results.total >= 1 {
                 break;
             }
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-            results = engine.search("Updated title", None, 10, 0).unwrap();
+            results = engine.search("Updated title", None, None, None, 10, 0).unwrap();
         }
         assert_eq!(results.total, 1);
         assert_eq!(results.hits[0].id, "r3");
 
         // Old content should not match.
-        let old_results = engine.search("Test r3", None, 10, 0).unwrap();
+        let old_results = engine.search("Test r3", None, None, None, 10, 0).unwrap();
         assert_eq!(old_results.total, 0);
     }
 
     #[tokio::test]
     async fn ignores_unrelated_events() {
         let bus = Arc::new(MessageBus::new());
-        let engine = Arc::new(SearchEngine::new().unwrap());
+        let engine = Arc::new(SearchEngine::with_commit_threshold(1).unwrap());
 
         let _handle = spawn(&bus, Arc::clone(&engine));
 
@@ -242,14 +247,14 @@ mod tests {
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
         // Search engine should be empty.
-        let results = engine.search("anything", None, 10, 0);
+        let results = engine.search("anything", None, None, None, 10, 0);
         assert!(results.is_err() || results.unwrap().total == 0);
     }
 
     #[tokio::test]
     async fn graceful_shutdown_via_watch() {
         let bus = Arc::new(MessageBus::new());
-        let engine = Arc::new(SearchEngine::new().unwrap());
+        let engine = Arc::new(SearchEngine::with_commit_threshold(1).unwrap());
 
         let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
         let handle = spawn_with_shutdown(&bus, Arc::clone(&engine), Some(shutdown_rx));
@@ -261,7 +266,7 @@ mod tests {
         });
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
-        let results = engine.search("Test s1", None, 10, 0).unwrap();
+        let results = engine.search("Test s1", None, None, None, 10, 0).unwrap();
         assert_eq!(results.total, 1);
 
         // Signal shutdown.

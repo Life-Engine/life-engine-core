@@ -17,6 +17,10 @@ pub struct SearchParams {
     pub q: Option<String>,
     /// Optional collection filter.
     pub collection: Option<String>,
+    /// Filter results to a specific user.
+    pub user_id: Option<String>,
+    /// Filter results to a specific household.
+    pub household_id: Option<String>,
     /// Maximum number of results (default 20, max 100).
     pub limit: Option<usize>,
     /// Number of results to skip.
@@ -57,8 +61,10 @@ pub async fn search(
     let limit = params.limit.unwrap_or(20).min(100);
     let offset = params.offset.unwrap_or(0);
     let collection_filter = params.collection.as_deref();
+    let user_id_filter = params.user_id.as_deref();
+    let household_id_filter = params.household_id.as_deref();
 
-    match engine.search(query, collection_filter, limit, offset) {
+    match engine.search(query, collection_filter, user_id_filter, household_id_filter, limit, offset) {
         Ok(results) => (StatusCode::OK, Json(json!(results))).into_response(),
         Err(e) => {
             tracing::error!(error = %e, query = %query, "search failed");
@@ -90,7 +96,7 @@ mod tests {
     // logic in isolation. Auth middleware is tested in the auth module tests
     // and in the integration test suite.
     async fn setup_search_app() -> (Router, Arc<SearchEngine>) {
-        let engine = Arc::new(SearchEngine::new().unwrap());
+        let engine = Arc::new(SearchEngine::with_commit_threshold(1).unwrap());
 
         let mut state = default_app_state();
         state.search_engine = Some(Arc::clone(&engine));

@@ -5,12 +5,18 @@
 
 use crate::storage::Record;
 use serde::Serialize;
+use std::path::Path;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use tantivy::collector::{Count, TopDocs};
+use tantivy::directory::MmapDirectory;
 use tantivy::query::{BooleanQuery, Occur, QueryParser, TermQuery};
 use tantivy::schema::{Field, IndexRecordOption, Schema, Value as TantivyValue, STRING, STORED, TEXT};
 use tantivy::{doc, Index, IndexReader, IndexWriter, TantivyDocument, Term};
 use tokio::sync::Mutex;
+
+/// Default number of documents to buffer before committing to the index.
+const DEFAULT_COMMIT_THRESHOLD: usize = 50;
 
 /// Full-text search engine wrapping a tantivy index.
 pub struct SearchEngine {
@@ -18,6 +24,10 @@ pub struct SearchEngine {
     reader: IndexReader,
     writer: Arc<Mutex<IndexWriter>>,
     fields: SearchFields,
+    /// Number of documents added since the last commit.
+    pending_count: AtomicUsize,
+    /// Commit after this many documents are added.
+    commit_threshold: usize,
 }
 
 /// Handles to the schema fields used during indexing and search.
@@ -26,6 +36,8 @@ struct SearchFields {
     id: Field,
     collection: Field,
     plugin_id: Field,
+    user_id: Field,
+    household_id: Field,
     content: Field,
     title: Field,
 }
@@ -59,15 +71,50 @@ pub struct SearchHit {
 impl SearchEngine {
     /// Create a new search engine with an in-memory tantivy index.
     pub fn new() -> anyhow::Result<Self> {
+        Self::build(None, DEFAULT_COMMIT_THRESHOLD)
+    }
+
+    /// Create a search engine with a custom commit threshold (in-memory).
+    ///
+    /// Documents are buffered in memory and committed to the index in
+    /// batches once the threshold is reached, eliminating per-document
+    /// write amplification.  A threshold of `1` replicates the legacy
+    /// commit-per-document behaviour.
+    pub fn with_commit_threshold(commit_threshold: usize) -> anyhow::Result<Self> {
+        Self::build(None, commit_threshold)
+    }
+
+    /// Create a disk-backed search engine at the given directory path.
+    ///
+    /// The index is persisted across restarts.  If the directory already
+    /// contains a valid tantivy index it is opened; otherwise a new
+    /// index is created.
+    pub fn open_in_dir(dir: &Path, commit_threshold: usize) -> anyhow::Result<Self> {
+        Self::build(Some(dir), commit_threshold)
+    }
+
+    fn build(dir: Option<&Path>, commit_threshold: usize) -> anyhow::Result<Self> {
+        let commit_threshold = commit_threshold.max(1);
+
         let mut schema_builder = Schema::builder();
         let id = schema_builder.add_text_field("id", STRING | STORED);
         let collection = schema_builder.add_text_field("collection", STRING | STORED);
         let plugin_id = schema_builder.add_text_field("plugin_id", STRING | STORED);
+        let user_id = schema_builder.add_text_field("user_id", STRING | STORED);
+        let household_id = schema_builder.add_text_field("household_id", STRING | STORED);
         let content = schema_builder.add_text_field("content", TEXT);
         let title = schema_builder.add_text_field("title", TEXT | STORED);
         let schema = schema_builder.build();
 
-        let index = Index::create_in_ram(schema);
+        let index = match dir {
+            Some(path) => {
+                std::fs::create_dir_all(path)?;
+                let mmap_dir = MmapDirectory::open(path)?;
+                Index::open_or_create(mmap_dir, schema)?
+            }
+            None => Index::create_in_ram(schema),
+        };
+
         let writer = index.writer(15_000_000)?;
         let reader = index.reader()?;
 
@@ -79,27 +126,46 @@ impl SearchEngine {
                 id,
                 collection,
                 plugin_id,
+                user_id,
+                household_id,
                 content,
                 title,
             },
+            pending_count: AtomicUsize::new(0),
+            commit_threshold,
         })
     }
 
     /// Index a storage record. Extracts text from the record's JSON data
     /// based on its collection type.
+    ///
+    /// Documents are buffered and committed in batches according to the
+    /// configured `commit_threshold`. Call [`flush`] to force a commit
+    /// of any buffered documents (e.g. on shutdown).
     pub async fn index_record(&self, record: &Record) -> anyhow::Result<()> {
         let (title_text, content_text) = extract_text(&record.collection, &record.data);
+
+        let user_id = record.user_id.as_deref().unwrap_or("");
+        let household_id = record.household_id.as_deref().unwrap_or("");
 
         let mut writer = self.writer.lock().await;
         writer.add_document(doc!(
             self.fields.id => record.id.as_str(),
             self.fields.collection => record.collection.as_str(),
             self.fields.plugin_id => record.plugin_id.as_str(),
+            self.fields.user_id => user_id,
+            self.fields.household_id => household_id,
             self.fields.title => title_text.as_str(),
             self.fields.content => content_text.as_str(),
         ))?;
-        writer.commit()?;
-        self.reader.reload()?;
+
+        let pending = self.pending_count.fetch_add(1, Ordering::Relaxed) + 1;
+        if pending >= self.commit_threshold {
+            writer.commit()?;
+            self.reader.reload()?;
+            self.pending_count.store(0, Ordering::Relaxed);
+            tracing::debug!(pending, "committed batched index writes");
+        }
 
         tracing::debug!(
             record_id = %record.id,
@@ -107,6 +173,21 @@ impl SearchEngine {
             "indexed record"
         );
 
+        Ok(())
+    }
+
+    /// Flush any pending index writes by committing immediately.
+    ///
+    /// This is a no-op if there are no pending documents.
+    pub async fn flush(&self) -> anyhow::Result<()> {
+        let pending = self.pending_count.load(Ordering::Relaxed);
+        if pending > 0 {
+            let mut writer = self.writer.lock().await;
+            writer.commit()?;
+            self.reader.reload()?;
+            self.pending_count.store(0, Ordering::Relaxed);
+            tracing::debug!(pending, "flushed pending index writes");
+        }
         Ok(())
     }
 
@@ -121,10 +202,14 @@ impl SearchEngine {
 
         for record in records {
             let (title_text, content_text) = extract_text(&record.collection, &record.data);
+            let user_id = record.user_id.as_deref().unwrap_or("");
+            let household_id = record.household_id.as_deref().unwrap_or("");
             writer.add_document(doc!(
                 self.fields.id => record.id.as_str(),
                 self.fields.collection => record.collection.as_str(),
                 self.fields.plugin_id => record.plugin_id.as_str(),
+                self.fields.user_id => user_id,
+                self.fields.household_id => household_id,
                 self.fields.title => title_text.as_str(),
                 self.fields.content => content_text.as_str(),
             ))?;
@@ -140,11 +225,15 @@ impl SearchEngine {
 
     /// Search the index with a text query.
     ///
-    /// Returns ranked results filtered optionally by collection.
+    /// Returns ranked results filtered optionally by collection, user, and household.
+    /// When `user_id` or `household_id` filters are provided, only records belonging
+    /// to the specified user/household are returned — preventing cross-tenant leakage.
     pub fn search(
         &self,
         query: &str,
         collection_filter: Option<&str>,
+        user_id_filter: Option<&str>,
+        household_id_filter: Option<&str>,
         limit: usize,
         offset: usize,
     ) -> anyhow::Result<SearchResults> {
@@ -159,21 +248,30 @@ impl SearchEngine {
             QueryParser::for_index(&self.index, vec![self.fields.title, self.fields.content]);
         let parsed_query = query_parser.parse_query(query)?;
 
-        // When a collection filter is provided, combine the text query
-        // with a TermQuery on the collection field using BooleanQuery
-        // with MUST clauses for correct AND semantics.
-        let effective_query: Box<dyn tantivy::query::Query> = if let Some(filter) =
-            collection_filter
-        {
-            let collection_term = Term::from_field_text(self.fields.collection, filter);
-            let collection_query =
-                TermQuery::new(collection_term, IndexRecordOption::Basic);
-            Box::new(BooleanQuery::new(vec![
-                (Occur::Must, parsed_query),
-                (Occur::Must, Box::new(collection_query)),
-            ]))
+        // Combine the text query with optional filter clauses using
+        // BooleanQuery with MUST semantics for correct AND behavior.
+        let mut clauses: Vec<(Occur, Box<dyn tantivy::query::Query>)> =
+            vec![(Occur::Must, parsed_query)];
+
+        if let Some(filter) = collection_filter {
+            let term = Term::from_field_text(self.fields.collection, filter);
+            clauses.push((Occur::Must, Box::new(TermQuery::new(term, IndexRecordOption::Basic))));
+        }
+
+        if let Some(uid) = user_id_filter {
+            let term = Term::from_field_text(self.fields.user_id, uid);
+            clauses.push((Occur::Must, Box::new(TermQuery::new(term, IndexRecordOption::Basic))));
+        }
+
+        if let Some(hid) = household_id_filter {
+            let term = Term::from_field_text(self.fields.household_id, hid);
+            clauses.push((Occur::Must, Box::new(TermQuery::new(term, IndexRecordOption::Basic))));
+        }
+
+        let effective_query: Box<dyn tantivy::query::Query> = if clauses.len() == 1 {
+            clauses.pop().unwrap().1
         } else {
-            parsed_query
+            Box::new(BooleanQuery::new(clauses))
         };
 
         let fetch_count = offset + limit;
@@ -371,17 +469,17 @@ mod tests {
 
     #[test]
     fn search_engine_creation() {
-        let engine = SearchEngine::new();
+        let engine = SearchEngine::with_commit_threshold(1);
         assert!(engine.is_ok());
     }
 
     #[tokio::test]
     async fn index_and_search_finds_record() {
-        let engine = SearchEngine::new().unwrap();
+        let engine = SearchEngine::with_commit_threshold(1).unwrap();
         let record = make_record("r1", "tasks", json!({"title": "Buy groceries", "description": "milk and eggs"}));
         engine.index_record(&record).await.unwrap();
 
-        let results = engine.search("groceries", None, 20, 0).unwrap();
+        let results = engine.search("groceries", None, None, None, 20, 0).unwrap();
         assert_eq!(results.total, 1);
         assert_eq!(results.hits[0].id, "r1");
         assert_eq!(results.hits[0].collection, "tasks");
@@ -390,43 +488,43 @@ mod tests {
 
     #[tokio::test]
     async fn search_no_results_returns_empty() {
-        let engine = SearchEngine::new().unwrap();
+        let engine = SearchEngine::with_commit_threshold(1).unwrap();
         let record = make_record("r1", "tasks", json!({"title": "Buy groceries"}));
         engine.index_record(&record).await.unwrap();
 
-        let results = engine.search("xylophone", None, 20, 0).unwrap();
+        let results = engine.search("xylophone", None, None, None, 20, 0).unwrap();
         assert_eq!(results.total, 0);
         assert!(results.hits.is_empty());
     }
 
     #[tokio::test]
     async fn search_across_multiple_collections() {
-        let engine = SearchEngine::new().unwrap();
+        let engine = SearchEngine::with_commit_threshold(1).unwrap();
         let task = make_record("r1", "tasks", json!({"title": "Important meeting"}));
         let note = make_record("r2", "notes", json!({"title": "Meeting notes", "body": "important details"}));
         engine.index_record(&task).await.unwrap();
         engine.index_record(&note).await.unwrap();
 
-        let results = engine.search("important", None, 20, 0).unwrap();
+        let results = engine.search("important", None, None, None, 20, 0).unwrap();
         assert_eq!(results.total, 2);
     }
 
     #[tokio::test]
     async fn collection_filter_limits_results() {
-        let engine = SearchEngine::new().unwrap();
+        let engine = SearchEngine::with_commit_threshold(1).unwrap();
         let task = make_record("r1", "tasks", json!({"title": "Important task"}));
         let note = make_record("r2", "notes", json!({"title": "Important note", "body": ""}));
         engine.index_record(&task).await.unwrap();
         engine.index_record(&note).await.unwrap();
 
-        let results = engine.search("important", Some("tasks"), 20, 0).unwrap();
+        let results = engine.search("important", Some("tasks"), None, None, 20, 0).unwrap();
         assert_eq!(results.total, 1);
         assert_eq!(results.hits[0].collection, "tasks");
     }
 
     #[tokio::test]
     async fn pagination_limit_and_offset() {
-        let engine = SearchEngine::new().unwrap();
+        let engine = SearchEngine::with_commit_threshold(1).unwrap();
         for i in 0..5 {
             let record = make_record(
                 &format!("r{i}"),
@@ -437,24 +535,24 @@ mod tests {
         }
 
         // First page: limit 2, offset 0.
-        let page1 = engine.search("alpha", None, 2, 0).unwrap();
+        let page1 = engine.search("alpha", None, None, None, 2, 0).unwrap();
         assert_eq!(page1.hits.len(), 2);
         assert_eq!(page1.total, 5);
 
         // Second page: limit 2, offset 2.
-        let page2 = engine.search("alpha", None, 2, 2).unwrap();
+        let page2 = engine.search("alpha", None, None, None, 2, 2).unwrap();
         assert_eq!(page2.hits.len(), 2);
         assert_eq!(page2.total, 5);
 
         // Third page: limit 2, offset 4.
-        let page3 = engine.search("alpha", None, 2, 4).unwrap();
+        let page3 = engine.search("alpha", None, None, None, 2, 4).unwrap();
         assert_eq!(page3.hits.len(), 1);
         assert_eq!(page3.total, 5);
     }
 
     #[tokio::test]
     async fn score_ordering_most_relevant_first() {
-        let engine = SearchEngine::new().unwrap();
+        let engine = SearchEngine::with_commit_threshold(1).unwrap();
         // Record with "rust" in title only.
         let r1 = make_record("r1", "tasks", json!({"title": "Learn Python", "description": "basics of python"}));
         // Record with "rust" in title and content.
@@ -462,7 +560,7 @@ mod tests {
         engine.index_record(&r1).await.unwrap();
         engine.index_record(&r2).await.unwrap();
 
-        let results = engine.search("rust", None, 20, 0).unwrap();
+        let results = engine.search("rust", None, None, None, 20, 0).unwrap();
         assert_eq!(results.total, 1);
         assert_eq!(results.hits[0].id, "r2");
         assert!(results.hits[0].score > 0.0);
@@ -470,42 +568,42 @@ mod tests {
 
     #[tokio::test]
     async fn remove_record_from_index() {
-        let engine = SearchEngine::new().unwrap();
+        let engine = SearchEngine::with_commit_threshold(1).unwrap();
         let record = make_record("r1", "tasks", json!({"title": "Removable task"}));
         engine.index_record(&record).await.unwrap();
 
         // Verify it exists.
-        let results = engine.search("removable", None, 20, 0).unwrap();
+        let results = engine.search("removable", None, None, None, 20, 0).unwrap();
         assert_eq!(results.total, 1);
 
         // Remove it.
         engine.remove("r1").await.unwrap();
 
         // Verify it is gone.
-        let results = engine.search("removable", None, 20, 0).unwrap();
+        let results = engine.search("removable", None, None, None, 20, 0).unwrap();
         assert_eq!(results.total, 0);
     }
 
     #[tokio::test]
     async fn index_email_record() {
-        let engine = SearchEngine::new().unwrap();
+        let engine = SearchEngine::with_commit_threshold(1).unwrap();
         let record = make_record("e1", "emails", json!({
             "subject": "Project update",
             "body_text": "The deployment was successful and all tests passed"
         }));
         engine.index_record(&record).await.unwrap();
 
-        let results = engine.search("deployment", None, 20, 0).unwrap();
+        let results = engine.search("deployment", None, None, None, 20, 0).unwrap();
         assert_eq!(results.total, 1);
         assert_eq!(results.hits[0].id, "e1");
 
-        let results = engine.search("update", None, 20, 0).unwrap();
+        let results = engine.search("update", None, None, None, 20, 0).unwrap();
         assert_eq!(results.total, 1);
     }
 
     #[tokio::test]
     async fn index_contact_record() {
-        let engine = SearchEngine::new().unwrap();
+        let engine = SearchEngine::with_commit_threshold(1).unwrap();
         let record = make_record("c1", "contacts", json!({
             "name": "Jane Doe",
             "first_name": "Jane",
@@ -515,14 +613,14 @@ mod tests {
         }));
         engine.index_record(&record).await.unwrap();
 
-        let results = engine.search("jane", None, 20, 0).unwrap();
+        let results = engine.search("jane", None, None, None, 20, 0).unwrap();
         assert_eq!(results.total, 1);
         assert_eq!(results.hits[0].id, "c1");
     }
 
     #[tokio::test]
     async fn index_event_record() {
-        let engine = SearchEngine::new().unwrap();
+        let engine = SearchEngine::with_commit_threshold(1).unwrap();
         let record = make_record("ev1", "events", json!({
             "title": "Team standup",
             "description": "Daily sync meeting",
@@ -530,95 +628,95 @@ mod tests {
         }));
         engine.index_record(&record).await.unwrap();
 
-        let results = engine.search("standup", None, 20, 0).unwrap();
+        let results = engine.search("standup", None, None, None, 20, 0).unwrap();
         assert_eq!(results.total, 1);
         assert_eq!(results.hits[0].id, "ev1");
 
-        let results = engine.search("conference", None, 20, 0).unwrap();
+        let results = engine.search("conference", None, None, None, 20, 0).unwrap();
         assert_eq!(results.total, 1);
     }
 
     #[tokio::test]
     async fn index_task_record() {
-        let engine = SearchEngine::new().unwrap();
+        let engine = SearchEngine::with_commit_threshold(1).unwrap();
         let record = make_record("t1", "tasks", json!({
             "title": "Fix authentication bug",
             "description": "Token expiry not handled correctly"
         }));
         engine.index_record(&record).await.unwrap();
 
-        let results = engine.search("authentication", None, 20, 0).unwrap();
+        let results = engine.search("authentication", None, None, None, 20, 0).unwrap();
         assert_eq!(results.total, 1);
 
-        let results = engine.search("expiry", None, 20, 0).unwrap();
+        let results = engine.search("expiry", None, None, None, 20, 0).unwrap();
         assert_eq!(results.total, 1);
     }
 
     #[tokio::test]
     async fn index_note_record() {
-        let engine = SearchEngine::new().unwrap();
+        let engine = SearchEngine::with_commit_threshold(1).unwrap();
         let record = make_record("n1", "notes", json!({
             "title": "Architecture decisions",
             "body": "We chose event sourcing for audit trail"
         }));
         engine.index_record(&record).await.unwrap();
 
-        let results = engine.search("architecture", None, 20, 0).unwrap();
+        let results = engine.search("architecture", None, None, None, 20, 0).unwrap();
         assert_eq!(results.total, 1);
 
-        let results = engine.search("sourcing", None, 20, 0).unwrap();
+        let results = engine.search("sourcing", None, None, None, 20, 0).unwrap();
         assert_eq!(results.total, 1);
     }
 
     #[tokio::test]
     async fn index_file_record() {
-        let engine = SearchEngine::new().unwrap();
+        let engine = SearchEngine::with_commit_threshold(1).unwrap();
         let record = make_record("f1", "files", json!({
             "name": "report.pdf",
             "path": "/documents/quarterly/report.pdf"
         }));
         engine.index_record(&record).await.unwrap();
 
-        let results = engine.search("report", None, 20, 0).unwrap();
+        let results = engine.search("report", None, None, None, 20, 0).unwrap();
         assert_eq!(results.total, 1);
         assert_eq!(results.hits[0].id, "f1");
     }
 
     #[tokio::test]
     async fn search_with_multiple_words() {
-        let engine = SearchEngine::new().unwrap();
+        let engine = SearchEngine::with_commit_threshold(1).unwrap();
         let r1 = make_record("r1", "tasks", json!({"title": "Buy milk and bread"}));
         let r2 = make_record("r2", "tasks", json!({"title": "Drink milk"}));
         engine.index_record(&r1).await.unwrap();
         engine.index_record(&r2).await.unwrap();
 
         // "milk bread" should match both (OR by default), but r1 should score higher.
-        let results = engine.search("milk bread", None, 20, 0).unwrap();
+        let results = engine.search("milk bread", None, None, None, 20, 0).unwrap();
         assert!(results.total >= 1);
         assert_eq!(results.hits[0].id, "r1");
     }
 
     #[tokio::test]
     async fn search_phrase_query() {
-        let engine = SearchEngine::new().unwrap();
+        let engine = SearchEngine::with_commit_threshold(1).unwrap();
         let r1 = make_record("r1", "tasks", json!({"title": "Buy milk and bread"}));
         let r2 = make_record("r2", "tasks", json!({"title": "Bread and butter with milk"}));
         engine.index_record(&r1).await.unwrap();
         engine.index_record(&r2).await.unwrap();
 
         // Phrase search with quotes should only match exact phrase.
-        let results = engine.search("\"milk and bread\"", None, 20, 0).unwrap();
+        let results = engine.search("\"milk and bread\"", None, None, None, 20, 0).unwrap();
         assert_eq!(results.total, 1);
         assert_eq!(results.hits[0].id, "r1");
     }
 
     #[test]
     fn empty_query_returns_error() {
-        let engine = SearchEngine::new().unwrap();
-        let result = engine.search("", None, 20, 0);
+        let engine = SearchEngine::with_commit_threshold(1).unwrap();
+        let result = engine.search("", None, None, None, 20, 0);
         assert!(result.is_err());
 
-        let result = engine.search("   ", None, 20, 0);
+        let result = engine.search("   ", None, None, None, 20, 0);
         assert!(result.is_err());
     }
 
@@ -647,7 +745,7 @@ mod tests {
 
     #[tokio::test]
     async fn index_generic_collection() {
-        let engine = SearchEngine::new().unwrap();
+        let engine = SearchEngine::with_commit_threshold(1).unwrap();
         let record = make_record("g1", "custom_data", json!({
             "field_a": "something searchable",
             "nested": {
@@ -656,28 +754,28 @@ mod tests {
         }));
         engine.index_record(&record).await.unwrap();
 
-        let results = engine.search("searchable", None, 20, 0).unwrap();
+        let results = engine.search("searchable", None, None, None, 20, 0).unwrap();
         assert_eq!(results.total, 1);
 
-        let results = engine.search("deeply", None, 20, 0).unwrap();
+        let results = engine.search("deeply", None, None, None, 20, 0).unwrap();
         assert_eq!(results.total, 1);
     }
 
     #[tokio::test]
     async fn limit_capped_at_100() {
-        let engine = SearchEngine::new().unwrap();
+        let engine = SearchEngine::with_commit_threshold(1).unwrap();
         let record = make_record("r1", "tasks", json!({"title": "Capped search test"}));
         engine.index_record(&record).await.unwrap();
 
         // Even if we request 500, limit is capped at 100.
-        let results = engine.search("capped", None, 500, 0).unwrap();
+        let results = engine.search("capped", None, None, None, 500, 0).unwrap();
         assert_eq!(results.total, 1);
         assert_eq!(results.hits.len(), 1);
     }
 
     #[tokio::test]
     async fn bulk_index_records() {
-        let engine = SearchEngine::new().unwrap();
+        let engine = SearchEngine::with_commit_threshold(1).unwrap();
         let records: Vec<Record> = (0..10)
             .map(|i| {
                 make_record(
@@ -691,20 +789,20 @@ mod tests {
         let count = engine.index_records_bulk(&records).await.unwrap();
         assert_eq!(count, 10);
 
-        let results = engine.search("bulk", None, 20, 0).unwrap();
+        let results = engine.search("bulk", None, None, None, 20, 0).unwrap();
         assert_eq!(results.total, 10);
     }
 
     #[tokio::test]
     async fn collection_filter_exact_match_no_false_positives() {
-        let engine = SearchEngine::new().unwrap();
+        let engine = SearchEngine::with_commit_threshold(1).unwrap();
         // "task" is a substring of "tasks" — with TEXT this could cause false matches.
         let r1 = make_record("r1", "tasks", json!({"title": "Alpha item"}));
         let r2 = make_record("r2", "task", json!({"title": "Alpha item"}));
         engine.index_record(&r1).await.unwrap();
         engine.index_record(&r2).await.unwrap();
 
-        let results = engine.search("alpha", Some("task"), 20, 0).unwrap();
+        let results = engine.search("alpha", Some("task"), None, None, 20, 0).unwrap();
         assert_eq!(results.total, 1);
         assert_eq!(results.hits[0].id, "r2");
     }

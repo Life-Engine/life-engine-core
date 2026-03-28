@@ -687,7 +687,7 @@ mod tests {
     async fn setup_test_app_with_search() -> (Router, String, Arc<crate::search::SearchEngine>) {
         let storage = Arc::new(SqliteStorage::open_in_memory().unwrap());
         let (auth_state, provider) = create_auth_state();
-        let search_engine = Arc::new(crate::search::SearchEngine::new().unwrap());
+        let search_engine = Arc::new(crate::search::SearchEngine::with_commit_threshold(1).unwrap());
         let bus = Arc::new(crate::message_bus::MessageBus::new());
 
         // Spawn the search processor so bus events trigger indexing.
@@ -734,7 +734,7 @@ mod tests {
         // Allow the spawned indexing task to complete.
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
-        let results = engine.search("searchable", None, 10, 0).unwrap();
+        let results = engine.search("searchable", None, None, None, 10, 0).unwrap();
         assert_eq!(results.total, 1);
         assert_eq!(results.hits[0].collection, "tasks");
     }
@@ -769,11 +769,11 @@ mod tests {
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
         // Old term should be gone.
-        let results = engine.search("OriginalUniqueWord", None, 10, 0).unwrap();
+        let results = engine.search("OriginalUniqueWord", None, None, None, 10, 0).unwrap();
         assert_eq!(results.total, 0);
 
         // New term should be findable.
-        let results = engine.search("UpdatedUniqueWord", None, 10, 0).unwrap();
+        let results = engine.search("UpdatedUniqueWord", None, None, None, 10, 0).unwrap();
         assert_eq!(results.total, 1);
     }
 
@@ -793,7 +793,7 @@ mod tests {
         let id = json["data"]["id"].as_str().unwrap().to_string();
 
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-        let results = engine.search("DeletableUniqueItem", None, 10, 0).unwrap();
+        let results = engine.search("DeletableUniqueItem", None, None, None, 10, 0).unwrap();
         assert_eq!(results.total, 1);
 
         // Delete.
@@ -802,7 +802,7 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-        let results = engine.search("DeletableUniqueItem", None, 10, 0).unwrap();
+        let results = engine.search("DeletableUniqueItem", None, None, None, 10, 0).unwrap();
         assert_eq!(results.total, 0);
     }
 

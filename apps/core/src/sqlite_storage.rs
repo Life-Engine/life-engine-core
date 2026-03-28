@@ -246,6 +246,64 @@ impl SqliteStorage {
                 version     INTEGER NOT NULL DEFAULT 1,
                 updated_at  TEXT NOT NULL,
                 PRIMARY KEY (plugin_id, collection)
+            );
+
+            CREATE TABLE IF NOT EXISTS federation_peers (
+                id               TEXT PRIMARY KEY,
+                name             TEXT NOT NULL,
+                endpoint         TEXT NOT NULL,
+                collections      TEXT NOT NULL DEFAULT '[]',
+                ca_cert_path     TEXT,
+                client_cert_path TEXT,
+                client_key_path  TEXT,
+                status           TEXT NOT NULL DEFAULT 'pending',
+                last_sync_at     TEXT,
+                last_sync_records INTEGER,
+                created_at       TEXT NOT NULL,
+                updated_at       TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS federation_sync_cursors (
+                peer_id    TEXT NOT NULL,
+                collection TEXT NOT NULL,
+                cursor     TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (peer_id, collection),
+                FOREIGN KEY (peer_id) REFERENCES federation_peers(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS households (
+                id                  TEXT PRIMARY KEY,
+                name                TEXT NOT NULL,
+                shared_collections  TEXT NOT NULL DEFAULT '[]',
+                created_at          TEXT NOT NULL,
+                updated_at          TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS household_members (
+                household_id TEXT NOT NULL,
+                user_id      TEXT NOT NULL,
+                display_name TEXT NOT NULL,
+                email        TEXT,
+                role         TEXT NOT NULL DEFAULT 'member',
+                joined_at    TEXT NOT NULL,
+                PRIMARY KEY (household_id, user_id),
+                FOREIGN KEY (household_id) REFERENCES households(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_household_members_user
+                ON household_members(user_id);
+
+            CREATE TABLE IF NOT EXISTS household_invites (
+                id           TEXT PRIMARY KEY,
+                household_id TEXT NOT NULL,
+                email        TEXT NOT NULL,
+                role         TEXT NOT NULL DEFAULT 'member',
+                invited_by   TEXT NOT NULL,
+                created_at   TEXT NOT NULL,
+                expires_at   TEXT NOT NULL,
+                accepted     INTEGER NOT NULL DEFAULT 0,
+                FOREIGN KEY (household_id) REFERENCES households(id) ON DELETE CASCADE
             );",
         )?;
         Ok(())

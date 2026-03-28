@@ -589,16 +589,28 @@ async fn main() -> anyhow::Result<()> {
         Arc::clone(&storage),
         Arc::clone(&schema_registry),
     ));
-    let search_engine = match search::SearchEngine::new() {
+    let search_index_dir = data_dir_path.join("search_index");
+    let search_engine = match search::SearchEngine::open_in_dir(&search_index_dir, 50) {
         Ok(engine) => {
             let engine = Arc::new(engine);
             search_processor::spawn(&message_bus, Arc::clone(&engine));
-            tracing::info!("search engine initialized");
+            tracing::info!(path = %search_index_dir.display(), "search engine initialized (disk-backed)");
             Some(engine)
         }
         Err(e) => {
-            tracing::warn!(error = %e, "failed to initialize search engine");
-            None
+            tracing::warn!(error = %e, "failed to initialize search engine, falling back to in-memory");
+            match search::SearchEngine::new() {
+                Ok(engine) => {
+                    let engine = Arc::new(engine);
+                    search_processor::spawn(&message_bus, Arc::clone(&engine));
+                    tracing::info!("search engine initialized (in-memory fallback)");
+                    Some(engine)
+                }
+                Err(e2) => {
+                    tracing::warn!(error = %e2, "failed to initialize in-memory search engine");
+                    None
+                }
+            }
         }
     };
     // Publish startup event.

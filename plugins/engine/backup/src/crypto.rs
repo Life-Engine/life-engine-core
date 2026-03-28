@@ -7,20 +7,27 @@ use crate::types::Argon2Params;
 use aes_gcm::aead::{Aead, KeyInit, OsRng};
 use aes_gcm::{AeadCore, Aes256Gcm, Nonce};
 use anyhow::Result;
+use rand::RngCore;
 use sha2::{Digest, Sha256};
 
 /// Length of the derived key in bytes (256-bit for AES-256).
 const KEY_LENGTH: usize = 32;
 
-/// Fixed salt for deterministic key derivation from passphrase.
-/// Matches the Core SQLCipher key derivation salt.
-const ARGON2_SALT: &[u8; 16] = b"life-engine-salt";
+/// Length of the random salt in bytes.
+const SALT_LENGTH: usize = 16;
 
 /// Nonce size for AES-256-GCM (96 bits).
 const NONCE_SIZE: usize = 12;
 
-/// Derive a 32-byte encryption key from a passphrase using Argon2id.
-pub fn derive_key(passphrase: &str, params: &Argon2Params) -> Result<Vec<u8>> {
+/// Generate a random 16-byte salt using OS entropy.
+pub fn generate_salt() -> [u8; SALT_LENGTH] {
+    let mut salt = [0u8; SALT_LENGTH];
+    OsRng.fill_bytes(&mut salt);
+    salt
+}
+
+/// Derive a 32-byte encryption key from a passphrase and salt using Argon2id.
+pub fn derive_key(passphrase: &str, salt: &[u8], params: &Argon2Params) -> Result<Vec<u8>> {
     let argon2 = argon2::Argon2::new(
         argon2::Algorithm::Argon2id,
         argon2::Version::V0x13,
@@ -35,7 +42,7 @@ pub fn derive_key(passphrase: &str, params: &Argon2Params) -> Result<Vec<u8>> {
 
     let mut output = [0u8; KEY_LENGTH];
     argon2
-        .hash_password_into(passphrase.as_bytes(), ARGON2_SALT, &mut output)
+        .hash_password_into(passphrase.as_bytes(), salt, &mut output)
         .map_err(|e| anyhow::anyhow!("Argon2 key derivation failed: {e}"))?;
 
     Ok(output.to_vec())
@@ -118,24 +125,46 @@ mod tests {
         }
     }
 
+    fn test_salt() -> [u8; 16] {
+        [0x42u8; 16]
+    }
+
     #[test]
     fn derive_key_produces_32_bytes() {
-        let key = derive_key("test-passphrase", &test_params()).unwrap();
+        let key = derive_key("test-passphrase", &test_salt(), &test_params()).unwrap();
         assert_eq!(key.len(), 32);
     }
 
     #[test]
     fn derive_key_is_deterministic() {
-        let k1 = derive_key("my-pass", &test_params()).unwrap();
-        let k2 = derive_key("my-pass", &test_params()).unwrap();
+        let salt = test_salt();
+        let k1 = derive_key("my-pass", &salt, &test_params()).unwrap();
+        let k2 = derive_key("my-pass", &salt, &test_params()).unwrap();
         assert_eq!(k1, k2);
     }
 
     #[test]
     fn derive_key_different_passphrases_differ() {
-        let k1 = derive_key("pass-a", &test_params()).unwrap();
-        let k2 = derive_key("pass-b", &test_params()).unwrap();
+        let salt = test_salt();
+        let k1 = derive_key("pass-a", &salt, &test_params()).unwrap();
+        let k2 = derive_key("pass-b", &salt, &test_params()).unwrap();
         assert_ne!(k1, k2);
+    }
+
+    #[test]
+    fn derive_key_different_salts_differ() {
+        let salt1 = [0x01u8; 16];
+        let salt2 = [0x02u8; 16];
+        let k1 = derive_key("same-pass", &salt1, &test_params()).unwrap();
+        let k2 = derive_key("same-pass", &salt2, &test_params()).unwrap();
+        assert_ne!(k1, k2);
+    }
+
+    #[test]
+    fn generate_salt_produces_unique_values() {
+        let s1 = generate_salt();
+        let s2 = generate_salt();
+        assert_ne!(s1, s2);
     }
 
     #[test]
@@ -155,7 +184,7 @@ mod tests {
 
     #[test]
     fn encrypt_decrypt_roundtrip() {
-        let key = derive_key("test-pass", &test_params()).unwrap();
+        let key = derive_key("test-pass", &test_salt(), &test_params()).unwrap();
         let plaintext = b"secret backup data";
         let encrypted = encrypt(plaintext, &key).unwrap();
         assert_ne!(encrypted, plaintext);
@@ -165,7 +194,7 @@ mod tests {
 
     #[test]
     fn encrypt_decrypt_large_data() {
-        let key = derive_key("test-pass", &test_params()).unwrap();
+        let key = derive_key("test-pass", &test_salt(), &test_params()).unwrap();
         let plaintext: Vec<u8> = (0..10000).map(|i| (i % 256) as u8).collect();
         let encrypted = encrypt(&plaintext, &key).unwrap();
         let decrypted = decrypt(&encrypted, &key).unwrap();
@@ -174,8 +203,9 @@ mod tests {
 
     #[test]
     fn decrypt_with_wrong_key_fails() {
-        let key1 = derive_key("correct-pass", &test_params()).unwrap();
-        let key2 = derive_key("wrong-pass", &test_params()).unwrap();
+        let salt = test_salt();
+        let key1 = derive_key("correct-pass", &salt, &test_params()).unwrap();
+        let key2 = derive_key("wrong-pass", &salt, &test_params()).unwrap();
         let plaintext = b"secret data";
         let encrypted = encrypt(plaintext, &key1).unwrap();
         let result = decrypt(&encrypted, &key2);
@@ -185,7 +215,7 @@ mod tests {
 
     #[test]
     fn decrypt_tampered_data_fails() {
-        let key = derive_key("test-pass", &test_params()).unwrap();
+        let key = derive_key("test-pass", &test_salt(), &test_params()).unwrap();
         let plaintext = b"secret data";
         let mut encrypted = encrypt(plaintext, &key).unwrap();
         // Tamper with ciphertext.
@@ -198,7 +228,7 @@ mod tests {
 
     #[test]
     fn decrypt_too_short_data_fails() {
-        let key = derive_key("test-pass", &test_params()).unwrap();
+        let key = derive_key("test-pass", &test_salt(), &test_params()).unwrap();
         let result = decrypt(&[0u8; 10], &key);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("too short"));
@@ -227,7 +257,7 @@ mod tests {
 
     #[test]
     fn full_pipeline_compress_encrypt_decrypt_decompress() {
-        let key = derive_key("pipeline-test", &test_params()).unwrap();
+        let key = derive_key("pipeline-test", &test_salt(), &test_params()).unwrap();
         let original = serde_json::json!({
             "records": [
                 {"id": "1", "data": {"title": "Test"}},

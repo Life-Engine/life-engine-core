@@ -1,0 +1,19 @@
+{
+  "current_wp": null,
+  "current_wp_title": null,
+  "current_wp_plan": null,
+  "current_wp_tasks": null,
+  "completed_wps": ["api-contracts:1.1"],
+  "history": [
+    {
+      "wp_id": "1.1",
+      "plan": "api-contracts.md",
+      "title": "Unify Capability Enum",
+      "timestamp": "2026-03-28T22:30:00Z",
+      "commit_hash": null,
+      "tasks_completed": 6,
+      "tasks_deferred": 0,
+      "notes": "All 6 tasks were already implemented by prior work. Removed stale WasmCapability comment. Pre-existing compilation error in life-engine-types blocks cargo check but is unrelated to this WP."
+    }
+  ]
+}

@@ -9,7 +9,7 @@
 //!
 //! When opened with [`SqliteStorage::open_encrypted`], the database is
 //! encrypted via SQLCipher. The passphrase is stretched to a 256-bit
-//! key using Argon2id (see [`crate::rekey::derive_key`]) and applied
+//! key using Argon2id (see [`crate::rekey::derive_key_for_db`]) and applied
 //! with `PRAGMA key` immediately after connection open.
 
 use std::path::Path;
@@ -108,7 +108,7 @@ impl SqliteStorage {
         passphrase: &str,
         argon2_settings: &crate::config::Argon2Settings,
     ) -> anyhow::Result<Self> {
-        let hex_key = crate::rekey::derive_key(passphrase, argon2_settings)?;
+        let hex_key = crate::rekey::derive_key_for_db(passphrase, path, argon2_settings)?;
 
         // F-045: Validate that the derived key contains only hex characters
         // before interpolating into the PRAGMA statement. This prevents any

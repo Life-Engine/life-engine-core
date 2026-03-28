@@ -15,6 +15,7 @@ use crate::config::Argon2Settings;
 use crate::error::CoreError;
 
 use argon2::Argon2;
+use rand::rngs::OsRng;
 use rand::RngCore;
 use rusqlite::Connection;
 use std::path::Path;
@@ -28,7 +29,7 @@ const SALT_LENGTH: usize = 16;
 /// Generate a random 16-byte salt.
 fn generate_salt() -> [u8; SALT_LENGTH] {
     let mut salt = [0u8; SALT_LENGTH];
-    rand::thread_rng().fill_bytes(&mut salt);
+    OsRng.fill_bytes(&mut salt);
     salt
 }
 
@@ -84,10 +85,20 @@ pub fn derive_key_with_salt(passphrase: &str, salt: &[u8], settings: &Argon2Sett
 
 /// Derive a key using the salt stored alongside the database file.
 ///
-/// Convenience wrapper that loads or creates the salt, then derives the key.
+/// Loads or creates the salt file at `<db_path>.salt`, then derives the key.
+/// This is the correct production path — always use this instead of
+/// deriving with a static salt.
+pub fn derive_key_for_db(passphrase: &str, db_path: &Path, settings: &Argon2Settings) -> Result<String, CoreError> {
+    let salt = load_or_create_salt(db_path)?;
+    derive_key_with_salt(passphrase, &salt, settings)
+}
+
+/// Derive a key with a zero salt. **Only for use in tests.**
+///
+/// Production code must use [`derive_key_for_db`] which loads or creates a
+/// random per-database salt file.
+#[cfg(test)]
 pub fn derive_key(passphrase: &str, settings: &Argon2Settings) -> Result<String, CoreError> {
-    // Fallback salt for contexts where no database path is available (e.g. tests).
-    // In production, callers should use derive_key_with_salt with load_or_create_salt.
     let fallback_salt = [0u8; SALT_LENGTH];
     derive_key_with_salt(passphrase, &fallback_salt, settings)
 }
@@ -394,6 +405,25 @@ mod tests {
 
         let result = open_encrypted(tmp.path(), &wrong_key);
         assert!(result.is_err());
+    }
+
+    // ── salt uniqueness tests ──────────────────────────────────────
+
+    #[test]
+    fn generate_salt_produces_unique_values() {
+        let s1 = generate_salt();
+        let s2 = generate_salt();
+        assert_ne!(s1, s2, "two consecutive salts should differ");
+    }
+
+    #[test]
+    fn derive_key_with_different_salts_produces_different_keys() {
+        let settings = test_argon2_settings();
+        let salt1 = [0x01u8; SALT_LENGTH];
+        let salt2 = [0x02u8; SALT_LENGTH];
+        let k1 = derive_key_with_salt("same-pass", &salt1, &settings).unwrap();
+        let k2 = derive_key_with_salt("same-pass", &salt2, &settings).unwrap();
+        assert_ne!(k1, k2, "same passphrase with different salts should produce different keys");
     }
 
     // ── run_rekey cannot be tested non-interactively (requires tty) ──

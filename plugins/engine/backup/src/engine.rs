@@ -58,9 +58,16 @@ pub async fn create_full_backup(
 
     let json = serde_json::to_vec(&archive)?;
     let compressed = crypto::compress(&json)?;
-    let key = crypto::derive_key(passphrase, argon2_params)?;
+    let salt = crypto::generate_salt();
+    let key = crypto::derive_key(passphrase, &salt, argon2_params)?;
     let encrypted = crypto::encrypt(&compressed, &key)?;
-    let checksum = crypto::sha256_hex(&encrypted);
+
+    // Prepend the 16-byte salt to the encrypted payload so restore can recover it.
+    let mut salted_payload = Vec::with_capacity(salt.len() + encrypted.len());
+    salted_payload.extend_from_slice(&salt);
+    salted_payload.extend_from_slice(&encrypted);
+
+    let checksum = crypto::sha256_hex(&salted_payload);
 
     // Build the final manifest with accurate stats.
     let manifest = BackupManifest {
@@ -75,9 +82,9 @@ pub async fn create_full_backup(
         cursor: Some(now.to_rfc3339()),
     };
 
-    // Store the encrypted backup.
+    // Store the salted encrypted backup.
     let storage_key = format!("{backup_id}.enc");
-    backend.put(&storage_key, &encrypted).await?;
+    backend.put(&storage_key, &salted_payload).await?;
 
     // Store the manifest separately (unencrypted, for listing).
     let manifest_json = serde_json::to_vec(&manifest)?;
@@ -126,9 +133,16 @@ pub async fn create_incremental_backup(
 
     let json = serde_json::to_vec(&archive)?;
     let compressed = crypto::compress(&json)?;
-    let key = crypto::derive_key(passphrase, argon2_params)?;
+    let salt = crypto::generate_salt();
+    let key = crypto::derive_key(passphrase, &salt, argon2_params)?;
     let encrypted = crypto::encrypt(&compressed, &key)?;
-    let checksum = crypto::sha256_hex(&encrypted);
+
+    // Prepend the 16-byte salt to the encrypted payload so restore can recover it.
+    let mut salted_payload = Vec::with_capacity(salt.len() + encrypted.len());
+    salted_payload.extend_from_slice(&salt);
+    salted_payload.extend_from_slice(&encrypted);
+
+    let checksum = crypto::sha256_hex(&salted_payload);
 
     // Build the final manifest with accurate stats.
     let manifest = BackupManifest {
@@ -144,7 +158,7 @@ pub async fn create_incremental_backup(
     };
 
     let storage_key = format!("{backup_id}.enc");
-    backend.put(&storage_key, &encrypted).await?;
+    backend.put(&storage_key, &salted_payload).await?;
 
     let manifest_json = serde_json::to_vec(&manifest)?;
     let manifest_key = format!("{backup_id}.manifest.json");
@@ -164,10 +178,10 @@ pub async fn restore_full(
     argon2_params: &Argon2Params,
 ) -> anyhow::Result<(Vec<BackupRecord>, RestoreResult)> {
     let storage_key = format!("{backup_id}.enc");
-    let encrypted = backend.get(&storage_key).await?;
+    let salted_payload = backend.get(&storage_key).await?;
 
-    // Verify checksum.
-    let actual_checksum = crypto::sha256_hex(&encrypted);
+    // Verify checksum against the full salted payload.
+    let actual_checksum = crypto::sha256_hex(&salted_payload);
 
     // Load manifest for checksum comparison.
     let manifest_key = format!("{backup_id}.manifest.json");
@@ -182,9 +196,13 @@ pub async fn restore_full(
         );
     }
 
-    // Decrypt -> decompress -> deserialize.
-    let key = crypto::derive_key(passphrase, argon2_params)?;
-    let compressed = crypto::decrypt(&encrypted, &key)?;
+    // Extract the 16-byte salt prefix, then decrypt the rest.
+    if salted_payload.len() < 16 {
+        anyhow::bail!("backup payload too short: missing salt");
+    }
+    let (salt, encrypted) = salted_payload.split_at(16);
+    let key = crypto::derive_key(passphrase, salt, argon2_params)?;
+    let compressed = crypto::decrypt(encrypted, &key)?;
     let json = crypto::decompress(&compressed)?;
     let archive: BackupArchive = serde_json::from_slice(&json)?;
 

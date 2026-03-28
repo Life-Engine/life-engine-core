@@ -225,32 +225,32 @@ This plan addresses the 27 issues identified in the phase-3 QA review of the bac
 > depends: none
 > spec: .odm/qa/reports/phase-3/backup-and-webhooks.md
 
-- [ ] Use `HashSet` for incremental backup deduplication instead of `Vec::contains` [minor]
+- [x] Use `HashSet` for incremental backup deduplication instead of `Vec::contains` [minor]
   <!-- file: plugins/engine/backup/src/engine.rs -->
   <!-- purpose: Linear search inconsistency with full backup path which uses HashSet -->
   <!-- requirements: 14 -->
   <!-- leverage: existing incremental backup at engine.rs:106 -->
-- [ ] Replace synchronous `path.exists()` with `tokio::fs::try_exists()` in local backend [minor]
+- [x] Replace synchronous `path.exists()` with `tokio::fs::try_exists()` in local backend [minor]
   <!-- file: plugins/engine/backup/src/backend/local.rs -->
   <!-- purpose: Synchronous call blocks async runtime -->
   <!-- requirements: 17 -->
   <!-- leverage: existing exists method at local.rs:120 -->
-- [ ] Add URL validation on `WebhookSubscription.url` [minor]
+- [x] Add URL validation on `WebhookSubscription.url` [minor]
   <!-- file: plugins/engine/webhook-sender/src/models.rs -->
   <!-- purpose: Malformed URLs will cause runtime errors during delivery -->
   <!-- requirements: 22 -->
   <!-- leverage: none -->
-- [ ] Store payload references or hashes in delivery records instead of full payloads [minor]
+- [x] Store payload references or hashes in delivery records instead of full payloads [minor]
   <!-- file: plugins/engine/webhook-sender/src/models.rs -->
   <!-- purpose: Each retry stores a full copy of the payload; 5 retries = 5 copies -->
   <!-- requirements: 10 -->
   <!-- leverage: existing DeliveryRecord struct at models.rs:47 -->
-- [ ] Remove unused `WebhookSenderStatus` type [minor]
+- [x] Remove unused `WebhookSenderStatus` type [minor]
   <!-- file: plugins/engine/webhook-sender/src/types.rs -->
   <!-- purpose: Defined but not referenced anywhere -->
   <!-- requirements: 16 -->
   <!-- leverage: none -->
-- [ ] Refactor `process_webhook` to derive `body` from `raw_body` internally instead of accepting both [minor]
+- [x] Refactor `process_webhook` to derive `body` from `raw_body` internally instead of accepting both [minor]
   <!-- file: plugins/engine/webhook-receiver/src/lib.rs -->
   <!-- purpose: Caller must ensure consistency; mismatch would verify signature against wrong data -->
   <!-- requirements: 27 -->

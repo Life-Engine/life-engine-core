@@ -59,14 +59,14 @@ impl WebhookReceiverPlugin {
     ///
     /// 1. Looks up the endpoint configuration by ID
     /// 2. Verifies the HMAC-SHA256 signature if a secret is configured
-    /// 3. Applies payload mapping to extract CDM fields
-    /// 4. Returns the processed event
+    /// 3. Parses the raw body as JSON
+    /// 4. Applies payload mapping to extract CDM fields
+    /// 5. Returns the processed event
     pub fn process_webhook(
         &self,
         endpoint_id: &str,
         signature_header: Option<&str>,
         raw_body: &[u8],
-        body: serde_json::Value,
     ) -> Result<WebhookReceivedEvent> {
         let endpoint = self
             .find_endpoint(endpoint_id)
@@ -79,11 +79,16 @@ impl WebhookReceiverPlugin {
             verify_hmac_sha256(secret.as_bytes(), raw_body, sig)?;
         }
 
+        // Parse the raw body as JSON — ensures the signed bytes and parsed
+        // payload are always consistent.
+        let body: serde_json::Value = serde_json::from_slice(raw_body)
+            .map_err(|e| anyhow::anyhow!("invalid JSON in webhook body: {}", e))?;
+
         // Apply payload mapping
         let mapped_data = if let Some(ref mappings) = endpoint.payload_mappings {
             mapping::apply_mappings(&body, mappings)
         } else {
-            body.clone()
+            body
         };
 
         Ok(WebhookReceivedEvent {
@@ -279,12 +284,12 @@ mod tests {
             "action": "triggered",
             "data": { "key": "value" }
         });
+        let raw = serde_json::to_vec(&body).unwrap();
 
         let result = plugin.process_webhook(
             "simple-hook",
             None,
-            b"{}",
-            body.clone(),
+            &raw,
         );
 
         assert!(result.is_ok());
@@ -319,7 +324,6 @@ mod tests {
             "github-push",
             Some(&sig),
             &raw,
-            body,
         );
 
         assert!(result.is_ok());
@@ -335,7 +339,6 @@ mod tests {
             "nonexistent",
             None,
             b"{}",
-            serde_json::json!({}),
         );
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("unknown webhook endpoint"));
@@ -350,7 +353,6 @@ mod tests {
             "github-push",
             None, // Missing signature
             b"{}",
-            serde_json::json!({}),
         );
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("missing signature header"));
@@ -365,7 +367,6 @@ mod tests {
             "github-push",
             Some("sha256=invalid_signature"),
             b"some body",
-            serde_json::json!({}),
         );
         assert!(result.is_err());
     }
@@ -391,7 +392,8 @@ mod tests {
             "array": [1, 2, 3]
         });
 
-        let result = plugin.process_webhook("simple-hook", None, b"{}", body.clone());
+        let raw = serde_json::to_vec(&body).unwrap();
+        let result = plugin.process_webhook("simple-hook", None, &raw);
         assert!(result.is_ok());
         assert_eq!(result.unwrap().data, body);
     }

@@ -1,6 +1,6 @@
 //! Backup engine — orchestrates full and incremental backup/restore operations.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use chrono::Utc;
 
@@ -105,15 +105,14 @@ pub async fn create_incremental_backup(
     let now = Utc::now();
     let backup_id = format!("incr-{}", now.format("%Y%m%d-%H%M%S-%3f"));
 
-    let mut collections: Vec<String> = Vec::new();
+    let mut collection_set: HashSet<String> = HashSet::new();
     let mut record_counts: HashMap<String, u64> = HashMap::new();
     for rec in &changed_records {
         let col = rec.collection.clone();
         *record_counts.entry(col.clone()).or_insert(0) += 1;
-        if !collections.contains(&col) {
-            collections.push(col);
-        }
+        collection_set.insert(col);
     }
+    let collections: Vec<String> = collection_set.into_iter().collect();
 
     // Serialize -> compress -> encrypt first, so we can compute final stats.
     let archive = BackupArchive {

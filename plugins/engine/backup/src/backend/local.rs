@@ -117,7 +117,7 @@ impl BackupBackend for LocalBackend {
     }
 
     async fn exists(&self, key: &str) -> anyhow::Result<bool> {
-        Ok(self.full_path(key)?.exists())
+        Ok(tokio::fs::try_exists(self.full_path(key)?).await?)
     }
 }
 

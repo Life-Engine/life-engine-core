@@ -2,6 +2,8 @@
 
 ## 2026-03-28
 
+- QA phase-3 remediation — connector-plugins WP 1.9: add symlink cycle detection (via canonical path tracking) and max depth limit (64) to filesystem connector scan_directory. Remove unused notify crate dependency. Remove unnecessary watch_paths clone in scan(). Fix let-chains in should_include for stable Rust compatibility.
+
 - QA phase-3 remediation — connector-plugins WP 1.2: refactor let-chains in connector-calendar handle_event() and google.rs to use nested if-let blocks for Rust stable compatibility. Local urlencoding module already provides explicit implementation (no transitive dependency risk).
 
 - QA phase-2 remediation — dav-and-webhooks WP 1.4: implement webhook transport with Axum router, HMAC-SHA256 signature verification (constant-time comparison), timestamp-based replay protection (5-minute window), idempotency key deduplication, content-type validation, webhook-specific error variants, and 12 integration tests.

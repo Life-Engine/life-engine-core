@@ -185,22 +185,22 @@ This plan addresses the issues identified in the phase-3 QA review of the four c
 > depends: none
 > spec: .odm/qa/reports/phase-3/connector-plugins.md
 
-- [ ] Add symlink cycle detection to recursive directory scanning [minor]
+- [x] Add symlink cycle detection to recursive directory scanning [minor]
   <!-- file: plugins/engine/connector-filesystem/src/local.rs -->
   <!-- purpose: Circular symlinks would cause infinite recursion -->
   <!-- requirements: 4 -->
   <!-- leverage: existing scan at local.rs:182-211 -->
-- [ ] Add configurable max depth limit for recursive scanning [minor]
+- [x] Add configurable max depth limit for recursive scanning [minor]
   <!-- file: plugins/engine/connector-filesystem/src/local.rs -->
   <!-- purpose: No limit on recursion depth; problematic on deeply nested filesystems -->
   <!-- requirements: 5 -->
   <!-- leverage: existing recursive scan -->
-- [ ] Remove unused `notify` crate dependency or implement filesystem watching [minor]
+- [x] Remove unused `notify` crate dependency or implement filesystem watching [minor]
   <!-- file: plugins/engine/connector-filesystem/Cargo.toml -->
   <!-- purpose: Crate listed but never imported; adds to build time -->
   <!-- requirements: 9 -->
   <!-- leverage: none -->
-- [ ] Remove unnecessary `watch_paths` clone in `scan()` [minor]
+- [x] Remove unnecessary `watch_paths` clone in `scan()` [minor]
   <!-- file: plugins/engine/connector-filesystem/src/local.rs -->
   <!-- purpose: Clones vector every call to work around borrow checker -->
   <!-- requirements: 10 -->

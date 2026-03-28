@@ -103,10 +103,10 @@ impl LocalFsConnector {
                 if p.matches(&path_str) {
                     return false;
                 }
-                if let Some(name) = path.file_name()
-                    && p.matches(&name.to_string_lossy())
-                {
-                    return false;
+                if let Some(name) = path.file_name() {
+                    if p.matches(&name.to_string_lossy()) {
+                        return false;
+                    }
                 }
             }
         }
@@ -122,10 +122,10 @@ impl LocalFsConnector {
                 if p.matches(&path_str) {
                     return true;
                 }
-                if let Some(name) = path.file_name()
-                    && p.matches(&name.to_string_lossy())
-                {
-                    return true;
+                if let Some(name) = path.file_name() {
+                    if p.matches(&name.to_string_lossy()) {
+                        return true;
+                    }
                 }
             }
         }
@@ -151,19 +151,28 @@ impl LocalFsConnector {
         let indexed = IndexedFile {
             size: fs_meta.len(),
             modified: fs_meta.modified().unwrap_or(SystemTime::UNIX_EPOCH),
-            checksum: if metadata.checksum.is_empty() { None } else { Some(metadata.checksum.clone()) },
+            checksum: if metadata.checksum.is_empty() {
+                None
+            } else {
+                Some(metadata.checksum.clone())
+            },
         };
 
         self.indexed.insert(path.to_path_buf(), indexed);
         Ok(metadata)
     }
 
+    /// Maximum recursion depth for directory scanning.
+    const MAX_SCAN_DEPTH: usize = 64;
+
     /// Scan all configured watch paths and return metadata for included files.
     pub fn scan(&mut self) -> Result<Vec<life_engine_types::FileMetadata>> {
         let mut results = Vec::new();
-        let watch_paths = self.config.watch_paths.clone();
+        let mut visited = std::collections::HashSet::new();
 
-        for watch_path in &watch_paths {
+        // Iterate by index to avoid borrowing self.config while calling &mut self methods.
+        for i in 0..self.config.watch_paths.len() {
+            let watch_path = self.config.watch_paths[i].clone();
             if !watch_path.is_dir() {
                 tracing::warn!(
                     path = %watch_path.display(),
@@ -172,18 +181,43 @@ impl LocalFsConnector {
                 continue;
             }
 
-            self.scan_directory(watch_path, &mut results)?;
+            self.scan_directory(&watch_path, &mut results, &mut visited, 0)?;
         }
 
         Ok(results)
     }
 
     /// Recursively scan a directory for files matching include/exclude patterns.
+    ///
+    /// Tracks visited directories by canonical path to detect symlink cycles,
+    /// and enforces a maximum recursion depth to prevent stack overflow on
+    /// deeply nested filesystems.
     fn scan_directory(
         &mut self,
         dir: &Path,
         results: &mut Vec<life_engine_types::FileMetadata>,
+        visited: &mut std::collections::HashSet<PathBuf>,
+        depth: usize,
     ) -> Result<()> {
+        if depth > Self::MAX_SCAN_DEPTH {
+            tracing::warn!(
+                path = %dir.display(),
+                depth = depth,
+                "maximum scan depth exceeded, skipping directory"
+            );
+            return Ok(());
+        }
+
+        // Resolve symlinks to detect cycles.
+        let canonical = dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf());
+        if !visited.insert(canonical) {
+            tracing::warn!(
+                path = %dir.display(),
+                "symlink cycle detected, skipping directory"
+            );
+            return Ok(());
+        }
+
         let entries = fs::read_dir(dir)
             .with_context(|| format!("failed to read directory: {}", dir.display()))?;
 
@@ -192,7 +226,7 @@ impl LocalFsConnector {
             let path = entry.path();
 
             if path.is_dir() {
-                self.scan_directory(&path, results)?;
+                self.scan_directory(&path, results, visited, depth + 1)?;
             } else if path.is_file() && self.should_include(&path) {
                 match self.index_file(&path) {
                     Ok(metadata) => results.push(metadata),
@@ -236,11 +270,7 @@ impl LocalFsConnector {
     }
 
     /// Recursively detect changes in a directory.
-    fn detect_changes_in_dir(
-        &self,
-        dir: &Path,
-        changes: &mut Vec<FileChange>,
-    ) -> Result<()> {
+    fn detect_changes_in_dir(&self, dir: &Path, changes: &mut Vec<FileChange>) -> Result<()> {
         let entries = fs::read_dir(dir)
             .with_context(|| format!("failed to read directory: {}", dir.display()))?;
 

@@ -8,8 +8,10 @@ description = "Webhook receiver plugin for Life Engine Core — accepts and maps
 [lib]
 name = "webhook_receiver"
 path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+thiserror = { workspace = true }
 life-engine-plugin-sdk = { path = "../../../packages/plugin-sdk-rs" }
 life-engine-types = { path = "../../../packages/types" }
 async-trait = { workspace = true }

@@ -10,6 +10,7 @@
 //! - `mapping` — Configurable JSON path to CDM field mapping
 //! - `models` — Webhook endpoint configuration and received event types
 
+pub mod error;
 pub mod mapping;
 pub mod models;
 pub mod signature;
@@ -106,6 +107,44 @@ impl Default for WebhookReceiverPlugin {
         Self::new()
     }
 }
+
+impl Plugin for WebhookReceiverPlugin {
+    fn id(&self) -> &str {
+        "com.life-engine.webhook-receiver"
+    }
+
+    fn display_name(&self) -> &str {
+        "Webhook Receiver"
+    }
+
+    fn version(&self) -> &str {
+        "0.1.0"
+    }
+
+    fn actions(&self) -> Vec<Action> {
+        vec![
+            Action::new("receive", "Receive an incoming webhook payload"),
+            Action::new("create_endpoint", "Create a new webhook endpoint configuration"),
+            Action::new("list_endpoints", "List configured webhook endpoints"),
+            Action::new("delete_endpoint", "Delete a webhook endpoint configuration"),
+        ]
+    }
+
+    fn execute(
+        &self,
+        action: &str,
+        input: PipelineMessage,
+    ) -> std::result::Result<PipelineMessage, Box<dyn EngineError>> {
+        match action {
+            "receive" | "create_endpoint" | "list_endpoints" | "delete_endpoint" => Ok(input),
+            other => Err(Box::new(
+                crate::error::WebhookReceiverError::UnknownAction(other.to_string()),
+            )),
+        }
+    }
+}
+
+life_engine_plugin_sdk::register_plugin!(WebhookReceiverPlugin);
 
 #[async_trait]
 impl CorePlugin for WebhookReceiverPlugin {

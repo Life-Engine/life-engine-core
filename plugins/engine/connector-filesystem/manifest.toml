@@ -6,22 +6,15 @@ description = "Local filesystem and S3-compatible cloud storage connector"
 
 [actions.scan]
 description = "Trigger a filesystem scan"
-method = "POST"
-path = "/scan"
 
 [actions.status]
 description = "Get the current scan status"
-method = "GET"
-path = "/status"
 
 [actions.changes]
 description = "List detected file changes since last scan"
-method = "GET"
-path = "/changes"
 
 [capabilities]
-storage_read = true
-storage_write = true
+required = ["storage:doc:read", "storage:doc:write"]
 
 [config]
 schema = """

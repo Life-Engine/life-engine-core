@@ -1,0 +1,23 @@
+[plugin]
+id = "com.life-engine.api-caldav"
+name = "CalDAV Server"
+version = "0.1.0"
+description = "CalDAV server API — exposes events as CalDAV calendars"
+
+[actions.propfind]
+description = "Handle CalDAV PROPFIND requests for calendar discovery and properties"
+
+[actions.report]
+description = "Handle CalDAV REPORT requests for calendar queries"
+
+[actions.get_event]
+description = "Retrieve a calendar event as iCalendar VEVENT"
+
+[actions.put_event]
+description = "Create or update a calendar event from iCalendar VEVENT"
+
+[actions.delete_event]
+description = "Delete a calendar event"
+
+[capabilities]
+required = ["storage:doc:read", "storage:doc:write", "logging"]

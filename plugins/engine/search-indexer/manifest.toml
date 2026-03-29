@@ -6,23 +6,15 @@ description = "Full-text search indexing powered by Tantivy"
 
 [actions.search]
 description = "Search across all indexed collections"
-method = "GET"
-path = "/search"
 
 [actions.reindex]
 description = "Trigger a full reindex of all collections"
-method = "POST"
-path = "/reindex"
 
 [actions.status]
 description = "Get indexer status and statistics"
-method = "GET"
-path = "/status"
 
 [capabilities]
-storage_read = true
-events_subscribe = true
-logging = true
+required = ["storage:doc:read", "events:subscribe", "logging"]
 
 [config]
 schema = """

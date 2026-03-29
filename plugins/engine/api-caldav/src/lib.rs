@@ -11,6 +11,7 @@
 //! - `discovery` — `.well-known/caldav` service discovery
 
 pub mod discovery;
+pub mod error;
 pub mod protocol;
 pub mod serializer;
 
@@ -36,6 +37,45 @@ impl Default for CalDavApiPlugin {
         Self::new()
     }
 }
+
+impl Plugin for CalDavApiPlugin {
+    fn id(&self) -> &str {
+        "com.life-engine.api-caldav"
+    }
+
+    fn display_name(&self) -> &str {
+        "CalDAV Server"
+    }
+
+    fn version(&self) -> &str {
+        "0.1.0"
+    }
+
+    fn actions(&self) -> Vec<Action> {
+        vec![
+            Action::new("propfind", "Handle CalDAV PROPFIND requests"),
+            Action::new("report", "Handle CalDAV REPORT requests"),
+            Action::new("get_event", "Retrieve a calendar event as iCalendar VEVENT"),
+            Action::new("put_event", "Create or update a calendar event"),
+            Action::new("delete_event", "Delete a calendar event"),
+        ]
+    }
+
+    fn execute(
+        &self,
+        action: &str,
+        input: PipelineMessage,
+    ) -> std::result::Result<PipelineMessage, Box<dyn EngineError>> {
+        match action {
+            "propfind" | "report" | "get_event" | "put_event" | "delete_event" => Ok(input),
+            other => Err(Box::new(
+                crate::error::CalDavError::UnknownAction(other.to_string()),
+            )),
+        }
+    }
+}
+
+life_engine_plugin_sdk::register_plugin!(CalDavApiPlugin);
 
 #[async_trait]
 impl CorePlugin for CalDavApiPlugin {

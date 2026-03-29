@@ -1,0 +1,20 @@
+[plugin]
+id = "com.life-engine.webhook-receiver"
+name = "Webhook Receiver"
+version = "0.1.0"
+description = "Inbound webhook handler — accepts, verifies, and maps incoming webhook payloads"
+
+[actions.receive]
+description = "Receive an incoming webhook payload"
+
+[actions.create_endpoint]
+description = "Create a new webhook endpoint configuration"
+
+[actions.list_endpoints]
+description = "List configured webhook endpoints"
+
+[actions.delete_endpoint]
+description = "Delete a webhook endpoint configuration"
+
+[capabilities]
+required = ["storage:doc:read", "storage:doc:write", "events:emit", "logging"]

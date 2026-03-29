@@ -6,25 +6,15 @@ description = "IMAP/SMTP email connector — fetches and sends email via IMAP an
 
 [actions.sync]
 description = "Sync emails from the configured IMAP server"
-method = "POST"
-path = "/sync"
 
 [actions.send]
 description = "Send an email via the configured SMTP server"
-method = "POST"
-path = "/send"
 
 [actions.status]
 description = "Get the current sync status"
-method = "GET"
-path = "/status"
 
 [capabilities]
-storage_read = true
-storage_write = true
-http_outbound = true
-credentials_read = true
-credentials_write = true
+required = ["storage:doc:read", "storage:doc:write", "http:outbound", "credentials:read", "credentials:write"]
 
 [config]
 schema = """

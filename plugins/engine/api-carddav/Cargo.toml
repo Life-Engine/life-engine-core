@@ -8,8 +8,10 @@ description = "CardDAV server API plugin for Life Engine Core — exposes contac
 [lib]
 name = "api_carddav"
 path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+thiserror = { workspace = true }
 life-engine-plugin-sdk = { path = "../../../packages/plugin-sdk-rs" }
 life-engine-types = { path = "../../../packages/types" }
 dav-utils = { path = "../../../packages/dav-utils" }

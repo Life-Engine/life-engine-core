@@ -973,7 +973,7 @@ Wire all layers together into the Core binary, create system workflows, generate
 
 ### 10.5 — First-Party Plugin Migration
 
-- [ ] Migrate all 10 first-party plugins to the new SDK: update each plugin to use `#[plugin_action]` signatures, `PipelineMessage` input/output, `PluginContext` for host function access, and `manifest.toml` for capability declarations. Verify each plugin compiles to `wasm32-wasip1` and loads correctly via the new plugin system. Plugins to migrate: `connector-email`, `connector-calendar`, `connector-contacts`, `connector-filesystem`, `webhook-sender`, `webhook-receiver`, `search-indexer`, `backup`, `api-caldav`, `api-carddav`.
+- [x] Migrate all 10 first-party plugins to the new SDK: update each plugin to use `#[plugin_action]` signatures, `PipelineMessage` input/output, `PluginContext` for host function access, and `manifest.toml` for capability declarations. Verify each plugin compiles to `wasm32-wasip1` and loads correctly via the new plugin system. Plugins to migrate: `connector-email`, `connector-calendar`, `connector-contacts`, `connector-filesystem`, `webhook-sender`, `webhook-receiver`, `search-indexer`, `backup`, `api-caldav`, `api-carddav`.
   <!-- files: plugins/engine/*/ -->
   <!-- purpose: Migrate all existing plugins to the new architecture -->
   <!-- requirements: plugin-actions 1.1, plugin-manifest 1.1 -->

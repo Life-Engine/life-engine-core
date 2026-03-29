@@ -11,6 +11,7 @@
 //! - `discovery` — `.well-known/carddav` service discovery
 
 pub mod discovery;
+pub mod error;
 pub mod protocol;
 pub mod serializer;
 
@@ -36,6 +37,45 @@ impl Default for CardDavApiPlugin {
         Self::new()
     }
 }
+
+impl Plugin for CardDavApiPlugin {
+    fn id(&self) -> &str {
+        "com.life-engine.api-carddav"
+    }
+
+    fn display_name(&self) -> &str {
+        "CardDAV Server"
+    }
+
+    fn version(&self) -> &str {
+        "0.1.0"
+    }
+
+    fn actions(&self) -> Vec<Action> {
+        vec![
+            Action::new("propfind", "Handle CardDAV PROPFIND requests"),
+            Action::new("report", "Handle CardDAV REPORT requests"),
+            Action::new("get_contact", "Retrieve a contact as vCard"),
+            Action::new("put_contact", "Create or update a contact"),
+            Action::new("delete_contact", "Delete a contact"),
+        ]
+    }
+
+    fn execute(
+        &self,
+        action: &str,
+        input: PipelineMessage,
+    ) -> std::result::Result<PipelineMessage, Box<dyn EngineError>> {
+        match action {
+            "propfind" | "report" | "get_contact" | "put_contact" | "delete_contact" => Ok(input),
+            other => Err(Box::new(
+                crate::error::CardDavError::UnknownAction(other.to_string()),
+            )),
+        }
+    }
+}
+
+life_engine_plugin_sdk::register_plugin!(CardDavApiPlugin);
 
 #[async_trait]
 impl CorePlugin for CardDavApiPlugin {

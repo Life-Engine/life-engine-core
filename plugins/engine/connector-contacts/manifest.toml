@@ -6,20 +6,12 @@ description = "CardDAV and Google Contacts connector — syncs contacts"
 
 [actions.sync]
 description = "Sync contacts from configured providers"
-method = "POST"
-path = "/sync"
 
 [actions.status]
 description = "Get the current sync status"
-method = "GET"
-path = "/status"
 
 [capabilities]
-storage_read = true
-storage_write = true
-http_outbound = true
-credentials_read = true
-credentials_write = true
+required = ["storage:doc:read", "storage:doc:write", "http:outbound", "credentials:read", "credentials:write"]
 
 [config]
 schema = """

@@ -6,39 +6,24 @@ description = "Encrypted backup to local, S3-compatible, or WebDAV storage targe
 
 [actions.backup]
 description = "Run a full backup"
-method = "POST"
-path = "/backup"
 
 [actions.backup_incremental]
 description = "Run an incremental backup"
-method = "POST"
-path = "/backup/incremental"
 
 [actions.restore]
 description = "Restore from a backup"
-method = "POST"
-path = "/restore"
 
 [actions.restore_partial]
 description = "Restore specific collections from a backup"
-method = "POST"
-path = "/restore/partial"
 
 [actions.list_backups]
 description = "List available backups"
-method = "GET"
-path = "/backups"
 
 [actions.status]
 description = "Get backup status and schedule"
-method = "GET"
-path = "/status"
 
 [capabilities]
-storage_read = true
-storage_write = true
-config_read = true
-logging = true
+required = ["storage:doc:read", "storage:doc:write", "config:read", "logging"]
 
 [config]
 schema = """

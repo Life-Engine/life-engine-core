@@ -1,0 +1,23 @@
+[plugin]
+id = "com.life-engine.api-carddav"
+name = "CardDAV Server"
+version = "0.1.0"
+description = "CardDAV server API — exposes contacts as CardDAV address books"
+
+[actions.propfind]
+description = "Handle CardDAV PROPFIND requests for address book discovery and properties"
+
+[actions.report]
+description = "Handle CardDAV REPORT requests for contact queries"
+
+[actions.get_contact]
+description = "Retrieve a contact as vCard"
+
+[actions.put_contact]
+description = "Create or update a contact from vCard"
+
+[actions.delete_contact]
+description = "Delete a contact"
+
+[capabilities]
+required = ["storage:doc:read", "storage:doc:write", "logging"]

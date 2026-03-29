@@ -5,9 +5,9 @@
 //! successful authentication, a session token is generated via the local
 //! token provider.
 
-use crate::auth::types::{AuthError, AuthIdentity, TokenInfo, TokenRequest, TokenResponse};
-use crate::auth::webauthn_store::{StoredPasskey, WebAuthnCredentialStore, WebAuthnStoreError};
-use crate::auth::AuthProvider;
+use crate::legacy::types::{AuthError, AuthIdentity, TokenInfo, TokenRequest, TokenResponse};
+use crate::legacy::webauthn_store::{StoredPasskey, WebAuthnCredentialStore, WebAuthnStoreError};
+use crate::legacy::AuthProvider;
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -478,8 +478,8 @@ impl AuthProvider for WebAuthnProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::auth::local_token::LocalTokenProvider;
-    use crate::auth::webauthn_store::InMemoryWebAuthnStore;
+    use crate::legacy::local_token::LocalTokenProvider;
+    use crate::legacy::webauthn_store::InMemoryWebAuthnStore;
 
     /// Build a valid `WebAuthnConfig` for testing.
     fn test_config() -> WebAuthnConfig {

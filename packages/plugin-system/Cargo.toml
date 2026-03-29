@@ -8,6 +8,7 @@ description = "Plugin discovery, loading, and capability enforcement for Life En
 [dependencies]
 life-engine-traits = { path = "../traits" }
 life-engine-types = { path = "../types" }
+anyhow = { workspace = true }
 async-trait = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

@@ -14,6 +14,7 @@ pub mod document;
 pub mod encryption;
 pub mod error;
 pub mod export;
+pub mod legacy;
 pub mod migration;
 pub mod schema;
 pub mod types;

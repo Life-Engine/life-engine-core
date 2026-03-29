@@ -8,6 +8,7 @@ description = "Infrastructure contracts (StorageBackend, Transport, Plugin, Engi
 [dependencies]
 life-engine-types = { path = "../types" }
 life-engine-crypto = { path = "../crypto" }
+anyhow = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 async-trait = { workspace = true }

@@ -9,6 +9,7 @@ description = "SQLCipher-backed storage backend for Life Engine"
 life-engine-types = { path = "../types" }
 life-engine-traits = { path = "../traits" }
 life-engine-crypto = { path = "../crypto" }
+anyhow = { workspace = true }
 rusqlite = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

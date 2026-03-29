@@ -5,6 +5,7 @@ pub mod error;
 pub mod event_bus;
 pub mod executor;
 pub mod loader;
+pub mod message_bus;
 pub mod migration;
 pub mod schema_registry;
 pub mod scheduler;

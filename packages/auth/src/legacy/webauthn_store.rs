@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use tokio::sync::RwLock;
 use webauthn_rs::prelude::{AuthenticationResult, Passkey};
 
-use crate::auth::types::AuthError;
+use crate::legacy::types::AuthError;
 
 /// A stored passkey credential with user-facing metadata.
 ///

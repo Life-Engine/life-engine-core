@@ -3,7 +3,7 @@
 //! Provides types for JWT headers, claims, JWKS caching, and token
 //! validation using the `jsonwebtoken` crate. Supports RS256 algorithm.
 
-use crate::auth::types::AuthError;
+use crate::legacy::types::AuthError;
 
 use jsonwebtoken::{Algorithm, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
@@ -385,8 +385,7 @@ mod tests {
         use rsa::pkcs8::{EncodePrivateKey, EncodePublicKey};
         use rsa::RsaPrivateKey;
 
-        let mut rng = rand::thread_rng();
-        let private_key = RsaPrivateKey::new(&mut rng, 2048).unwrap();
+        let private_key = RsaPrivateKey::new(&mut rsa::rand_core::OsRng, 2048).unwrap();
         let public_key = private_key.to_public_key();
 
         let private_pem = private_key

@@ -8,6 +8,7 @@ pub mod blob;
 pub mod capability;
 pub mod error;
 pub mod index_hints;
+pub mod legacy_storage;
 pub mod plugin;
 pub mod schema;
 pub mod schema_versioning;

@@ -106,7 +106,12 @@ pub async fn init_storage(
     }
 
     // Create the encrypted database.
-    match SqliteStorage::open_encrypted(&state.db_path, &body.passphrase, &state.argon2_settings) {
+    let legacy_settings = crate::sqlite_storage::Argon2Settings {
+        memory_mb: state.argon2_settings.memory_mb,
+        iterations: state.argon2_settings.iterations,
+        parallelism: state.argon2_settings.parallelism,
+    };
+    match SqliteStorage::open_encrypted(&state.db_path, &body.passphrase, &legacy_settings) {
         Ok(_storage) => {
             tracing::info!(path = %state.db_path.display(), "encrypted storage initialized");
             (

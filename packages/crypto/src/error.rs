@@ -20,4 +20,8 @@ pub enum CryptoError {
     /// HMAC verification failed.
     #[error("HMAC verification failed")]
     HmacVerificationFailed,
+
+    /// Invalid key length.
+    #[error("invalid key length: expected 32 bytes")]
+    InvalidKeyLength,
 }

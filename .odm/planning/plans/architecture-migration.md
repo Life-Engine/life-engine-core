@@ -941,32 +941,32 @@ Wire all layers together into the Core binary, create system workflows, generate
 
 ### 10.4 — Migration from Current Architecture
 
-- [ ] Audit existing `apps/core/src/` modules and identify code that maps to the new architecture: (a) code that should move into `packages/` crates (storage, crypto, auth, plugin loading, workflow execution), (b) code that is replaced by the new architecture (monolithic route handlers, inline storage calls, direct plugin invocations), (c) code that remains in `apps/core/` (startup orchestration, config, shutdown). Create a migration checklist mapping each existing module to its destination.
+- [x] Audit existing `apps/core/src/` modules and identify code that maps to the new architecture: (a) code that should move into `packages/` crates (storage, crypto, auth, plugin loading, workflow execution), (b) code that is replaced by the new architecture (monolithic route handlers, inline storage calls, direct plugin invocations), (c) code that remains in `apps/core/` (startup orchestration, config, shutdown). Create a migration checklist mapping each existing module to its destination.
   <!-- files: (analysis task — no file output) -->
   <!-- purpose: Plan the migration of existing code into the new crate structure -->
   <!-- requirements: all specs -->
 
-- [ ] Migrate storage code: move `sqlite_storage.rs`, `pg_storage.rs`, and `storage_migration.rs` into `packages/storage-sqlite/`, refactoring them to implement the `DocumentStorageAdapter` trait. Preserve all existing tests and verify they pass against the new trait implementation.
+- [x] Migrate storage code: move `sqlite_storage.rs`, `pg_storage.rs`, and `storage_migration.rs` into `packages/storage-sqlite/`, refactoring them to implement the `DocumentStorageAdapter` trait. Preserve all existing tests and verify they pass against the new trait implementation.
   <!-- files: packages/storage-sqlite/ -->
   <!-- purpose: Migrate existing storage to the new adapter trait -->
   <!-- requirements: document-storage-adapter 1.1 -->
 
-- [ ] Migrate crypto code: consolidate `crypto.rs`, `credential_store.rs`, `credential_bridge.rs`, and `rekey.rs` into `packages/crypto/`, ensuring all functions use AES-256-GCM (not XOR) and Argon2id key derivation. Remove any remaining legacy crypto patterns.
+- [x] Migrate crypto code: consolidate `crypto.rs`, `credential_store.rs`, `credential_bridge.rs`, and `rekey.rs` into `packages/crypto/`, ensuring all functions use AES-256-GCM (not XOR) and Argon2id key derivation. Remove any remaining legacy crypto patterns.
   <!-- files: packages/crypto/ -->
   <!-- purpose: Unify crypto under the shared crate -->
   <!-- requirements: encryption-and-audit 1.1, 2.1 -->
 
-- [ ] Migrate auth code: move `auth/` module into `packages/auth/`, implementing the OIDC token validation used by the transport middleware. Preserve WebAuthn support as an optional auth mode.
+- [x] Migrate auth code: move `auth/` module into `packages/auth/`, implementing the OIDC token validation used by the transport middleware. Preserve WebAuthn support as an optional auth mode.
   <!-- files: packages/auth/ -->
   <!-- purpose: Migrate auth to a standalone crate -->
   <!-- requirements: transport-layer 13.1 -->
 
-- [ ] Migrate plugin loading: move `plugin_loader.rs`, `manifest.rs`, `wasm_runtime.rs`, `wasm_adapter.rs` into `packages/plugin-system/`, refactoring to use the new manifest types and lifecycle management. Ensure all existing plugins continue to load and function.
+- [x] Migrate plugin loading: move `plugin_loader.rs`, `manifest.rs`, `wasm_runtime.rs`, `wasm_adapter.rs` into `packages/plugin-system/`, refactoring to use the new manifest types and lifecycle management. Ensure all existing plugins continue to load and function.
   <!-- files: packages/plugin-system/ -->
   <!-- purpose: Migrate plugin infrastructure to the new crate -->
   <!-- requirements: plugin-system 1.1 -->
 
-- [ ] Migrate workflow engine: move `message_bus.rs` into `packages/workflow-engine/src/event_bus.rs`. Implement the pipeline executor and scheduler as new code (these do not exist in the current monolith). Route handlers in `apps/core/src/routes/` become thin dispatchers that build WorkflowRequests and call the executor.
+- [x] Migrate workflow engine: move `message_bus.rs` into `packages/workflow-engine/src/event_bus.rs`. Implement the pipeline executor and scheduler as new code (these do not exist in the current monolith). Route handlers in `apps/core/src/routes/` become thin dispatchers that build WorkflowRequests and call the executor.
   <!-- files: packages/workflow-engine/ -->
   <!-- purpose: Implement the workflow engine layer -->
   <!-- requirements: pipeline-executor 1.1, event-bus 1.1, scheduler 1.1 -->

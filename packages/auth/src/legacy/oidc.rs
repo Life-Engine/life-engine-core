@@ -4,9 +4,9 @@
 //! by an OIDC identity provider. JWKS keys are cached and refreshed
 //! periodically or on key miss.
 
-use crate::auth::jwt::{self, JwksCache, JwksResponse, JwtError};
-use crate::auth::types::{AuthError, AuthIdentity, TokenInfo, TokenRequest, TokenResponse};
-use crate::auth::AuthProvider;
+use crate::legacy::jwt::{self, JwksCache, JwksResponse, JwtError};
+use crate::legacy::types::{AuthError, AuthIdentity, TokenInfo, TokenRequest, TokenResponse};
+use crate::legacy::AuthProvider;
 
 use async_trait::async_trait;
 use chrono::{TimeZone, Utc};

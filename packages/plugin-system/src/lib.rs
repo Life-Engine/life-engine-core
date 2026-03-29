@@ -10,6 +10,7 @@ pub mod error;
 pub mod execute;
 pub mod host_functions;
 pub mod injection;
+pub mod legacy_manifest;
 pub mod lifecycle;
 pub mod loader;
 pub mod manifest;

@@ -6,8 +6,8 @@
 //! `auth_tokens` and `auth_config`. An in-memory write-through cache keeps
 //! reads fast and preserves backward compatibility with existing tests.
 
-use crate::auth::types::{AuthError, AuthIdentity, TokenInfo, TokenRequest, TokenResponse};
-use crate::auth::AuthProvider;
+use crate::legacy::types::{AuthError, AuthIdentity, TokenInfo, TokenRequest, TokenResponse};
+use crate::legacy::AuthProvider;
 
 use argon2::password_hash::rand_core::OsRng;
 use argon2::password_hash::SaltString;
@@ -27,15 +27,15 @@ const DEFAULT_EXPIRY_DAYS: u32 = 30;
 
 /// A stored token entry (only the hash is kept, never the raw token).
 #[derive(Debug, Clone)]
-pub(crate) struct StoredToken {
+pub struct StoredToken {
     /// Unique token identifier.
-    pub(crate) id: String,
+    pub id: String,
     /// SHA-256 hash of the raw token (hex-encoded).
-    pub(crate) token_hash: String,
+    pub token_hash: String,
     /// When the token was created.
-    pub(crate) created_at: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
     /// When the token expires.
-    pub(crate) expires_at: DateTime<Utc>,
+    pub expires_at: DateTime<Utc>,
 }
 
 /// Shared mutable state for the local token provider.
@@ -43,13 +43,13 @@ pub(crate) struct StoredToken {
 /// Serves as a write-through cache backed by SQLite. On startup,
 /// existing tokens and the passphrase hash are loaded from the database.
 #[derive(Debug)]
-pub(crate) struct TokenState {
+pub struct TokenState {
     /// The Argon2id hash of the master passphrase. `None` if not yet set.
-    pub(crate) passphrase_hash: Option<String>,
+    pub passphrase_hash: Option<String>,
     /// All stored tokens keyed by token ID.
-    pub(crate) tokens: HashMap<String, StoredToken>,
+    pub tokens: HashMap<String, StoredToken>,
     /// Reverse index: SHA-256 token hash -> token ID for O(1) lookup.
-    pub(crate) hash_index: HashMap<String, String>,
+    pub hash_index: HashMap<String, String>,
 }
 
 /// Local token authentication provider.
@@ -64,7 +64,7 @@ pub(crate) struct TokenState {
 #[derive(Debug, Clone)]
 pub struct LocalTokenProvider {
     /// In-memory write-through cache of tokens and passphrase hash.
-    pub(crate) state: Arc<RwLock<TokenState>>,
+    pub state: Arc<RwLock<TokenState>>,
     /// SQLite connection for durable storage.
     db: Arc<tokio::sync::Mutex<Connection>>,
 }

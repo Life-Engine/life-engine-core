@@ -14,6 +14,7 @@ use uuid::Uuid;
 pub mod config;
 pub mod error;
 pub mod handlers;
+pub mod legacy;
 pub mod types;
 
 pub use config::AuthConfig;

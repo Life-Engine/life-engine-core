@@ -1,0 +1,40 @@
+{
+  "name": "plugin-system",
+  "sourceRoot": "packages/plugin-system/src",
+  "projectType": "library",
+  "tags": ["lang:rust", "type:lib"],
+  "namedInputs": {
+    "rust": [
+      "{projectRoot}/src/**/*.rs",
+      "{projectRoot}/Cargo.toml",
+      "{workspaceRoot}/Cargo.toml",
+      "{workspaceRoot}/Cargo.lock"
+    ]
+  },
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "inputs": ["rust"],
+      "options": {
+        "command": "cargo build -p life-engine-plugin-system",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "inputs": ["rust"],
+      "options": {
+        "command": "cargo test -p life-engine-plugin-system",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "inputs": ["rust"],
+      "options": {
+        "command": "cargo clippy -p life-engine-plugin-system -- -D warnings",
+        "cwd": "{workspaceRoot}"
+      }
+    }
+  }
+}

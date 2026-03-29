@@ -29,3 +29,4 @@ extism = { workspace = true }
 [dev-dependencies]
 tempfile = { workspace = true }
 wat = "1"
+life-engine-test-utils = { path = "../test-utils" }

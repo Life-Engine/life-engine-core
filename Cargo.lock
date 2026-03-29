@@ -4175,6 +4175,7 @@ dependencies = [
  "extism",
  "jsonschema",
  "life-engine-storage-sqlite",
+ "life-engine-test-utils",
  "life-engine-traits",
  "life-engine-types",
  "rusqlite",

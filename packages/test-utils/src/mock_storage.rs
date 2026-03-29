@@ -9,7 +9,7 @@ use tokio::sync::{mpsc, RwLock};
 use uuid::Uuid;
 
 use life_engine_traits::storage::{
-    AdapterCapabilities, ChangeEvent, ChangeKind, CollectionDescriptor, DocumentList,
+    AdapterCapabilities, ChangeEvent, ChangeType, CollectionDescriptor, DocumentList,
     DocumentStorageAdapter, FilterNode, FilterOperator, HealthCheck, HealthReport, HealthStatus,
     Pagination, QueryDescriptor, SortDirection, StorageError,
 };
@@ -36,9 +36,9 @@ impl MockDocumentStorageAdapter {
     }
 
     /// Emit a change event to all watchers of the given collection.
-    async fn emit(&self, collection: &str, document_id: &str, kind: ChangeKind) {
+    async fn emit(&self, collection: &str, document_id: &str, change_type: ChangeType) {
         let event = ChangeEvent {
-            kind,
+            change_type,
             collection: collection.to_string(),
             document_id: document_id.to_string(),
             timestamp: Utc::now(),
@@ -71,7 +71,7 @@ fn matches_filter(doc: &Value, filter: &FilterNode) -> bool {
         FilterNode::And(children) => children.iter().all(|c| matches_filter(doc, c)),
         FilterNode::Or(children) => children.iter().any(|c| matches_filter(doc, c)),
         FilterNode::Not(child) => !matches_filter(doc, child),
-        FilterNode::Comparison { field, op, value } => {
+        FilterNode::Comparison { field, operator: op, value } => {
             let field_val = resolve_field(doc, field);
             match op {
                 FilterOperator::Eq => field_val.as_ref() == Some(value),
@@ -178,7 +178,7 @@ impl DocumentStorageAdapter for MockDocumentStorageAdapter {
 
         coll.insert(id.clone(), doc.clone());
         drop(data);
-        self.emit(collection, &id, ChangeKind::Created).await;
+        self.emit(collection, &id, ChangeType::Created).await;
         Ok(doc)
     }
 
@@ -208,7 +208,7 @@ impl DocumentStorageAdapter for MockDocumentStorageAdapter {
 
         coll.insert(id.to_string(), doc.clone());
         drop(data);
-        self.emit(collection, id, ChangeKind::Updated).await;
+        self.emit(collection, id, ChangeType::Updated).await;
         Ok(doc)
     }
 
@@ -240,7 +240,7 @@ impl DocumentStorageAdapter for MockDocumentStorageAdapter {
 
         let result = existing.clone();
         drop(data);
-        self.emit(collection, id, ChangeKind::Updated).await;
+        self.emit(collection, id, ChangeType::Updated).await;
         Ok(result)
     }
 
@@ -259,7 +259,7 @@ impl DocumentStorageAdapter for MockDocumentStorageAdapter {
         }
 
         drop(data);
-        self.emit(collection, id, ChangeKind::Deleted).await;
+        self.emit(collection, id, ChangeType::Deleted).await;
         Ok(())
     }
 
@@ -273,7 +273,7 @@ impl DocumentStorageAdapter for MockDocumentStorageAdapter {
         };
 
         // Apply filters.
-        if let Some(ref filter) = descriptor.filters {
+        if let Some(ref filter) = descriptor.filter {
             docs.retain(|doc| matches_filter(doc, filter));
         }
 
@@ -300,28 +300,29 @@ impl DocumentStorageAdapter for MockDocumentStorageAdapter {
             });
         }
 
-        // Apply pagination.
-        let Pagination { limit, offset, .. } = &descriptor.pagination;
-        if let Some(off) = offset {
-            let off = *off as usize;
-            if off < docs.len() {
-                docs = docs[off..].to_vec();
-            } else {
-                docs.clear();
+        // Apply pagination (cursor-based).
+        let Pagination { limit, cursor } = &descriptor.pagination;
+        if let Some(cursor_val) = cursor {
+            // Simple cursor: skip documents until we find the cursor id.
+            if let Some(pos) = docs.iter().position(|d| {
+                d.get("id")
+                    .or_else(|| d.get("_id_"))
+                    .and_then(|v| v.as_str())
+                    .map_or(false, |id| id == cursor_val.as_str())
+            }) {
+                docs = docs[(pos + 1)..].to_vec();
             }
         }
-        if let Some(lim) = limit {
-            docs.truncate(*lim as usize);
-        }
+        docs.truncate(*limit as usize);
 
-        // Apply projection.
-        if !descriptor.projection.is_empty() {
+        // Apply field projection.
+        if let Some(ref fields) = descriptor.fields {
             docs = docs
                 .into_iter()
                 .map(|doc| {
                     let mut projected = serde_json::Map::new();
                     if let Some(obj) = doc.as_object() {
-                        for field in &descriptor.projection {
+                        for field in fields {
                             if let Some(val) = obj.get(field.as_str()) {
                                 projected.insert(field.clone(), val.clone());
                             }
@@ -624,14 +625,15 @@ mod tests {
         let result = store
             .query(QueryDescriptor {
                 collection: "users".to_string(),
-                filters: Some(FilterNode::Comparison {
+                filter: Some(FilterNode::Comparison {
                     field: "age".to_string(),
-                    op: FilterOperator::Gte,
+                    operator: FilterOperator::Gte,
                     value: serde_json::json!(30),
                 }),
                 sort: vec![],
                 pagination: Pagination::default(),
-                projection: vec![],
+                fields: None,
+                text_search: None,
             })
             .await
             .unwrap();
@@ -665,26 +667,27 @@ mod tests {
         let result = store
             .query(QueryDescriptor {
                 collection: "items".to_string(),
-                filters: None,
+                filter: None,
                 sort: vec![SortField {
                     field: "order".to_string(),
                     direction: SortDirection::Desc,
                 }],
                 pagination: Pagination {
-                    limit: Some(2),
-                    offset: Some(1),
+                    limit: 3,
                     cursor: None,
                 },
-                projection: vec![],
+                fields: None,
+                text_search: None,
             })
             .await
             .unwrap();
 
         assert_eq!(result.total_count, 5);
-        assert_eq!(result.documents.len(), 2);
-        // Sorted desc: [5, 4, 3, 2, 1], offset 1 → [4, 3], limit 2 → [4, 3]
-        assert_eq!(result.documents[0]["order"], 4);
-        assert_eq!(result.documents[1]["order"], 3);
+        assert_eq!(result.documents.len(), 3);
+        // Sorted desc: [5, 4, 3, 2, 1], limit 3 → [5, 4, 3]
+        assert_eq!(result.documents[0]["order"], 5);
+        assert_eq!(result.documents[1]["order"], 4);
+        assert_eq!(result.documents[2]["order"], 3);
     }
 
     #[tokio::test]
@@ -702,7 +705,7 @@ mod tests {
                 "c",
                 Some(FilterNode::Comparison {
                     field: "x".to_string(),
-                    op: FilterOperator::Gt,
+                    operator: FilterOperator::Gt,
                     value: serde_json::json!(1),
                 }),
             )
@@ -806,6 +809,7 @@ mod tests {
         let result = store
             .migrate(CollectionDescriptor {
                 name: "test".to_string(),
+                plugin_id: "test-plugin".to_string(),
                 fields: vec![],
                 indexes: vec![],
             })
@@ -824,7 +828,7 @@ mod tests {
             .unwrap();
 
         let event = rx.try_recv().unwrap();
-        assert_eq!(event.kind, ChangeKind::Created);
+        assert_eq!(event.change_type, ChangeType::Created);
         assert_eq!(event.collection, "users");
         assert_eq!(event.document_id, "1");
     }

@@ -1,0 +1,38 @@
+# Build artifacts
+target/
+
+# Version control
+.git/
+.gitignore
+
+# Node/frontend (if any)
+node_modules/
+
+# Documentation and reports
+docs/
+.odm/
+
+# Tools and scripts (not needed in the image)
+tools/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Test fixtures
+packages/test-fixtures/
+packages/test-utils/
+
+# Deployment configs (not needed inside the build context)
+deploy/nginx/
+deploy/caddy/
+deploy/systemd/
+deploy/launchd/
+
+# Misc
+*.md
+LICENSE
+.env*
+docker-compose*.yml

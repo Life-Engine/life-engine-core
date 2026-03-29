@@ -311,3 +311,135 @@ fn created_response_is_success_in_both_transports() {
     assert!(gql_body.get("errors").is_none());
     assert_eq!(gql_body["data"], data);
 }
+
+// ---------------------------------------------------------------------------
+// Test 7: All five CRUD operations produce equivalent responses when
+// given the same WorkflowResponse. This explicitly covers
+// collection.list, collection.create, collection.get, collection.update,
+// and collection.delete.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn crud_operations_produce_equivalent_responses() {
+    let crud_scenarios: Vec<(&str, WorkflowStatus, Value)> = vec![
+        (
+            "collection.list",
+            WorkflowStatus::Ok,
+            json!({
+                "documents": [
+                    {"id": "task-1", "title": "Buy groceries"},
+                    {"id": "task-2", "title": "Write tests"}
+                ],
+                "total_count": 2,
+                "next_cursor": null
+            }),
+        ),
+        (
+            "collection.create",
+            WorkflowStatus::Created,
+            json!({
+                "created": true,
+                "document": {"id": "task-3", "title": "New task"}
+            }),
+        ),
+        (
+            "collection.get",
+            WorkflowStatus::Ok,
+            json!({"id": "task-1", "title": "Buy groceries", "status": "pending"}),
+        ),
+        (
+            "collection.update",
+            WorkflowStatus::Ok,
+            json!({"id": "task-1", "title": "Updated", "status": "completed"}),
+        ),
+        (
+            "collection.delete",
+            WorkflowStatus::Ok,
+            json!({"deleted": true}),
+        ),
+    ];
+
+    for (operation, status, data) in crud_scenarios {
+        let response = WorkflowResponse {
+            status,
+            data: Some(data.clone()),
+            errors: vec![],
+            meta: ResponseMeta {
+                request_id: format!("{operation}-req-001"),
+                duration_ms: 5,
+                traces: vec![],
+            },
+        };
+
+        // REST produces an HTTP status code and wraps data.
+        let rest_code = status_to_http(status).as_u16();
+
+        // GraphQL produces an HTTP status code and wraps data.
+        let (gql_code, gql_body) = translate_response(&response);
+
+        assert_eq!(
+            rest_code, gql_code,
+            "{operation}: status codes must match"
+        );
+
+        let gql_data = gql_body.get("data").unwrap_or(&Value::Null);
+        assert_eq!(
+            gql_data, &data,
+            "{operation}: GraphQL data payload must match source"
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Test 8: Both transports generate a request ID for each CRUD operation,
+// ensuring traceability through the pipeline.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn both_transports_assign_request_ids_for_all_crud_ops() {
+    let identity = Identity::guest();
+
+    // REST: each CRUD operation gets a unique request ID.
+    let rest_list = build_workflow_request(
+        "collection.list".into(),
+        identity.clone(),
+        HashMap::from([("collection".into(), "tasks".into())]),
+        HashMap::new(),
+        None,
+    );
+    let rest_create = build_workflow_request(
+        "collection.create".into(),
+        identity.clone(),
+        HashMap::from([("collection".into(), "tasks".into())]),
+        HashMap::new(),
+        Some(json!({"title": "New"})),
+    );
+
+    assert_ne!(
+        rest_list.meta.request_id, rest_create.meta.request_id,
+        "each REST request should get a unique ID"
+    );
+
+    // GraphQL: same — each request gets a unique ID.
+    let gql_list = translate_request(
+        &GraphqlRequest {
+            query: "{ tasks { id } }".into(),
+            operation_name: None,
+            variables: HashMap::new(),
+        },
+        identity.clone(),
+    );
+    let gql_create = translate_request(
+        &GraphqlRequest {
+            query: "mutation { createTask(title: \"New\") { id } }".into(),
+            operation_name: None,
+            variables: HashMap::from([("collection".into(), json!("tasks"))]),
+        },
+        identity,
+    );
+
+    assert_ne!(
+        gql_list.meta.request_id, gql_create.meta.request_id,
+        "each GraphQL request should get a unique ID"
+    );
+}

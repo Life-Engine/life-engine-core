@@ -79,7 +79,6 @@ pub fn create_test_contact() -> Contact {
         name: ContactName {
             given: "Alice".into(),
             family: "Johnson".into(),
-            display: None,
             prefix: None,
             suffix: None,
             middle: None,

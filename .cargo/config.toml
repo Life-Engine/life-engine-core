@@ -14,6 +14,9 @@
 #   rustup target add aarch64-unknown-linux-gnu
 #   cargo build --release --package life-engine-core --target aarch64-unknown-linux-gnu
 
+[profile.dev]
+incremental = false
+
 [target.aarch64-unknown-linux-gnu]
 linker = "aarch64-linux-gnu-gcc"
 
